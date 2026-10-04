@@ -256,7 +256,7 @@ struct BudgetSetupView: View {
             Spacer()
 
             Button("Start exploring") {
-                appState.profile.monthlyBudget = budget
+                appState.updateMonthlyBudget(budget)
                 router.reset()
                 appState.enterApp()
             }

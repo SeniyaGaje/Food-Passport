@@ -179,13 +179,16 @@ extension View {
 
 /// Full-width orange gradient button for the main action on a screen.
 struct BrandPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(Theme.primaryGradient, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
-            .shadow(color: Theme.orange.opacity(0.3), radius: 12, y: 6)
+            .shadow(color: Theme.orange.opacity(isEnabled ? 0.3 : 0), radius: 12, y: 6)
+            .opacity(isEnabled ? 1 : 0.5)
             .pressedEffect(configuration.isPressed)
     }
 }
@@ -266,6 +269,15 @@ private extension View {
             .scaleEffect(isPressed ? 0.98 : 1)
             .opacity(isPressed ? 0.85 : 1)
             .animation(.easeOut(duration: 0.15), value: isPressed)
+    }
+}
+
+// MARK: - String
+
+extension String {
+    /// The text without leading or trailing spaces and new lines, e.g. for form input.
+    var trimmed: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

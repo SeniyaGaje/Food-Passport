@@ -4,29 +4,90 @@ import SwiftUI
 
 // MARK: - AppState
 
-/// App-wide session state shared through the environment.
-/// Backed by mock data for now; Firebase-backed services replace it in the API milestone.
+/// App-wide session state shared through the environment: who is signed in and their data.
+/// Reads and writes go through `AuthService` and `DatabaseService`, which are passed in (dependency injection),
+/// so the same code runs on Firebase in the app and on in-memory mocks in previews and unit tests.
 @Observable
 final class AppState {
     enum Stage {
+        /// Checking for a signed-in user at launch.
+        case launching
         case onboarding
         case main
     }
 
-    var stage: Stage = .onboarding
+    var stage: Stage = .launching
     var isLocked = false
     var isFaceIDEnabled = true
 
     var profile = MockData.profile
+    var restaurants = MockData.restaurants
     var visits = MockData.visits
     var stamps = MockData.stamps
-    var bookmarkedRestaurantIDs: Set<Restaurant.ID> = []
+
+    /// Shown in an alert by `RootView` when loading or saving fails.
+    var errorMessage: String?
+
+    private let auth: AuthService
+    private let database: DatabaseService
+
+    /// Background saves that haven't finished yet, so unit tests can wait for them.
+    private var pendingWrites: [UUID: Task<Void, Never>] = [:]
+
+    init(auth: AuthService = MockAuthService(), database: DatabaseService = MockDatabaseService()) {
+        self.auth = auth
+        self.database = database
+    }
 
     var cuisinesTriedCount: Int {
         Set(visits.map(\.cuisine)).count
     }
 
     // MARK: Session
+
+    /// Called once at launch: skips onboarding when a user is still signed in from last time.
+    func restoreSession() async {
+        guard let userID = auth.currentUserID else {
+            stage = .onboarding
+            return
+        }
+
+        do {
+            try await loadUserData(userID: userID)
+            enterApp()
+        } catch {
+            errorMessage = "Couldn't load your passport. \(error.localizedDescription)"
+            stage = .onboarding
+        }
+    }
+
+    func signIn(email: String, password: String) async throws {
+        let userID = try await auth.signIn(email: email, password: password)
+        try await loadUserData(userID: userID)
+        enterApp()
+    }
+
+    /// Creates the account and its profile document. Onboarding (permissions, budget) continues afterwards.
+    func signUp(name: String, email: String, password: String) async throws {
+        let userID = try await auth.signUp(email: email, password: password)
+        let newProfile = UserProfile(
+            name: name,
+            email: email,
+            memberSince: .now,
+            monthlyBudget: 3000,
+            bookmarkedRestaurantIDs: []
+        )
+        try await database.saveProfile(newProfile, userID: userID)
+
+        profile = newProfile
+        visits = []
+        stamps = []
+        restaurants = try await database.fetchRestaurants()
+    }
+
+    func sendPasswordReset(email: String) async throws {
+        try await auth.sendPasswordReset(email: email)
+    }
 
     func enterApp() {
         stage = .main
@@ -43,31 +104,119 @@ final class AppState {
     }
 
     func signOut() {
+        do {
+            try auth.signOut()
+        } catch {
+            errorMessage = "Couldn't sign out. \(error.localizedDescription)"
+            return
+        }
         stage = .onboarding
         isLocked = false
     }
 
-    // MARK: Data
+    private func loadUserData(userID: String) async throws {
+        restaurants = try await database.fetchRestaurants()
+        visits = try await database.fetchVisits(userID: userID)
+        stamps = try await database.fetchStamps(userID: userID)
 
+        if let savedProfile = try await database.fetchProfile(userID: userID) {
+            profile = savedProfile
+        } else {
+            // The account exists but its profile was never saved (e.g. sign-up was interrupted).
+            profile = UserProfile(name: "", email: "", memberSince: .now, monthlyBudget: 3000, bookmarkedRestaurantIDs: [])
+            save { database, userID in try await database.saveProfile(self.profile, userID: userID) }
+        }
+    }
+
+    // MARK: Visits and stamps
+
+    /// Adds a logged visit and saves it.
+    /// Returns the new stamp when this is the first location-verified visit for the visit's cuisine.
+    @discardableResult
+    func addVisit(_ visit: Visit) -> Stamp? {
+        visits.insert(visit, at: 0)
+        save { database, userID in try await database.saveVisit(visit, userID: userID) }
+
+        guard visit.isLocationVerified, !stamps.contains(where: { $0.cuisine == visit.cuisine }) else {
+            return nil
+        }
+
+        let stamp = Stamp(
+            cuisine: visit.cuisine,
+            restaurantName: visit.restaurant.name,
+            earnedDate: visit.date,
+            visitID: visit.id,
+            imageName: visit.imageName
+        )
+        stamps.append(stamp)
+        save { database, userID in try await database.saveStamp(stamp, userID: userID) }
+        return stamp
+    }
+
+    /// Deletes a visit, and the stamp it earned if there was one.
     func deleteVisit(_ visit: Visit) {
         visits.removeAll { $0.id == visit.id }
-        stamps.removeAll { $0.visitID == visit.id }
+        save { database, userID in try await database.deleteVisit(id: visit.id, userID: userID) }
+
+        for stamp in stamps where stamp.visitID == visit.id {
+            stamps.removeAll { $0.cuisine == stamp.cuisine }
+            save { database, userID in try await database.deleteStamp(cuisine: stamp.cuisine, userID: userID) }
+        }
     }
 
     func resetAllData() {
         visits = []
         stamps = []
+        save { database, userID in try await database.deleteVisitsAndStamps(userID: userID) }
+    }
+
+    // MARK: Profile
+
+    func updateMonthlyBudget(_ amount: Int) {
+        profile.monthlyBudget = amount
+        saveProfile()
     }
 
     func isBookmarked(_ restaurant: Restaurant) -> Bool {
-        bookmarkedRestaurantIDs.contains(restaurant.id)
+        profile.bookmarkedRestaurantIDs.contains(restaurant.id)
     }
 
     func toggleBookmark(for restaurant: Restaurant) {
-        if bookmarkedRestaurantIDs.contains(restaurant.id) {
-            bookmarkedRestaurantIDs.remove(restaurant.id)
+        if profile.bookmarkedRestaurantIDs.contains(restaurant.id) {
+            profile.bookmarkedRestaurantIDs.remove(restaurant.id)
         } else {
-            bookmarkedRestaurantIDs.insert(restaurant.id)
+            profile.bookmarkedRestaurantIDs.insert(restaurant.id)
+        }
+        saveProfile()
+    }
+
+    private func saveProfile() {
+        let profile = profile
+        save { database, userID in try await database.saveProfile(profile, userID: userID) }
+    }
+
+    // MARK: Saving
+
+    /// Runs a database write in the background. The screen has already been updated, so the student never waits.
+    /// Firestore keeps the change in its offline cache straight away and syncs it when the device is online.
+    private func save(_ write: @escaping (DatabaseService, String) async throws -> Void) {
+        guard let userID = auth.currentUserID else { return }
+
+        let id = UUID()
+        pendingWrites[id] = Task { [database] in
+            do {
+                try await write(database, userID)
+            } catch {
+                errorMessage = "Couldn't save your changes. \(error.localizedDescription)"
+            }
+            pendingWrites[id] = nil
+        }
+    }
+
+    /// Waits until every background save has finished. Used by unit tests.
+    func waitForPendingWrites() async {
+        for task in pendingWrites.values {
+            await task.value
         }
     }
 }

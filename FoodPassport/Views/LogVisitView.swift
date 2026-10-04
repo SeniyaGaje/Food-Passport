@@ -4,6 +4,7 @@ import SwiftUI
 
 /// "Log your visit" form — dish, cuisine, amount, rating and notes, with meal and receipt scanning.
 struct LogVisitView: View {
+    @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
 
     let restaurant: Restaurant
@@ -14,11 +15,21 @@ struct LogVisitView: View {
     @State private var rating = 0
     @State private var notes = ""
     @State private var hasMealPhoto = false
+    @State private var isAmountFromReceipt = false
     @State private var isShowingMealCamera = false
     @State private var isShowingReceiptScanner = false
 
     private var selectedCuisine: Cuisine {
         Cuisine.allCases.first { $0.rawValue.caseInsensitiveCompare(cuisine) == .orderedSame } ?? restaurant.cuisine
+    }
+
+    /// The amount typed or scanned, ignoring anything that isn't a digit (e.g. "LKR" or commas).
+    private var amountValue: Int? {
+        Int(amount.filter(\.isNumber))
+    }
+
+    private var canSave: Bool {
+        !dish.trimmed.isEmpty && (amountValue ?? 0) > 0
     }
 
     var body: some View {
@@ -60,11 +71,10 @@ struct LogVisitView: View {
                     InputField(placeholder: "Add details about your experience...", text: $notes, isMultiline: true)
                 }
 
-                Button("Save visit") {
-                    router.present(.stampEarned(selectedCuisine))
-                }
-                .buttonStyle(.brandPrimary)
-                .padding(.top, 4)
+                Button("Save visit", action: saveVisit)
+                    .buttonStyle(.brandPrimary)
+                    .disabled(!canSave)
+                    .padding(.top, 4)
             }
             .padding(20)
         }
@@ -82,7 +92,34 @@ struct LogVisitView: View {
         .fullScreenCover(isPresented: $isShowingReceiptScanner) {
             ReceiptScanView(receipt: MockData.sampleReceipt) { total in
                 amount = "\(total)"
+                isAmountFromReceipt = true
             }
+        }
+    }
+
+    private func saveVisit() {
+        let visit = Visit(
+            id: UUID().uuidString,
+            dishName: dish.trimmed,
+            cuisine: selectedCuisine,
+            restaurant: restaurant,
+            amount: amountValue ?? 0,
+            rating: rating,
+            notes: notes.trimmed,
+            date: .now,
+            // The student reaches this screen from the arrival alert or "I'm here".
+            // Checking their real location against the restaurant comes with Core Location geofencing.
+            isLocationVerified: true,
+            isAutoDetected: hasMealPhoto,
+            isFromReceipt: isAmountFromReceipt,
+            imageName: restaurant.imageName
+        )
+
+        if let stamp = appState.addVisit(visit) {
+            router.present(.stampEarned(stamp.cuisine))
+        } else {
+            router.closeVisitLoggingScreens()
+            router.showToast("Visit logged ✓")
         }
     }
 

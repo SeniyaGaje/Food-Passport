@@ -5,9 +5,11 @@ Students set a food quest, find restaurants on a map, log meals, earn cuisine st
 
 ## Current status
 
-**UI milestone:** every screen from the Figma prototype is built in SwiftUI with working navigation, running on mock data.
-Backend and device features (Firebase, Face ID, Core ML, Vision, geofencing, notifications) are not wired up yet —
-the screens that will use them show sample results so the full user flow can be clicked through.
+- **UI:** every screen from the Figma prototype is built in SwiftUI with working navigation.
+- **Backend:** Firebase Authentication (email and password) and Cloud Firestore store accounts, profiles, budgets,
+  bookmarks, visits, stamps and the restaurant list.
+- **Not wired up yet:** Face ID, Core ML, Vision, geofencing and notifications. Those screens show sample results,
+  and quests, trails and challenges still use sample data.
 
 ## Requirements
 
@@ -20,10 +22,34 @@ the screens that will use them show sample results so the full user flow can be 
 2. Select the **FoodPassport** scheme and an iPhone simulator.
 3. Press **Run** (⌘R). Run the unit tests with **Test** (⌘U).
 
+Without `GoogleService-Info.plist` the app runs on mock data (any email and password signs in).
+To use the real backend, follow **Firebase setup** below.
+
 Demo flow: Get started → Create account → Before we begin → Start exploring → Explore → Campus Bites → Get directions →
 Start (arrival banner appears) → tap banner → Scan your meal / Scan receipt → Save visit → Done → Budget update → See updated plan.
 
 The Face ID lock screen appears when the app returns from the background while "Unlock with Face ID" is on in Profile.
+
+## Firebase setup
+
+1. In the [Firebase console](https://console.firebase.google.com), create a project.
+2. Add an **iOS** app with the bundle ID `com.seniyagajadeera.FoodPassport`, then download `GoogleService-Info.plist`.
+3. Put `GoogleService-Info.plist` in the `FoodPassport/` folder, next to `FoodPassportApp.swift`.
+   It is listed in `.gitignore`, so it is not committed.
+4. **Authentication → Sign-in method:** enable **Email/Password**.
+5. **Firestore Database:** create a database in production mode, then paste the contents of
+   [`firestore.rules`](firestore.rules) into the **Rules** tab and publish.
+6. Run the app and create an account. On the first run, a debug build uploads the sample restaurants
+   to the `restaurants` collection.
+
+Firestore layout:
+
+```
+restaurants/{restaurantID}          shared restaurant list
+users/{userID}                      profile: name, email, monthly budget, bookmarks
+users/{userID}/visits/{visitID}     logged visits
+users/{userID}/stamps/{cuisine}     one stamp per cuisine
+```
 
 ## Project structure
 
@@ -35,9 +61,12 @@ FoodPassport/
 ├── Assets.xcassets           App icon, accent colour, photos
 ├── Models/
 │   ├── Models.swift          Data types (Restaurant, Visit, Quest, Stamp, …)
-│   └── MockData.swift        Sample data used until Firestore is connected
+│   └── MockData.swift        Sample data for previews, tests and the first Firestore upload
 ├── ViewModels/
-│   └── AppState.swift        Shared app state and navigation (tabs, routes, pop-ups)
+│   └── AppState.swift        Session and data state, plus navigation (tabs, routes, pop-ups)
+├── Services/
+│   ├── AuthService.swift     Sign up / sign in: Firebase Auth version and a mock for tests
+│   └── DatabaseService.swift Reads and writes: Firestore version and a mock for tests
 ├── Views/
 │   ├── MainTabView.swift     Tab bar, screen routing, pop-up and toast hosts
 │   ├── OnboardingViews.swift Welcome, permissions, budget setup

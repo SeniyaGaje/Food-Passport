@@ -3,7 +3,7 @@ import CoreLocation
 
 // MARK: - Cuisine
 
-enum Cuisine: String, CaseIterable, Identifiable, Hashable {
+enum Cuisine: String, CaseIterable, Identifiable, Hashable, Codable {
     case sriLankan = "Sri Lankan"
     case indian = "Indian"
     case chinese = "Chinese"
@@ -16,7 +16,7 @@ enum Cuisine: String, CaseIterable, Identifiable, Hashable {
 
 // MARK: - Dish
 
-struct Dish: Identifiable, Hashable {
+struct Dish: Identifiable, Hashable, Codable {
     var id: String { name }
     let name: String
     let price: Int
@@ -24,7 +24,8 @@ struct Dish: Identifiable, Hashable {
 
 // MARK: - Restaurant
 
-struct Restaurant: Identifiable, Hashable {
+/// Stored in Firestore under `restaurants/{id}`.
+struct Restaurant: Identifiable, Hashable, Codable {
     let id: String
     let name: String
     let cuisine: Cuisine
@@ -43,7 +44,7 @@ struct Restaurant: Identifiable, Hashable {
     }
 }
 
-// MARK: - Restaurant
+// MARK: - Restaurant formatting
 
 extension Restaurant {
     var distanceText: String {
@@ -57,7 +58,9 @@ extension Restaurant {
 
 // MARK: - Visit
 
-struct Visit: Identifiable, Hashable {
+/// Stored in Firestore under `users/{uid}/visits/{id}`. The restaurant is copied into the visit
+/// so History still shows it even if the restaurant's details change later.
+struct Visit: Identifiable, Hashable, Codable {
     let id: String
     let dishName: String
     let cuisine: Cuisine
@@ -114,7 +117,8 @@ enum VisitDateGroup: Int, CaseIterable, Comparable {
 // MARK: - Stamp
 
 /// A cuisine stamp in the student's passport, earned by a location-verified visit.
-struct Stamp: Identifiable, Hashable {
+/// Stored in Firestore under `users/{uid}/stamps/{cuisine}`.
+struct Stamp: Identifiable, Hashable, Codable {
     var id: Cuisine { cuisine }
     let cuisine: Cuisine
     let restaurantName: String
@@ -251,11 +255,13 @@ struct WeeklyChallenge: Hashable {
 
 // MARK: - UserProfile
 
-struct UserProfile: Hashable {
+/// Stored in Firestore as the `users/{uid}` document.
+struct UserProfile: Hashable, Codable {
     var name: String
     var email: String
     var memberSince: Date
     var monthlyBudget: Int
+    var bookmarkedRestaurantIDs: Set<Restaurant.ID>
 
     var initials: String {
         name.split(separator: " ")

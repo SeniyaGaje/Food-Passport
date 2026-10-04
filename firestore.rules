@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Security rules for FoodPassport's Cloud Firestore database.
+// Paste these into Firebase console → Firestore Database → Rules, then press Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Shared restaurant list: any signed-in student can read it.
+    // Writing is allowed only so a debug build can upload the sample restaurants on its first run.
+    // Once the restaurants appear in the console, change the write rule to `if false` and publish again.
+    match /restaurants/{restaurantId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Each student can only read and write their own profile, visits and stamps.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /visits/{visitId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /stamps/{cuisine} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

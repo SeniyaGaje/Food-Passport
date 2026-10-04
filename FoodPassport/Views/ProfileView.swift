@@ -287,7 +287,7 @@ struct MonthlyBudgetSheet: View {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.brandSecondary)
                 Button("Save") {
-                    appState.profile.monthlyBudget = amount
+                    appState.updateMonthlyBudget(amount)
                     dismiss()
                 }
                 .buttonStyle(.brandPrimary)

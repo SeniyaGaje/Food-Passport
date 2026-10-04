@@ -120,7 +120,8 @@ enum MockData {
         name: "John Doe",
         email: "john.doe@students.cmb.ac.lk",
         memberSince: Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 1)) ?? .now,
-        monthlyBudget: 3000
+        monthlyBudget: 3000,
+        bookmarkedRestaurantIDs: []
     )
 
     static let visits: [Visit] = [

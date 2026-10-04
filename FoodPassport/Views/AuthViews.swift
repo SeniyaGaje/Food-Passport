@@ -22,6 +22,20 @@ struct AuthHeader: View {
     }
 }
 
+// MARK: - FormErrorText
+
+/// Red message under a form, e.g. "Incorrect email or password."
+struct FormErrorText: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.circle.fill")
+            .font(.subheadline)
+            .foregroundStyle(.red)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - SignInView
 
 struct SignInView: View {
@@ -30,6 +44,8 @@ struct SignInView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isShowingForgotPassword = false
+    @State private var isSigningIn = false
+    @State private var errorMessage: String?
 
     var body: some View {
         ScrollView {
@@ -56,11 +72,21 @@ struct SignInView: View {
                         .padding(.top, 4)
                 }
 
-                Button("Sign in") {
-                    router.reset()
-                    appState.enterApp()
+                if let errorMessage {
+                    FormErrorText(message: errorMessage)
+                }
+
+                Button(action: signIn) {
+                    if isSigningIn {
+                        ProgressView()
+                            .tint(.white)
+                            .accessibilityLabel("Signing in")
+                    } else {
+                        Text("Sign in")
+                    }
                 }
                 .buttonStyle(.brandPrimary)
+                .disabled(isSigningIn || email.trimmed.isEmpty || password.isEmpty)
 
                 HStack(spacing: 4) {
                     Text("Don't have an account?")
@@ -81,15 +107,43 @@ struct SignInView: View {
             ForgotPasswordView()
         }
     }
+
+    private func signIn() {
+        isSigningIn = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await appState.signIn(email: email.trimmed, password: password)
+                router.reset()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isSigningIn = false
+        }
+    }
 }
 
 // MARK: - SignUpView
 
 struct SignUpView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(AppRouter.self) private var router
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var isCreatingAccount = false
+    @State private var errorMessage: String?
+
+    /// Checked before contacting Firebase, so simple mistakes are explained straight away.
+    private var validationMessage: String? {
+        if name.trimmed.isEmpty { return "Enter your full name." }
+        if !email.trimmed.contains("@") { return "Enter a valid email address." }
+        if password.count < 8 { return "Password must be at least 8 characters." }
+        if password != confirmPassword { return "Passwords don't match." }
+        return nil
+    }
 
     var body: some View {
         ScrollView {
@@ -121,10 +175,21 @@ struct SignUpView: View {
                     SecureInputField(placeholder: "Re-enter password", text: $confirmPassword)
                 }
 
-                NavigationLink(value: OnboardingRoute.permissions) {
-                    Text("Create account")
+                if let errorMessage {
+                    FormErrorText(message: errorMessage)
+                }
+
+                Button(action: createAccount) {
+                    if isCreatingAccount {
+                        ProgressView()
+                            .tint(.white)
+                            .accessibilityLabel("Creating account")
+                    } else {
+                        Text("Create account")
+                    }
                 }
                 .buttonStyle(.brandPrimary)
+                .disabled(isCreatingAccount)
                 .padding(.top, 4)
 
                 HStack(spacing: 4) {
@@ -143,14 +208,37 @@ struct SignUpView: View {
         .appBackground()
         .navigationBarTitleDisplayMode(.inline)
     }
+
+    private func createAccount() {
+        if let validationMessage {
+            errorMessage = validationMessage
+            return
+        }
+
+        isCreatingAccount = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await appState.signUp(name: name.trimmed, email: email.trimmed, password: password)
+                router.onboardingPath.append(.permissions)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isCreatingAccount = false
+        }
+    }
 }
 
 // MARK: - ForgotPasswordView
 
 struct ForgotPasswordView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var email = ""
     @State private var isLinkSent = false
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -183,10 +271,13 @@ struct ForgotPasswordView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                Button("Send reset link") {
-                    withAnimation { isLinkSent = true }
+                if let errorMessage {
+                    FormErrorText(message: errorMessage)
                 }
-                .buttonStyle(.brandPrimary)
+
+                Button("Send reset link", action: sendResetLink)
+                    .buttonStyle(.brandPrimary)
+                    .disabled(isSending || email.trimmed.isEmpty)
             }
         }
         .padding(24)
@@ -194,6 +285,21 @@ struct ForgotPasswordView: View {
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .presentationBackground(Theme.sheetBackground)
+    }
+
+    private func sendResetLink() {
+        isSending = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await appState.sendPasswordReset(email: email.trimmed)
+                withAnimation { isLinkSent = true }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isSending = false
+        }
     }
 }
 

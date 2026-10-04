@@ -10,12 +10,15 @@ struct ExploreView: View {
         case list
     }
 
+    @Environment(AppState.self) private var appState
     @State private var searchText = ""
     @State private var selectedCuisine: Cuisine?
     @State private var displayMode: DisplayMode = .map
     @State private var selectedRestaurantID: Restaurant.ID?
 
-    private let restaurants = MockData.restaurants
+    private var restaurants: [Restaurant] {
+        appState.restaurants
+    }
 
     private var cuisineFilters: [Cuisine] {
         Cuisine.allCases.filter { cuisine in
