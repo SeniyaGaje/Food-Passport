@@ -164,7 +164,7 @@ struct TopMessageHost: View {
     var body: some View {
         VStack(spacing: 8) {
             if let banner = router.banner {
-                NotificationBannerView(title: banner.title, message: banner.message) {
+                NotificationBannerView(title: banner.title, message: banner.message, imageName: banner.imageName) {
                     router.openBanner()
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))

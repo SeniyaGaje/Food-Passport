@@ -271,5 +271,6 @@ struct InAppBanner: Equatable, Identifiable {
     let id = UUID()
     let title: String
     let message: String
+    var imageName: String?
     var route: AppRoute?
 }

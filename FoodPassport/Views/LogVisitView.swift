@@ -106,26 +106,23 @@ struct LogVisitView: View {
     @ViewBuilder
     private var mealScanArea: some View {
         if hasMealPhoto {
-            FoodImageView(imageName: "dish_kottu", cuisine: selectedCuisine, cornerRadius: 20)
-                .frame(height: 180)
-                .overlay(alignment: .topLeading) {
-                    PillLabel(text: "Auto-detected", systemImage: "sparkles", style: .orange)
-                        .padding(12)
+            Button {
+                isShowingMealCamera = true
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "camera")
+                        .font(.title3)
+                        .foregroundStyle(Theme.ink)
+                        .frame(width: 48, height: 48)
+                        .background(Color(hex: 0xE8E8EA), in: Circle())
+
+                    Text("Retake")
+                        .font(.headline)
+                        .foregroundStyle(Theme.ink)
                 }
-                .overlay(alignment: .bottomTrailing) {
-                    Button {
-                        isShowingMealCamera = true
-                    } label: {
-                        Label("Retake", systemImage: "camera")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Theme.ink)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.ultraThinMaterial, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(12)
-                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
         } else {
             Button {
                 isShowingMealCamera = true

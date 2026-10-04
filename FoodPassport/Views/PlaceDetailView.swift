@@ -297,6 +297,7 @@ struct DirectionsView: View {
                 InAppBanner(
                     title: "You've arrived at \(restaurant.name)! 📍",
                     message: "Log your visit now to earn a stamp and level up your \(restaurant.cuisine.rawValue) quest.",
+                    imageName: restaurant.imageName,
                     route: .logVisit(restaurant)
                 )
             )

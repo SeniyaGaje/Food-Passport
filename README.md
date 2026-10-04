@@ -61,9 +61,9 @@ The project uses Xcode folder-synced groups, so any file added inside `FoodPassp
 
 ## Photos
 
-Food photos currently show cuisine-coloured placeholders. To use real images, add them to `Assets.xcassets`
-with these names and they will appear automatically:
-
+Food photos come from the Figma prototype and live in `Assets.xcassets`:
 `welcome_hero`, `restaurant_campus_bites`, `restaurant_spice_route`, `restaurant_dragon_wok`,
-`restaurant_hoppers_hut`, `restaurant_pasta_corner`, `dish_kottu`, `dish_masala_dosa`, `dish_butter_chicken`,
-`camera_preview_meal`
+`restaurant_hoppers_hut`, `restaurant_pasta_corner`, `dish_kottu`, `dish_masala_dosa`, `dish_butter_chicken`.
+To change a photo, replace the image in that set. Any missing photo falls back to a cuisine-coloured placeholder.
+
+The meal camera and receipt scanner show placeholders until the camera is connected.

@@ -592,6 +592,7 @@ struct NotificationBannerView: View {
     let title: String
     let message: String
     var timestamp = "now"
+    var imageName: String?
     let action: () -> Void
 
     var body: some View {
@@ -615,6 +616,12 @@ struct NotificationBannerView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                }
+
+                if let imageName {
+                    FoodImageView(imageName: imageName, cornerRadius: 8)
+                        .frame(width: 40, height: 40)
+                        .padding(.top, 22)
                 }
             }
             .foregroundStyle(Theme.ink)
