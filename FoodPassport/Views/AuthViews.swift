@@ -305,12 +305,20 @@ struct ForgotPasswordView: View {
 
 // MARK: - FaceIDLockView
 
-/// Shown over the app when it returns from the background and "Unlock with Face ID" is on.
+/// Covers the app when it opens or returns from the background while "Unlock with Face ID" is on.
 struct FaceIDLockView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// The Face ID prompt is shown by itself once each time the app comes back.
+    /// After that the student taps to retry, so cancelling doesn't bring the prompt straight back.
+    @State private var hasPromptedAutomatically = false
+    @State private var isAuthenticating = false
 
     var body: some View {
+        let biometryName = appState.biometryKind.name
+
         VStack(spacing: 20) {
             Spacer()
 
@@ -327,10 +335,8 @@ struct FaceIDLockView: View {
 
             Spacer()
 
-            Button {
-                appState.unlock()
-            } label: {
-                Image(systemName: "faceid")
+            Button(action: unlock) {
+                Image(systemName: appState.biometryKind.systemImage)
                     .font(.system(size: 52))
                     .foregroundStyle(Theme.orange)
                     .symbolEffect(.pulse, options: .repeating)
@@ -339,16 +345,23 @@ struct FaceIDLockView: View {
                     .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Unlock with Face ID")
+            .disabled(isAuthenticating)
+            .accessibilityLabel("Unlock with \(biometryName)")
 
-            Text("Tap to unlock with Face ID")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if let lockMessage = appState.lockMessage {
+                FormErrorText(message: lockMessage)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("Tap to unlock with \(biometryName)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer()
 
-            Button("Unlock with Face ID") { appState.unlock() }
+            Button("Unlock with \(biometryName)", action: unlock)
                 .buttonStyle(.brandPrimary)
+                .disabled(isAuthenticating)
 
             Button("Use account password") {
                 router.reset()
@@ -359,6 +372,25 @@ struct FaceIDLockView: View {
         }
         .padding(24)
         .appBackground()
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            switch phase {
+            case .active where !hasPromptedAutomatically:
+                hasPromptedAutomatically = true
+                unlock()
+            case .background:
+                hasPromptedAutomatically = false
+            default:
+                break
+            }
+        }
+    }
+
+    private func unlock() {
+        isAuthenticating = true
+        Task {
+            await appState.unlockWithBiometrics()
+            isAuthenticating = false
+        }
     }
 }
 

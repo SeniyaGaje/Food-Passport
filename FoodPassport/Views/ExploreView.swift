@@ -159,10 +159,8 @@ struct ExploreMapView: View {
 
     var body: some View {
         Map(position: $position) {
-            Annotation("You", coordinate: MockData.userLocation) {
-                UserLocationDot()
-            }
-            .annotationTitles(.hidden)
+            // The student's real location (shown once location access is allowed).
+            UserAnnotation()
 
             ForEach(restaurants) { restaurant in
                 Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
@@ -179,6 +177,7 @@ struct ExploreMapView: View {
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .mapControls {
+            MapUserLocationButton()
             MapCompass()
         }
     }

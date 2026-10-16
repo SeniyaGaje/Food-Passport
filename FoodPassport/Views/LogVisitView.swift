@@ -107,9 +107,8 @@ struct LogVisitView: View {
             rating: rating,
             notes: notes.trimmed,
             date: .now,
-            // The student reaches this screen from the arrival alert or "I'm here".
-            // Checking their real location against the restaurant comes with Core Location geofencing.
-            isLocationVerified: true,
+            // Only a visit logged at the restaurant itself is verified, and only verified visits earn stamps.
+            isLocationVerified: appState.isAtRestaurant(restaurant),
             isAutoDetected: hasMealPhoto,
             isFromReceipt: isAmountFromReceipt,
             imageName: restaurant.imageName
@@ -119,7 +118,7 @@ struct LogVisitView: View {
             router.present(.stampEarned(stamp.cuisine))
         } else {
             router.closeVisitLoggingScreens()
-            router.showToast("Visit logged ✓")
+            router.showToast(visit.isLocationVerified ? "Visit logged ✓" : "Visit logged. Stamps need a verified location.")
         }
     }
 
@@ -132,7 +131,11 @@ struct LogVisitView: View {
                 Text(restaurant.name)
                     .font(.title3.bold())
                     .foregroundStyle(Theme.ink)
-                PillLabel(text: "Location verified", trailingSystemImage: "checkmark")
+                if appState.isAtRestaurant(restaurant) {
+                    PillLabel(text: "Location verified", trailingSystemImage: "checkmark", style: .green)
+                } else {
+                    PillLabel(text: "Not at this restaurant", systemImage: "location.slash")
+                }
             }
 
             Spacer(minLength: 0)

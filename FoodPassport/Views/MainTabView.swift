@@ -4,6 +4,7 @@ import SwiftUI
 
 /// The five-tab shell (Home, Explore, Passport, History, Profile), each with its own navigation stack.
 struct MainTabView: View {
+    @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
 
     var body: some View {
@@ -26,6 +27,43 @@ struct MainTabView: View {
         .overlay(alignment: .top) { TopMessageHost() }
         .sheet(item: $router.sheet) { sheet in
             AppSheetContent(sheet: sheet)
+        }
+        // `initial: true` also handles a tap that launched the app, which arrives before this view appears.
+        .onChange(of: appState.notificationDestination, initial: true) { _, destination in
+            guard let destination else { return }
+            appState.notificationDestination = nil
+            open(destination)
+        }
+        // Geofence arrival while the app is open: the same message as the notification, as an in-app banner.
+        .onChange(of: appState.arrivedRestaurant) { _, restaurant in
+            guard let restaurant else { return }
+            appState.arrivedRestaurant = nil
+            router.showBanner(
+                InAppBanner(
+                    title: "You've arrived at \(restaurant.name)! 📍",
+                    message: "Log your visit now to earn a stamp and level up your \(restaurant.cuisine.rawValue) quest.",
+                    imageName: restaurant.imageName,
+                    route: .logVisit(restaurant)
+                )
+            )
+        }
+    }
+
+    /// Shows the screen a tapped notification points to.
+    private func open(_ destination: NotificationDestination) {
+        switch destination {
+        case .restaurant(let id):
+            if let restaurant = appState.restaurants.first(where: { $0.id == id }) {
+                router.open(.placeDetail(restaurant), in: .explore)
+            }
+        case .logVisit(let id):
+            if let restaurant = appState.restaurants.first(where: { $0.id == id }) {
+                // Same screens as arriving from Directions: Place detail with Log your visit on top.
+                router.tabPaths[.explore] = [.placeDetail(restaurant), .logVisit(restaurant)]
+                router.selectedTab = .explore
+            }
+        case .weeklyChallenge:
+            router.open(.weeklyChallenge, in: .passport)
         }
     }
 

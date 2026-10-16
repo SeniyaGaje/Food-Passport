@@ -345,6 +345,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "FoodPassport uses the camera to recognise your meal and read your receipt. Photos are processed on your device.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "FoodPassport uses Face ID to keep your visits and spending private.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "FoodPassport uses your location in the background to tell you when you arrive at a food place, so you can log your visit and earn a stamp.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "FoodPassport uses your location to find food places nearby and to verify your visits so you can earn stamps.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "FoodPassport lets you choose a meal photo from your library to log a visit.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -381,6 +382,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "FoodPassport uses the camera to recognise your meal and read your receipt. Photos are processed on your device.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "FoodPassport uses Face ID to keep your visits and spending private.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "FoodPassport uses your location in the background to tell you when you arrive at a food place, so you can log your visit and earn a stamp.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "FoodPassport uses your location to find food places nearby and to verify your visits so you can earn stamps.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "FoodPassport lets you choose a meal photo from your library to log a visit.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

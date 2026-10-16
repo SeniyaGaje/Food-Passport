@@ -93,11 +93,13 @@ struct WelcomeView: View {
 
 /// "Before we begin" — explains each permission before it is requested.
 struct PermissionsView: View {
+    @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
-    @State private var grantedPermissions: Set<OnboardingPermission> = []
+    /// The student's answer for each permission asked so far: true if allowed.
+    @State private var answers: [OnboardingPermission: Bool] = [:]
 
     private var nextPermission: OnboardingPermission? {
-        OnboardingPermission.allCases.first { !grantedPermissions.contains($0) }
+        OnboardingPermission.allCases.first { answers[$0] == nil }
     }
 
     var body: some View {
@@ -110,17 +112,14 @@ struct PermissionsView: View {
                 .foregroundStyle(.secondary)
 
             ForEach(OnboardingPermission.allCases) { permission in
-                PermissionCard(permission: permission, isGranted: grantedPermissions.contains(permission))
+                PermissionCard(permission: permission, isGranted: answers[permission] == true)
             }
 
             Spacer()
 
             if let nextPermission {
-                Button(nextPermission.buttonTitle) {
-                    // UI only: the real system permission request is added with each feature.
-                    withAnimation { _ = grantedPermissions.insert(nextPermission) }
-                }
-                .buttonStyle(.brandPrimary)
+                Button(nextPermission.buttonTitle) { ask(for: nextPermission) }
+                    .buttonStyle(.brandPrimary)
 
                 Button("Continue") { router.onboardingPath.append(.budgetSetup) }
                     .buttonStyle(BrandTextButtonStyle(color: .secondary))
@@ -132,6 +131,24 @@ struct PermissionsView: View {
         .padding(24)
         .appBackground()
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func ask(for permission: OnboardingPermission) {
+        switch permission {
+        case .notifications:
+            Task {
+                let isAllowed = await appState.allowRemindersDuringOnboarding()
+                withAnimation { answers[.notifications] = isAllowed }
+            }
+        case .location:
+            Task {
+                let isAllowed = await appState.requestLocationPermission()
+                withAnimation { answers[.location] = isAllowed }
+            }
+        case .camera:
+            // UI only for now: the system prompt is added with the camera feature.
+            withAnimation { answers[permission] = true }
+        }
     }
 }
 

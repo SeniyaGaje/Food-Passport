@@ -8,7 +8,16 @@ Students set a food quest, find restaurants on a map, log meals, earn cuisine st
 - **UI:** every screen from the Figma prototype is built in SwiftUI with working navigation.
 - **Backend:** Firebase Authentication (email and password) and Cloud Firestore store accounts, profiles, budgets,
   bookmarks, visits, stamps and the restaurant list.
-- **Not wired up yet:** Face ID, Core ML, Vision, geofencing and notifications. Those screens show sample results,
+- **Face ID / Touch ID:** turn on "Unlock with Face ID" in Profile. The app then asks for Face ID whenever it opens
+  or comes back from the background (LocalAuthentication).
+- **Notifications:** local reminders 30 minutes before a planned visit, and a weekly challenge reminder every Monday
+  at the time chosen in Profile (UserNotifications). Tapping one opens the restaurant or the weekly challenge.
+- **MapKit + Core Location geofencing:** restaurant pins come from Firestore, and distances and walking times are
+  measured from the student's real location. Every restaurant has a 100 m geofence. Walking into one shows
+  "You've arrived" (an in-app banner, or a notification when the app is closed), and Directions draws a MapKit
+  walking route. A visit only counts as location verified, and earns a stamp, when it is logged within 150 m
+  of the restaurant.
+- **Not wired up yet:** Core ML and Vision. Those screens show sample results,
   and quests, trails and challenges still use sample data.
 
 ## Requirements
@@ -29,6 +38,26 @@ Demo flow: Get started → Create account → Before we begin → Start explorin
 Start (arrival banner appears) → tap banner → Scan your meal / Scan receipt → Save visit → Done → Budget update → See updated plan.
 
 The Face ID lock screen appears when the app returns from the background while "Unlock with Face ID" is on in Profile.
+
+## Trying Face ID and notifications in the simulator
+
+- **Face ID:** in the Simulator menu choose **Features → Face ID → Enrolled**. Turn on "Unlock with Face ID" in Profile,
+  then use **Features → Face ID → Matching Face** (or **Non-matching Face**) when the prompt appears.
+- **Lock screen:** with Face ID on, press ⇧⌘H to go home, then reopen FoodPassport.
+- **Reminders:** allow notifications during onboarding, or turn a reminder on in Profile. Plan a visit at least
+  30 minutes ahead with "Remind me" on. Notifications show even while the app is open.
+
+## Trying geofencing in the simulator
+
+The simulator starts in California, so first move it to campus: **Features → Location → Custom Location…**
+and enter latitude `6.9028`, longitude `79.8598`. Allow location during onboarding.
+
+- **Arrival alert:** open Campus Bites → **Get directions** → **Start**, then set the custom location to
+  `6.9010`, `79.8624` (Campus Bites). The "You've arrived" banner appears and the route card switches to
+  **Log your visit**.
+- **With the app closed:** choose **Always** when iOS asks to change location access, press ⇧⌘H, then move the
+  location to Campus Bites. A notification appears; tapping it opens Log your visit.
+- From Terminal: `xcrun simctl location booted set 6.9010,79.8624`
 
 ## Firebase setup
 
@@ -66,7 +95,10 @@ FoodPassport/
 │   └── AppState.swift        Session and data state, plus navigation (tabs, routes, pop-ups)
 ├── Services/
 │   ├── AuthService.swift     Sign up / sign in: Firebase Auth version and a mock for tests
-│   └── DatabaseService.swift Reads and writes: Firestore version and a mock for tests
+│   ├── DatabaseService.swift Reads and writes: Firestore version and a mock for tests
+│   ├── BiometricService.swift      Face ID / Touch ID: LocalAuthentication version and a mock
+│   ├── NotificationService.swift   Reminders: UserNotifications version and a mock
+│   └── LocationService.swift       Location and geofences: Core Location version and a mock
 ├── Views/
 │   ├── MainTabView.swift     Tab bar, screen routing, pop-up and toast hosts
 │   ├── OnboardingViews.swift Welcome, permissions, budget setup

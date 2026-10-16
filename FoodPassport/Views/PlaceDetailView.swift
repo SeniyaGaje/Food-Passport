@@ -102,19 +102,29 @@ struct PlaceDetailView: View {
 /// Bottom sheet for choosing a date and time to visit a restaurant.
 struct PlanVisitSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
 
     let restaurant: Restaurant
 
     @State private var selectedDayIndex = 2
-    @State private var selectedTime = "1:00 PM"
+    @State private var selectedMinutes = 13 * 60
     @State private var remindMe = true
     @State private var countsTowardsQuest = true
 
     private let days: [Date] = (0..<5).compactMap {
         Calendar.current.date(byAdding: .day, value: $0, to: .now)
     }
-    private let times = ["12:30 PM", "1:00 PM", "1:30 PM", "6:30 PM"]
+    /// Time slots as minutes after midnight: 12:30 PM, 1:00 PM, 1:30 PM and 6:30 PM.
+    private let timeSlots = [12 * 60 + 30, 13 * 60, 13 * 60 + 30, 18 * 60 + 30]
+
+    private var selectedVisitDate: Date {
+        date(on: days[selectedDayIndex], minutes: selectedMinutes)
+    }
+
+    private var isSelectedTimeInPast: Bool {
+        selectedVisitDate <= .now
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -122,7 +132,8 @@ struct PlanVisitSheet: View {
                 title: "Plan your visit",
                 confirmTitle: "Plan",
                 onCancel: { dismiss() },
-                onConfirm: planVisit
+                onConfirm: planVisit,
+                isConfirmEnabled: !isSelectedTimeInPast
             )
 
             VStack(alignment: .leading, spacing: 10) {
@@ -139,11 +150,17 @@ struct PlanVisitSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionCaption("Select time")
                 HStack(spacing: 8) {
-                    ForEach(times, id: \.self) { time in
-                        timeChip(time, isSelected: time == selectedTime) {
-                            selectedTime = time
+                    ForEach(timeSlots, id: \.self) { minutes in
+                        timeChip(minutes, isSelected: minutes == selectedMinutes) {
+                            selectedMinutes = minutes
                         }
                     }
+                }
+
+                if isSelectedTimeInPast {
+                    Text("That time has passed. Pick a later time or another day.")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.destructive)
                 }
             }
 
@@ -167,9 +184,25 @@ struct PlanVisitSheet: View {
     }
 
     private func planVisit() {
-        let day = days[selectedDayIndex].formatted(.dateTime.weekday(.abbreviated).day())
+        let visitDate = selectedVisitDate
+        let wantsReminder = remindMe
+        let restaurant = restaurant
         dismiss()
-        router.showToast("Visit to \(restaurant.name) planned for \(day), \(selectedTime)")
+
+        Task {
+            let reminderDate = await appState.planVisit(to: restaurant, at: visitDate, remind: wantsReminder)
+            let day = visitDate.formatted(.dateTime.weekday(.abbreviated).day().hour().minute())
+
+            if let reminderDate {
+                router.showToast("Visit planned for \(day). Reminder at \(reminderDate.formatted(date: .omitted, time: .shortened))")
+            } else {
+                router.showToast("Visit to \(restaurant.name) planned for \(day)")
+            }
+        }
+    }
+
+    private func date(on day: Date, minutes: Int) -> Date {
+        Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: day) ?? day
     }
 
     private func dayChip(for date: Date, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -189,9 +222,9 @@ struct PlanVisitSheet: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private func timeChip(_ time: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func timeChip(_ minutes: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(time)
+            Text(date(on: .now, minutes: minutes).formatted(date: .omitted, time: .shortened))
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -207,35 +240,37 @@ struct PlanVisitSheet: View {
 
 // MARK: - DirectionsView
 
-/// Walking route to a restaurant with a Start button.
+/// Walking route from the student to a restaurant. Start turns on the arrival alert for when they get there.
 struct DirectionsView: View {
-    @Environment(AppRouter.self) private var router
+    @Environment(AppState.self) private var appState
+    @State private var route: MKRoute?
+    @State private var isLoadingRoute = true
     @State private var isNavigating = false
-    @State private var position: MapCameraPosition
+    @State private var position: MapCameraPosition = .automatic
 
     let restaurant: Restaurant
 
-    init(restaurant: Restaurant) {
-        self.restaurant = restaurant
-        _position = State(initialValue: .region(.fitting([MockData.userLocation, restaurant.coordinate], paddingFactor: 2.6)))
+    /// The restaurant with its distance kept up to date as the student walks.
+    private var liveRestaurant: Restaurant {
+        appState.restaurants.first { $0.id == restaurant.id } ?? restaurant
     }
 
-    /// Placeholder path drawn until real MapKit walking directions are added.
-    private var routeCoordinates: [CLLocationCoordinate2D] {
-        let start = MockData.userLocation
-        let end = restaurant.coordinate
-        return [start, CLLocationCoordinate2D(latitude: start.latitude, longitude: end.longitude), end]
+    private var hasArrived: Bool {
+        appState.isAtRestaurant(restaurant)
     }
 
     var body: some View {
         Map(position: $position) {
-            MapPolyline(coordinates: routeCoordinates)
-                .stroke(Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round, dash: [1, 12]))
-
-            Annotation("You", coordinate: MockData.userLocation) {
-                UserLocationDot()
+            if let route {
+                MapPolyline(route.polyline)
+                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+            } else if let start = appState.userLocation?.coordinate {
+                // No walking route (e.g. offline): a dotted straight line still shows the direction.
+                MapPolyline(coordinates: [start, restaurant.coordinate])
+                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [1, 12]))
             }
-            .annotationTitles(.hidden)
+
+            UserAnnotation()
 
             Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
                 RestaurantPin(isSelected: true)
@@ -243,64 +278,120 @@ struct DirectionsView: View {
             .annotationTitles(.hidden)
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .mapControls {
+            MapUserLocationButton()
+        }
         .safeAreaInset(edge: .bottom) {
             routeCard
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
         }
         .navigationTitleHidden("Directions")
+        // Recalculated once the student's location first becomes known.
+        .task(id: appState.userLocation == nil) {
+            await loadRoute()
+        }
+    }
+
+    // MARK: Route details
+
+    private var walkingMinutes: Int {
+        guard let route else { return liveRestaurant.walkingMinutes }
+        return max(1, Int((route.expectedTravelTime / 60).rounded(.up)))
+    }
+
+    private var distanceText: String {
+        guard let route else { return liveRestaurant.distanceText }
+        return Measurement(value: route.distance, unit: UnitLength.meters)
+            .formatted(.measurement(width: .abbreviated, usage: .road))
+    }
+
+    private var routeSummary: String {
+        guard let route, !route.name.isEmpty else { return restaurant.routeSummary }
+        return "Route via \(route.name)"
     }
 
     private var routeCard: some View {
         VStack(spacing: 18) {
             HStack(spacing: 14) {
-                Image(systemName: "figure.walk")
+                Image(systemName: hasArrived ? "mappin.and.ellipse" : "figure.walk")
                     .font(.title2)
                     .foregroundStyle(Theme.orange)
                     .frame(width: 56, height: 56)
                     .background(Theme.orangeTint, in: Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(restaurant.walkingMinutes) min walk")
+                    Text(hasArrived ? "You're here" : "\(walkingMinutes) min walk")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.ink)
-                    Text("\(restaurant.distanceText) • \(restaurant.routeSummary)")
+                    Text(hasArrived ? restaurant.name : "\(distanceText) • \(routeSummary)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: 0)
+
+                if isLoadingRoute && !hasArrived {
+                    ProgressView()
+                        .accessibilityLabel("Finding a walking route")
+                }
             }
 
-            Button {
-                startNavigation()
-            } label: {
-                Label(
-                    isNavigating ? "Navigating…" : "Start",
-                    systemImage: isNavigating ? "location.fill" : "arrow.triangle.turn.up.right.diamond.fill"
-                )
+            if appState.locationPermission.allowsLocation == false {
+                Text("Allow location access in Settings to see your route and get an alert when you arrive.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.brandPrimary)
-            .disabled(isNavigating)
+
+            if hasArrived {
+                NavigationLink(value: AppRoute.logVisit(restaurant)) {
+                    Label("Log your visit", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.brandPrimary)
+            } else {
+                Button(action: startNavigation) {
+                    Label(
+                        isNavigating ? "We'll alert you when you arrive" : "Start",
+                        systemImage: isNavigating ? "location.fill" : "arrow.triangle.turn.up.right.diamond.fill"
+                    )
+                }
+                .buttonStyle(.brandPrimary)
+                .disabled(isNavigating)
+            }
         }
         .padding(20)
         .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
     }
 
+    // MARK: Actions
+
+    /// Asks MapKit for a walking route from the student's location to the restaurant.
+    private func loadRoute() async {
+        guard let start = appState.userLocation?.coordinate else {
+            isLoadingRoute = appState.locationPermission.allowsLocation
+            return
+        }
+
+        isLoadingRoute = true
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: start))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: restaurant.coordinate))
+        request.transportType = .walking
+
+        do {
+            route = try await MKDirections(request: request).calculate().routes.first
+        } catch {
+            route = nil
+        }
+        isLoadingRoute = false
+    }
+
     private func startNavigation() {
         isNavigating = true
-        // Stand-in for the geofence arrival alert so the prototype flow can be clicked through.
         Task {
-            try? await Task.sleep(for: .seconds(2))
-            router.showBanner(
-                InAppBanner(
-                    title: "You've arrived at \(restaurant.name)! 📍",
-                    message: "Log your visit now to earn a stamp and level up your \(restaurant.cuisine.rawValue) quest.",
-                    imageName: restaurant.imageName,
-                    route: .logVisit(restaurant)
-                )
-            )
+            await appState.startArrivalAlerts(for: restaurant)
         }
     }
 }

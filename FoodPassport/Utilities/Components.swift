@@ -515,6 +515,7 @@ struct SheetHeader: View {
     let confirmTitle: String
     let onCancel: () -> Void
     let onConfirm: () -> Void
+    var isConfirmEnabled = true
 
     var body: some View {
         ZStack {
@@ -528,7 +529,8 @@ struct SheetHeader: View {
                 Spacer()
                 Button(confirmTitle, action: onConfirm)
                     .font(.headline)
-                    .foregroundStyle(Theme.orange)
+                    .foregroundStyle(isConfirmEnabled ? Theme.orange : .secondary)
+                    .disabled(!isConfirmEnabled)
             }
         }
     }
@@ -826,25 +828,6 @@ struct RestaurantPin: View {
                 .frame(width: 6, height: 6)
         }
         .animation(.spring(duration: 0.25), value: isSelected)
-    }
-}
-
-// MARK: - UserLocationDot
-
-/// Blue dot for the student's current location.
-struct UserLocationDot: View {
-    var body: some View {
-        Circle()
-            .fill(Color.blue)
-            .frame(width: 16, height: 16)
-            .overlay(Circle().stroke(.white, lineWidth: 3))
-            .background {
-                Circle()
-                    .fill(Color.blue.opacity(0.18))
-                    .frame(width: 44, height: 44)
-            }
-            .shadow(color: .black.opacity(0.2), radius: 2)
-            .accessibilityLabel("Your location")
     }
 }
 
