@@ -9,13 +9,24 @@ struct FoodPassportApp: App {
     @State private var router = AppRouter()
 
     init() {
+        // Face ID, notifications and location are device features, so they always use the real services.
+        let biometrics = LocalBiometricService()
+        let notifications = UserNotificationService()
+        let location = CoreLocationService()
+
         // Use Firebase once GoogleService-Info.plist has been added to the project (see README).
         // Without it the app runs on mock data, so it still builds and runs before Firebase is set up.
         if Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist") != nil {
             FirebaseApp.configure()
-            _appState = State(initialValue: AppState(auth: FirebaseAuthService(), database: FirestoreDatabaseService()))
+            _appState = State(initialValue: AppState(
+                auth: FirebaseAuthService(),
+                database: FirestoreDatabaseService(),
+                biometrics: biometrics,
+                notifications: notifications,
+                location: location
+            ))
         } else {
-            _appState = State(initialValue: AppState())
+            _appState = State(initialValue: AppState(biometrics: biometrics, notifications: notifications, location: location))
         }
     }
 
@@ -36,6 +47,7 @@ struct FoodPassportApp: App {
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ZStack {
@@ -61,7 +73,8 @@ struct RootView: View {
         .task {
             await appState.restoreSession()
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .onChange(of: scenePhase, initial: true) { _, newPhase in
+            appState.isAppActive = newPhase == .active
             if newPhase == .background {
                 appState.lockIfNeeded()
             }
@@ -71,6 +84,23 @@ struct RootView: View {
         } message: {
             Text(appState.errorMessage ?? "")
         }
+        .alert("Notifications are off", isPresented: isShowingNotificationSettingsPrompt) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                    openURL(url)
+                }
+            }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("To get reminders, allow notifications for FoodPassport in Settings.")
+        }
+    }
+
+    private var isShowingNotificationSettingsPrompt: Binding<Bool> {
+        Binding(
+            get: { appState.isShowingNotificationSettingsPrompt },
+            set: { appState.isShowingNotificationSettingsPrompt = $0 }
+        )
     }
 
     private var isShowingError: Binding<Bool> {

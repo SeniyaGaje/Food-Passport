@@ -29,8 +29,9 @@ struct Restaurant: Identifiable, Hashable, Codable {
     let id: String
     let name: String
     let cuisine: Cuisine
-    let distanceKm: Double
-    let walkingMinutes: Int
+    /// Distance from campus as stored in Firestore, replaced by the real distance once the student's location is known.
+    var distanceKm: Double
+    var walkingMinutes: Int
     let priceRange: ClosedRange<Int>
     let latitude: Double
     let longitude: Double
@@ -41,6 +42,22 @@ struct Restaurant: Identifiable, Hashable, Codable {
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var location: CLLocation {
+        CLLocation(latitude: latitude, longitude: longitude)
+    }
+
+    /// Average walking speed in metres per minute (about 4.8 km/h).
+    static let walkingMetresPerMinute = 80.0
+
+    /// A copy whose distance and walking time are measured from `location` (the student's position).
+    func withDistance(from location: CLLocation) -> Restaurant {
+        let metres = location.distance(from: self.location)
+        var copy = self
+        copy.distanceKm = metres / 1000
+        copy.walkingMinutes = max(1, Int((metres / Self.walkingMetresPerMinute).rounded(.up)))
+        return copy
     }
 }
 

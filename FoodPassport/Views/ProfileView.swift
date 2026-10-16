@@ -8,16 +8,11 @@ struct ProfileView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.openURL) private var openURL
 
-    @State private var plannedVisitReminders = true
-    @State private var weeklyChallengeReminder = true
-    @State private var reminderTime = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: .now) ?? .now
     @State private var isShowingReminderSheet = false
     @State private var isConfirmingReset = false
     @State private var isConfirmingSignOut = false
 
     var body: some View {
-        @Bindable var appState = appState
-
         ScrollView {
             VStack(spacing: 20) {
                 header
@@ -39,18 +34,26 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
 
                     SettingsDivider()
-                    SettingsToggleRow(systemImage: "bell", title: "Planned-visit reminders", isOn: $plannedVisitReminders)
+                    SettingsToggleRow(
+                        systemImage: "bell",
+                        title: "Planned-visit reminders",
+                        isOn: asyncBinding(appState.plannedVisitRemindersEnabled, set: appState.setPlannedVisitReminders)
+                    )
 
                     SettingsDivider()
-                    SettingsToggleRow(systemImage: "clock", title: "Weekly challenge reminder", isOn: $weeklyChallengeReminder)
+                    SettingsToggleRow(
+                        systemImage: "clock",
+                        title: "Weekly challenge reminder",
+                        isOn: asyncBinding(appState.weeklyChallengeReminderEnabled, set: appState.setWeeklyChallengeReminder)
+                    )
 
-                    if weeklyChallengeReminder {
+                    if appState.weeklyChallengeReminderEnabled {
                         SettingsDivider()
                         Button {
                             isShowingReminderSheet = true
                         } label: {
                             SettingsRow(systemImage: nil, title: "Reminder time", titleColor: .secondary) {
-                                SettingsValue(reminderTime.formatted(date: .omitted, time: .shortened))
+                                SettingsValue(appState.weeklyReminderTime.formatted(date: .omitted, time: .shortened))
                             }
                             .background(Color(hex: 0xF6F6F7))
                         }
@@ -58,7 +61,11 @@ struct ProfileView: View {
                     }
 
                     SettingsDivider()
-                    SettingsToggleRow(systemImage: "faceid", title: "Unlock with Face ID", isOn: $appState.isFaceIDEnabled)
+                    SettingsToggleRow(
+                        systemImage: appState.biometryKind.systemImage,
+                        title: "Unlock with \(appState.biometryKind.name)",
+                        isOn: asyncBinding(appState.isFaceIDEnabled, set: appState.setFaceIDEnabled)
+                    )
 
                     SettingsDivider()
                     Button {
@@ -67,7 +74,7 @@ struct ProfileView: View {
                         }
                     } label: {
                         SettingsRow(systemImage: "location", title: "Location access") {
-                            SettingsValue("While Using")
+                            SettingsValue(appState.locationPermission.label)
                         }
                     }
                     .buttonStyle(.plain)
@@ -81,7 +88,7 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                 }
                 .settingsCard()
-                .animation(.easeInOut(duration: 0.2), value: weeklyChallengeReminder)
+                .animation(.easeInOut(duration: 0.2), value: appState.weeklyChallengeReminderEnabled)
 
                 VStack(spacing: 0) {
                     Button {
@@ -114,7 +121,9 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $isShowingReminderSheet) {
-            ReminderTimeSheet(time: $reminderTime)
+            ReminderTimeSheet(time: appState.weeklyReminderTime) { newTime in
+                Task { await appState.setWeeklyReminderTime(newTime) }
+            }
         }
         .alert("Reset All Data?", isPresented: $isConfirmingReset) {
             Button("Cancel", role: .cancel) {}
@@ -133,6 +142,15 @@ struct ProfileView: View {
         } message: {
             Text("You'll need to sign in again to see your passport.")
         }
+    }
+
+    /// A switch binding whose change needs async work first, such as a Face ID check or a permission prompt.
+    /// The switch shows the saved value, so it only stays on once AppState has accepted the change.
+    private func asyncBinding(_ value: Bool, set: @escaping (Bool) async -> Void) -> Binding<Bool> {
+        Binding(
+            get: { value },
+            set: { newValue in Task { await set(newValue) } }
+        )
     }
 
     private var header: some View {
@@ -306,7 +324,8 @@ struct MonthlyBudgetSheet: View {
 
 struct ReminderTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var time: Date
+    let time: Date
+    let onSave: (Date) -> Void
     @State private var draft = Date.now
 
     var body: some View {
@@ -325,7 +344,7 @@ struct ReminderTimeSheet: View {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.brandSecondary)
                 Button("Save") {
-                    time = draft
+                    onSave(draft)
                     dismiss()
                 }
                 .buttonStyle(.brandPrimary)
@@ -423,7 +442,7 @@ struct AboutView: View {
 #Preview {
     Text("Profile")
         .sheet(isPresented: .constant(true)) {
-            ReminderTimeSheet(time: .constant(.now))
+            ReminderTimeSheet(time: .now) { _ in }
         }
 }
 
