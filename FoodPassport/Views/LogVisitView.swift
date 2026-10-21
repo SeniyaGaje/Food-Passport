@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import PhotosUI
 import VisionKit
 
@@ -85,7 +86,7 @@ struct LogVisitView: View {
         .navigationTitle("Log your visit")
         .navigationBarTitleDisplayMode(.large)
         .fullScreenCover(isPresented: $isShowingMealCamera) {
-            MealCameraView { prediction in
+            MealCameraView(menu: restaurant.popularDishes.map(\.name)) { prediction in
                 dish = prediction.dishName
                 cuisine = prediction.cuisine.rawValue
                 hasMealPhoto = true
@@ -211,64 +212,225 @@ struct LogVisitView: View {
 
 // MARK: - MealCameraView
 
-/// Full-screen camera for photographing a meal. Shows a placeholder viewfinder until the camera is wired up.
+/// Full-screen camera for photographing a meal. The dish is recognised on the device with Core ML (MobileCLIP).
 struct MealCameraView: View {
+    private enum Step {
+        case camera
+        case recognising(UIImage)
+        case results(UIImage, [MealPrediction])
+        /// Not a dish the app knows, or something went wrong.
+        case problem(UIImage?, title: String, message: String)
+    }
+
+    private enum CameraStatus {
+        case starting
+        case running
+        /// No camera, e.g. on the simulator.
+        case unavailable
+        case denied
+    }
+
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
-    let onConfirm: (MealPrediction) -> Void
+    private let menu: [String]
+    private let recognizer: MealRecognizer
+    private let initialPhoto: UIImage?
+    private let onConfirm: (MealPrediction) -> Void
 
-    @State private var isShowingResults = false
+    @State private var camera = CameraService()
+    @State private var cameraStatus = CameraStatus.starting
+    @State private var step = Step.camera
     @State private var isFlashOn = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isShowingResults = false
     @State private var confirmedPrediction: MealPrediction?
     @State private var wantsManualEntry = false
 
+    /// - Parameters:
+    ///   - menu: dish names on the restaurant's menu; the recogniser favours them.
+    ///   - initialPhoto: a photo to recognise straight away, e.g. in previews.
+    init(
+        menu: [String] = [],
+        recognizer: MealRecognizer = CoreMLMealRecognizer.shared,
+        initialPhoto: UIImage? = nil,
+        onConfirm: @escaping (MealPrediction) -> Void
+    ) {
+        self.menu = menu
+        self.recognizer = recognizer
+        self.initialPhoto = initialPhoto
+        self.onConfirm = onConfirm
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            FoodImageView(imageName: "camera_preview_meal", cuisine: .sriLankan)
-                .overlay { viewfinderFrame }
+            viewfinder
+                .overlay { viewfinderOverlay }
                 .overlay(alignment: .top) { topControls }
+                .clipped()
 
-            VStack(spacing: 16) {
-                Button {
-                    isShowingResults = true
-                } label: {
-                    Circle()
-                        .stroke(.white, lineWidth: 4)
-                        .frame(width: 80, height: 80)
-                        .overlay {
-                            Circle()
-                                .fill(.white)
-                                .frame(width: 66, height: 66)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Take photo")
-
-                Button("Choose from Photos") {
-                    isShowingResults = true
-                }
-                .font(.headline)
-                .foregroundStyle(.white)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
+            bottomControls
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
         }
         .background(Color.black.ignoresSafeArea())
         .statusBarHidden()
+        .task {
+            if let initialPhoto {
+                recognise(initialPhoto)
+            } else {
+                await startCamera()
+            }
+        }
+        .task {
+            // Load the model while the student lines up the photo, so recognition is quick.
+            await recognizer.prepare()
+        }
+        .onDisappear {
+            camera.stop()
+        }
+        .onChange(of: selectedPhoto) { _, item in
+            loadPhoto(item)
+        }
         .sheet(isPresented: $isShowingResults, onDismiss: handleResultsDismissed) {
-            MealRecognitionSheet(
-                predictions: MockData.mealPredictions,
-                onConfirm: { prediction in
-                    confirmedPrediction = prediction
-                    isShowingResults = false
-                },
-                onEnterManually: {
-                    wantsManualEntry = true
-                    isShowingResults = false
-                }
-            )
+            if case .results(let photo, let predictions) = step {
+                MealRecognitionSheet(
+                    photo: photo,
+                    predictions: predictions,
+                    onConfirm: { prediction in
+                        confirmedPrediction = prediction
+                        isShowingResults = false
+                    },
+                    onEnterManually: {
+                        wantsManualEntry = true
+                        isShowingResults = false
+                    }
+                )
+            }
         }
     }
+
+    // MARK: Viewfinder
+
+    @ViewBuilder
+    private var viewfinder: some View {
+        switch step {
+        case .camera:
+            switch cameraStatus {
+            case .running:
+                CameraPreview(session: camera.session)
+                    .accessibilityLabel("Camera viewfinder")
+            case .starting:
+                Color.black
+            case .unavailable:
+                cameraMessage(
+                    systemImage: "camera",
+                    title: "No camera here",
+                    message: "The camera isn't available on this device. Choose a photo of your meal instead."
+                )
+            case .denied:
+                cameraMessage(
+                    systemImage: "camera.badge.ellipsis",
+                    title: "Camera access is off",
+                    message: "Allow camera access in Settings to photograph your meal, or choose a photo instead.",
+                    showsSettingsButton: true
+                )
+            }
+        case .recognising(let photo), .results(let photo, _), .problem(let photo?, _, _):
+            Color.black
+                .overlay {
+                    Image(uiImage: photo)
+                        .resizable()
+                        .scaledToFill()
+                }
+                .accessibilityLabel("Photo of your meal")
+        case .problem(nil, _, _):
+            Color.black
+        }
+    }
+
+    @ViewBuilder
+    private var viewfinderOverlay: some View {
+        switch step {
+        case .camera where cameraStatus == .running:
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(.white.opacity(0.85), lineWidth: 2)
+                .padding(40)
+                .overlay(alignment: .bottom) {
+                    Text("Centre your meal in the frame")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.45), in: Capsule())
+                        .padding(.bottom, 56)
+                }
+                .allowsHitTesting(false)
+        case .recognising:
+            VStack(spacing: 12) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+                Text("Recognising your meal…")
+                    .font(.headline)
+                Label("On your device", systemImage: "iphone")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .foregroundStyle(.white)
+            .padding(24)
+            .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .accessibilityElement(children: .combine)
+        case .problem(_, let title, let message):
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.title3.bold())
+                    .foregroundStyle(Theme.ink)
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Retake", action: retake)
+                    .buttonStyle(.brandPrimary)
+                    .padding(.top, 6)
+                Button("Enter manually") { dismiss() }
+                    .buttonStyle(BrandTextButtonStyle(color: .secondary))
+            }
+            .padding(20)
+            .background(.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .padding(20)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func cameraMessage(systemImage: String, title: String, message: String, showsSettingsButton: Bool = false) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 52))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.title3.bold())
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.75))
+            if showsSettingsButton {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+                .font(.headline)
+                .foregroundStyle(Theme.orange)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: 0x1C1C1E))
+    }
+
+    // MARK: Controls
 
     private var topControls: some View {
         HStack {
@@ -276,28 +438,53 @@ struct MealCameraView: View {
                 dismiss()
             }
             Spacer()
-            cameraControlButton(systemImage: isFlashOn ? "bolt.fill" : "bolt.slash.fill", label: "Flash") {
-                isFlashOn.toggle()
+            if case .camera = step, cameraStatus == .running {
+                cameraControlButton(
+                    systemImage: isFlashOn ? "bolt.fill" : "bolt.slash.fill",
+                    label: isFlashOn ? "Flash on" : "Flash off"
+                ) {
+                    isFlashOn.toggle()
+                }
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }
 
-    private var viewfinderFrame: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .strokeBorder(.white.opacity(0.85), lineWidth: 2)
-            .padding(40)
-            .overlay(alignment: .bottom) {
-                Text("Centre your meal in the frame")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.black.opacity(0.45), in: Capsule())
-                    .padding(.bottom, 56)
+    private var bottomControls: some View {
+        VStack(spacing: 16) {
+            Button(action: takePhoto) {
+                Circle()
+                    .stroke(.white, lineWidth: 4)
+                    .frame(width: 80, height: 80)
+                    .overlay {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 66, height: 66)
+                    }
             }
-            .allowsHitTesting(false)
+            .buttonStyle(.plain)
+            .opacity(canTakePhoto ? 1 : 0.35)
+            .disabled(!canTakePhoto)
+            .accessibilityLabel("Take photo")
+
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Text("Choose from Photos")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+            }
+            .disabled(isBusy)
+        }
+    }
+
+    private var canTakePhoto: Bool {
+        if case .camera = step { return cameraStatus == .running }
+        return false
+    }
+
+    private var isBusy: Bool {
+        if case .recognising = step { return true }
+        return false
     }
 
     private func cameraControlButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
@@ -312,20 +499,123 @@ struct MealCameraView: View {
         .accessibilityLabel(label)
     }
 
+    // MARK: Actions
+
+    private func startCamera() async {
+        guard CameraService.isAvailable else {
+            cameraStatus = .unavailable
+            return
+        }
+        guard await CameraService.requestAccess() else {
+            cameraStatus = .denied
+            return
+        }
+        camera.start()
+        cameraStatus = .running
+    }
+
+    private func takePhoto() {
+        Task {
+            do {
+                recognise(try await camera.takePhoto(withFlash: isFlashOn))
+            } catch {
+                step = .problem(nil, title: "Couldn't take the photo", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            if let data = try? await item.loadTransferable(type: Data.self), let photo = UIImage(data: data) {
+                recognise(photo)
+            } else {
+                step = .problem(nil, title: "Couldn't open the photo", message: MealRecognitionError.unreadableImage.localizedDescription)
+            }
+        }
+    }
+
+    private func recognise(_ photo: UIImage) {
+        step = .recognising(photo)
+        Task {
+            do {
+                switch try await recognizer.recognize(photo, menu: menu) {
+                case .dishes(let predictions) where !predictions.isEmpty:
+                    step = .results(photo, predictions)
+                    isShowingResults = true
+                case .dishes:
+                    step = .problem(photo, title: "No dish found", message: "Retake the photo with your plate in the middle of the frame, or enter the dish yourself.")
+                case .unknownFood(let lookalike):
+                    step = .problem(photo, title: "Not one of our dishes yet",
+                                    message: "This looks like \(lookalike.lowercased()), which FoodPassport can't recognise yet. Enter the dish yourself.")
+                case .notFood(let lookalike):
+                    step = .problem(photo, title: "This doesn't look like a meal", message: notAMealMessage(lookalike))
+                }
+            } catch {
+                step = .problem(photo, title: "Couldn't recognise the photo", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func notAMealMessage(_ lookalike: String) -> String {
+        switch lookalike {
+        case "Receipt": "It looks like a receipt. Use Scan receipt for the bill, and photograph your plate here."
+        case "Unclear photo": "The photo is too dark or blurry. Retake it in better light with your plate in the frame."
+        default: "It looks like a \(lookalike.lowercased()). Retake the photo with your plate in the middle of the frame."
+        }
+    }
+
+    private func retake() {
+        selectedPhoto = nil
+        confirmedPrediction = nil
+        wantsManualEntry = false
+        step = .camera
+    }
+
     private func handleResultsDismissed() {
         if let confirmedPrediction {
             onConfirm(confirmedPrediction)
             dismiss()
         } else if wantsManualEntry {
             dismiss()
+        } else {
+            // Swiped the results away: back to the camera for another try.
+            retake()
+        }
+    }
+}
+
+// MARK: - CameraPreview
+
+/// Live picture from `CameraService`, filling the viewfinder.
+private struct CameraPreview: UIViewRepresentable {
+    let session: AVCaptureSession
+
+    func makeUIView(context: Context) -> PreviewView {
+        let view = PreviewView()
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = .resizeAspectFill
+        return view
+    }
+
+    func updateUIView(_ view: PreviewView, context: Context) {}
+
+    final class PreviewView: UIView {
+        override class var layerClass: AnyClass {
+            AVCaptureVideoPreviewLayer.self
+        }
+
+        var previewLayer: AVCaptureVideoPreviewLayer {
+            layer as! AVCaptureVideoPreviewLayer
         }
     }
 }
 
 // MARK: - MealRecognitionSheet
 
-/// "We found matches!" — top three dish predictions from the on-device model.
+/// "We found matches!" — the top three dishes from the on-device recogniser.
 struct MealRecognitionSheet: View {
+    let photo: UIImage?
     let predictions: [MealPrediction]
     let onConfirm: (MealPrediction) -> Void
     let onEnterManually: () -> Void
@@ -336,21 +626,41 @@ struct MealRecognitionSheet: View {
         predictions[selectedIndex]
     }
 
+    private var isConfident: Bool {
+        (predictions.first?.confidence ?? 0) >= MealClassifier.confidentThreshold
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 14) {
-                FoodImageView(imageName: "camera_preview_meal", cuisine: selected.cuisine, cornerRadius: 14)
-                    .frame(width: 64, height: 64)
+                Group {
+                    if let photo {
+                        Image(uiImage: photo)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        FoodImageView(imageName: nil, cuisine: selected.cuisine)
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Detected on your device", systemImage: "iphone")
                         .textCase(.uppercase)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text("We found matches!")
+                    Text(isConfident ? "We found matches!" : "Is it one of these?")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.ink)
                 }
+            }
+
+            if !isConfident {
+                Label("Not sure about this one. Tap the right dish, or enter it yourself.", systemImage: "questionmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             ForEach(Array(predictions.enumerated()), id: \.element.id) { index, prediction in
@@ -378,7 +688,7 @@ struct MealRecognitionSheet: View {
                 .buttonStyle(BrandTextButtonStyle(color: .secondary))
         }
         .padding(20)
-        .presentationDetents([.fraction(0.72), .large])
+        .presentationDetents([.fraction(0.75), .large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(28)
     }
@@ -390,14 +700,22 @@ private struct PredictionRow: View {
     let prediction: MealPrediction
     let isSelected: Bool
 
+    private var percentage: Int {
+        Int((prediction.confidence * 100).rounded())
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(spacing: 8) {
                 Text(prediction.label)
                     .font(.headline)
                     .foregroundStyle(Theme.ink)
+                if prediction.isOnMenu {
+                    PillLabel(text: "On the menu", font: .caption2.weight(.semibold))
+                        .fixedSize()
+                }
                 Spacer()
-                Text(verbatim: "\(Int(prediction.confidence * 100))%")
+                Text(verbatim: "\(percentage)%")
                     .font(.headline)
                     .foregroundStyle(isSelected ? Theme.ink : Color.secondary)
             }
@@ -414,6 +732,8 @@ private struct PredictionRow: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(isSelected ? Theme.orange : .clear, lineWidth: 2)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(prediction.label), \(percentage) percent\(prediction.isOnMenu ? ", on the menu" : "")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -823,13 +1143,13 @@ struct StampEarnedPopup: View {
 }
 
 #Preview {
-    MealCameraView { _ in }
+    MealCameraView(recognizer: MockMealRecognizer(), initialPhoto: UIImage(named: "dish_kottu")) { _ in }
 }
 
 #Preview {
     Color.black
         .sheet(isPresented: .constant(true)) {
-            MealRecognitionSheet(predictions: MockData.mealPredictions, onConfirm: { _ in }, onEnterManually: {})
+            MealRecognitionSheet(photo: nil, predictions: MockData.mealPredictions, onConfirm: { _ in }, onEnterManually: {})
         }
 }
 

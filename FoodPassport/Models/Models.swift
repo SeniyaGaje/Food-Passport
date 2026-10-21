@@ -319,13 +319,17 @@ struct CuisineShare: Identifiable, Hashable {
 
 // MARK: - MealPrediction
 
-/// One of the top results returned by the on-device dish classifier.
+/// One of the top results returned by the on-device meal recogniser.
 struct MealPrediction: Identifiable, Hashable {
     var id: String { label }
     let label: String
+    /// Saved on the visit. The restaurant's own menu name when it matches (e.g. "Chicken Kottu").
     let dishName: String
+    /// 0–1, how likely the photo shows this dish.
     let confidence: Double
     let cuisine: Cuisine
+    /// True when the dish is on the menu of the restaurant being logged.
+    var isOnMenu = false
 }
 
 // MARK: - ReceiptScan

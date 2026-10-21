@@ -20,3 +20,6 @@ DerivedData/
 
 # Firebase config contains project keys — add it locally, don't commit it
 GoogleService-Info.plist
+
+# Model downloaded by Tools/make_dish_embeddings.py (not needed by the app)
+Tools/.cache/

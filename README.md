@@ -48,6 +48,44 @@ The simulator has no camera, so add a receipt photo to its Photos app first: dra
 Simulator window, or run `xcrun simctl addmedia booted path/to/receipt.jpg`. Then go to Log your visit →
 Scan receipt → **Choose from Photos**. On a real iPhone, **Scan receipt** opens the document scanner.
 
+## Meal recognition (Core ML)
+
+Log your visit → **Scan your meal** takes a photo with the camera (AVFoundation) or picks one from Photos, and
+recognises the dish on the device. It shows the top three dishes with their likelihood, suggests the cuisine,
+and fills in the dish and cuisine. Photos that aren't a meal (a receipt, a selfie) or aren't one of the app's
+dishes (a burger) get a clear message instead of a wrong guess.
+
+Ready-made food models such as Food-101 have no Sri Lankan dishes, so the app uses **MobileCLIP-S1**, Apple's
+on-device image and text model, from [apple/coreml-mobileclip](https://huggingface.co/apple/coreml-mobileclip):
+
+1. **Ahead of time:** `Tools/make_dish_embeddings.py` runs MobileCLIP's *text* model on short descriptions of
+   46 labels in `Tools/dishes.json`: 35 dishes across six cuisines, plus "other food" (burger, cake, drinks…)
+   and "not a meal" (receipt, person, room…). It writes one 512-number embedding per label to
+   `FoodPassport/ML/DishEmbeddings.json`.
+2. **On the phone:** Core ML runs MobileCLIP's *image* model (`FoodPassport/ML/MobileCLIPImageEncoder.mlpackage`)
+   through Vision, which centre-crops the photo to 256 × 256, to get the photo's embedding.
+3. **Scoring:** the photo is compared with every label (cosine similarity × 100, then softmax). Dishes on the
+   restaurant's menu count double. If "not a meal" or "other food" is at least 50% likely, the app says so;
+   otherwise it offers the top three dishes, and asks the student to check when the best is under 40%.
+
+**Accuracy:** on 37 test photos (Wikimedia Commons and the prototype's photos, not shipped), the right dish came
+first 81% of the time and was in the top three 92% of the time. Every kottu, string hoppers, pizza and sushi
+photo was right. The usual mistakes are between similar dishes (hoppers / pol roti, noodles / string hoppers).
+MobileCLIP-S0 (23 MB) and S2 (71 MB) were also tested: S0 was slightly less accurate, and S2 no better than S1.
+
+To add or change dishes, edit `Tools/dishes.json`, then:
+
+```
+python3 -m pip install tokenizers coremltools numpy
+python3 Tools/make_dish_embeddings.py
+```
+
+The simulator has no camera: add a food photo to its Photos app (drag it onto the Simulator window), then use
+Scan your meal → **Choose from Photos**.
+
+MobileCLIP is © Apple Inc., used under the Apple Sample Code License in `FoodPassport/ML/MobileCLIP-LICENSE.txt`.
+Paper: Vasu et al., *MobileCLIP: Fast Image-Text Models through Multi-Modal Reinforced Training*, CVPR 2024.
+
 ## Demo at NIBM Colombo (viva)
 
 **NIBM Canteen** is a sample restaurant placed on the NIBM building on Vidya Mawatha (6.9063905, 79.8708285,
@@ -99,7 +137,13 @@ FoodPassport/
 │   ├── BiometricService.swift      Face ID / Touch ID: LocalAuthentication version and a mock
 │   ├── NotificationService.swift   Reminders: UserNotifications version and a mock
 │   ├── LocationService.swift       Location and geofences: Core Location version and a mock
-│   └── ReceiptScanner.swift        Receipt reading: Vision text recognition, the receipt parser, and a mock
+│   ├── ReceiptScanner.swift        Receipt reading: Vision text recognition, the receipt parser, and a mock
+│   ├── MealRecognizer.swift        Meal recognition: Core ML + Vision, the dish scoring, and a mock
+│   └── CameraService.swift         The back camera (AVFoundation)
+├── ML/
+│   ├── MobileCLIPImageEncoder.mlpackage   Apple's MobileCLIP-S1 image model (Core ML)
+│   ├── DishEmbeddings.json         Dish labels and their embeddings, made by Tools/make_dish_embeddings.py
+│   └── MobileCLIP-LICENSE.txt      Apple's licence for the model
 ├── Views/
 │   ├── MainTabView.swift     Tab bar, screen routing, pop-up and toast hosts
 │   ├── OnboardingViews.swift Welcome, permissions, budget setup
@@ -116,6 +160,9 @@ FoodPassport/
     ├── Theme.swift           Colours, button styles, card style, small extensions
     └── Components.swift      Reusable UI pieces (headers, chips, fields, pins, rows, …)
 FoodPassportTests/            Swift Testing unit tests
+Tools/
+├── dishes.json                   The dishes the meal recogniser knows, with descriptions
+└── make_dish_embeddings.py       Turns dishes.json into ML/DishEmbeddings.json
 ```
 
 Each file is split into `// MARK: -` sections, so use the Xcode jump bar to find a specific view.
