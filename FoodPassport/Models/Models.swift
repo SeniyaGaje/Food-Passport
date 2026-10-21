@@ -330,16 +330,22 @@ struct MealPrediction: Identifiable, Hashable {
 
 // MARK: - ReceiptScan
 
-/// Text read from a receipt by Vision, with the detected total.
+/// What Vision read from a photo of a receipt.
 struct ReceiptScan: Hashable {
     struct LineItem: Identifiable, Hashable {
-        var id: String { name }
+        /// Position on the receipt, so two identical items ("Tea", "Tea") stay separate.
+        let id: Int
         let name: String
         let price: Int
     }
 
-    let restaurantName: String
-    let timestamp: String
-    let items: [LineItem]
-    let total: Int
+    var restaurantName: String?
+    var date: String?
+    var items: [LineItem]
+    /// The amount to use, or nil when no amount could be read.
+    var total: Int?
+    /// False when no "TOTAL" line was found and `total` is only the largest amount, so the student should check it.
+    var isTotalFromTotalLine: Bool
+    /// Where the total is on the photo, in Vision's normalised coordinates (0–1, origin bottom-left), for highlighting.
+    var totalBoundingBox: CGRect?
 }

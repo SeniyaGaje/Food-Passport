@@ -153,9 +153,15 @@ struct ExploreMapView: View {
     let highlightedRestaurantID: Restaurant.ID?
     let onSelect: (Restaurant) -> Void
 
-    @State private var position: MapCameraPosition = .region(
-        MKCoordinateRegion(center: MockData.campusCenter, latitudinalMeters: 2600, longitudinalMeters: 2600)
-    )
+    @State private var position: MapCameraPosition
+
+    init(restaurants: [Restaurant], highlightedRestaurantID: Restaurant.ID?, onSelect: @escaping (Restaurant) -> Void) {
+        self.restaurants = restaurants
+        self.highlightedRestaurantID = highlightedRestaurantID
+        self.onSelect = onSelect
+        // Start framed around every restaurant (University of Colombo area to NIBM). "Show my location" recentres on the student.
+        _position = State(initialValue: .region(.fitting(restaurants.map(\.coordinate), paddingFactor: 1.4)))
+    }
 
     var body: some View {
         Map(position: $position) {

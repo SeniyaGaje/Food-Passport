@@ -65,25 +65,34 @@ final class FirestoreDatabaseService: DatabaseService {
 
     func fetchRestaurants() async throws -> [Restaurant] {
         let snapshot = try await restaurantsCollection.order(by: "distanceKm").getDocuments()
-        let restaurants = try snapshot.documents.map { try $0.data(as: Restaurant.self) }
+        var restaurants = try snapshot.documents.map { try $0.data(as: Restaurant.self) }
 
         #if DEBUG
-        // First run against a new Firebase project: upload the sample restaurants so there is something to explore.
-        if restaurants.isEmpty {
-            try await uploadSampleRestaurants()
-            return MockData.restaurants
+        // Upload any sample restaurant Firestore doesn't have yet: all of them on a new Firebase project,
+        // or one added to MockData later (like the NIBM canteen). Restaurants already in Firestore are left
+        // untouched, so edits made in the Firebase console are kept.
+        let missing = MockData.restaurants.filter { sample in
+            !restaurants.contains { $0.id == sample.id }
+        }
+        if !missing.isEmpty {
+            upload(missing)
+            restaurants += missing
         }
         #endif
 
         return restaurants
     }
 
-    private func uploadSampleRestaurants() async throws {
+    /// Not awaited: Firestore keeps the upload in its offline cache straight away and sends it once online,
+    /// so signing in never waits on a slow connection. If the security rules block the write,
+    /// this debug build still shows the restaurants; they just don't reach other phones.
+    private func upload(_ restaurants: [Restaurant]) {
         let batch = db.batch()
-        for restaurant in MockData.restaurants {
-            batch.setData(try encoder.encode(restaurant), forDocument: restaurantsCollection.document(restaurant.id))
+        for restaurant in restaurants {
+            guard let data = try? encoder.encode(restaurant) else { continue }
+            batch.setData(data, forDocument: restaurantsCollection.document(restaurant.id))
         }
-        try await batch.commit()
+        batch.commit { _ in }
     }
 
     // MARK: Profile

@@ -7,7 +7,6 @@ enum MockData {
 
     // MARK: Locations (University of Colombo area)
 
-    static let campusCenter = CLLocationCoordinate2D(latitude: 6.9020, longitude: 79.8610)
     static let userLocation = CLLocationCoordinate2D(latitude: 6.9028, longitude: 79.8598)
 
     // MARK: Restaurants
@@ -112,7 +111,31 @@ enum MockData {
         ]
     )
 
-    static let restaurants = [campusBites, spiceRoute, dragonWok, hoppersHut, pastaCorner]
+    /// The canteen at NIBM Colombo, so the geofence and visit verification can be shown live on campus.
+    /// Centred on the NIBM building on Vidya Mawatha (OpenStreetMap way 327564305, about 56 × 49 m),
+    /// so the 100 m geofence covers the whole building. To move it, edit `latitude` and `longitude`
+    /// on its document in Firestore (restaurants/nibm-canteen); the app reads them at launch.
+    static let nibmCanteen = Restaurant(
+        id: "nibm-canteen",
+        name: "NIBM Canteen",
+        cuisine: .sriLankan,
+        distanceKm: 1.2,
+        walkingMinutes: 15,
+        priceRange: 200...700,
+        latitude: 6.9063905,
+        longitude: 79.8708285,
+        imageName: "restaurant_nibm_canteen",
+        routeSummary: "NIBM, Vidya Mawatha",
+        pricesUpdated: "This week",
+        popularDishes: [
+            Dish(name: "Rice & Curry", price: 350),
+            Dish(name: "Chicken Kottu", price: 600),
+            Dish(name: "Fried Rice", price: 550),
+            Dish(name: "Egg Roti", price: 200),
+        ]
+    )
+
+    static let restaurants = [campusBites, spiceRoute, dragonWok, hoppersHut, pastaCorner, nibmCanteen]
 
     // MARK: Profile, visits and stamps
 
@@ -272,14 +295,17 @@ enum MockData {
         MealPrediction(label: "Noodles", dishName: "Noodles", confidence: 0.05, cuisine: .chinese),
     ]
 
+    /// What the scanner returns in previews and tests.
     static let sampleReceipt = ReceiptScan(
         restaurantName: "CAMPUS BITES",
-        timestamp: Date.now.formatted(date: .numeric, time: .shortened),
+        date: "2026-10-26",
         items: [
-            ReceiptScan.LineItem(name: "Kottu Roti", price: 750),
-            ReceiptScan.LineItem(name: "Iced Milo", price: 200),
+            ReceiptScan.LineItem(id: 0, name: "Kottu Roti", price: 750),
+            ReceiptScan.LineItem(id: 1, name: "Iced Milo", price: 200),
         ],
-        total: 950
+        total: 950,
+        isTotalFromTotalLine: true,
+        totalBoundingBox: CGRect(x: 0.1, y: 0.2, width: 0.8, height: 0.06)
     )
 
     // MARK: Helpers

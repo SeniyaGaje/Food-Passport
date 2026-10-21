@@ -6,8 +6,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Shared restaurant list: any signed-in student can read it.
-    // Writing is allowed only so a debug build can upload the sample restaurants on its first run.
-    // Once the restaurants appear in the console, change the write rule to `if false` and publish again.
+    // Writing is allowed only so a debug build can upload sample restaurants Firestore doesn't have yet
+    // (all of them on a new project, or ones added later such as the NIBM canteen).
+    // Once every restaurant appears in the console, change the write rule to `if false` and publish again.
     match /restaurants/{restaurantId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null;

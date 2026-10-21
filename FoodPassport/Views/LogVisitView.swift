@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import VisionKit
 
 // MARK: - LogVisitView
 
@@ -90,9 +92,15 @@ struct LogVisitView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingReceiptScanner) {
-            ReceiptScanView(receipt: MockData.sampleReceipt) { total in
-                amount = "\(total)"
-                isAmountFromReceipt = true
+            ReceiptScanView { receipt in
+                if let total = receipt.total {
+                    amount = "\(total)"
+                    isAmountFromReceipt = true
+                }
+                // Fill in the dish from the receipt if the student hasn't typed or scanned one yet.
+                if dish.trimmed.isEmpty, let firstItem = receipt.items.first {
+                    dish = firstItem.name
+                }
             }
         }
     }
@@ -412,14 +420,35 @@ private struct PredictionRow: View {
 
 // MARK: - ReceiptScanView
 
-/// Full-screen receipt scanner showing the detected total.
+/// Reads the total from a photo of a receipt with Vision, on the device, and highlights it on the photo.
 struct ReceiptScanView: View {
+    private enum Step {
+        case choosing
+        case reading(UIImage)
+        case result(UIImage, ReceiptScan)
+        case failed(UIImage?, String)
+    }
+
     @Environment(\.dismiss) private var dismiss
 
-    let receipt: ReceiptScan
-    let onUseAmount: (Int) -> Void
+    private let scanner: ReceiptScanner
+    private let initialImage: UIImage?
+    private let onUseReceipt: (ReceiptScan) -> Void
 
-    @State private var isReading = false
+    @State private var step: Step = .choosing
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isShowingDocumentCamera = false
+
+    /// - Parameter initialImage: a photo to read straight away, e.g. in previews.
+    init(
+        scanner: ReceiptScanner = VisionReceiptScanner(),
+        initialImage: UIImage? = nil,
+        onUseReceipt: @escaping (ReceiptScan) -> Void
+    ) {
+        self.scanner = scanner
+        self.initialImage = initialImage
+        self.onUseReceipt = onUseReceipt
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -443,130 +472,293 @@ struct ReceiptScanView: View {
 
             Spacer(minLength: 16)
 
-            ReceiptPaperView(receipt: receipt, highlightsTotal: !isReading)
-                .padding(.horizontal, 48)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 2)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, -16)
-                }
+            photoArea
+                .padding(.horizontal, 32)
 
             Spacer(minLength: 16)
 
-            resultCard
+            bottomCard
         }
         .background(Color(hex: 0x2A2724).ignoresSafeArea())
         .statusBarHidden()
+        .fullScreenCover(isPresented: $isShowingDocumentCamera) {
+            DocumentCameraView(
+                onScan: { image in
+                    isShowingDocumentCamera = false
+                    read(image)
+                },
+                onCancel: { isShowingDocumentCamera = false }
+            )
+            .ignoresSafeArea()
+        }
+        .onChange(of: selectedPhoto) { _, item in
+            loadPhoto(item)
+        }
+        .task {
+            if let initialImage {
+                read(initialImage)
+            }
+        }
     }
 
-    private var resultCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionCaption("Total detected")
+    // MARK: Photo
 
-            if isReading {
+    @ViewBuilder
+    private var photoArea: some View {
+        switch step {
+        case .choosing:
+            instructions(systemImage: "doc.text.viewfinder", title: "Scan your receipt",
+                         message: "Photograph the whole receipt, flat and in good light. It's read on your phone and the photo isn't uploaded.")
+        case .reading(let image):
+            ReceiptPhotoView(image: image, highlight: nil)
+                .overlay {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
+                        .padding(20)
+                        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+                }
+        case .result(let image, let receipt):
+            ReceiptPhotoView(image: image, highlight: receipt.totalBoundingBox)
+        case .failed(let image?, _):
+            ReceiptPhotoView(image: image, highlight: nil)
+        case .failed(nil, _):
+            instructions(systemImage: "exclamationmark.triangle", title: "Couldn't open the photo", message: "Try another photo of the receipt.")
+        }
+    }
+
+    private func instructions(systemImage: String, title: String, message: String) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 64))
+                .foregroundStyle(.white.opacity(0.9))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.7))
+        }
+    }
+
+    // MARK: Bottom card
+
+    private var bottomCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch step {
+            case .choosing:
+                choosingButtons
+
+            case .reading:
+                SectionCaption("Total detected")
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Reading receipt…")
                         .foregroundStyle(.secondary)
                 }
                 .frame(height: 41)
-            } else {
-                Text(receipt.total.lkr)
-                    .font(.system(size: 34, weight: .bold))
+
+            case .result(_, let receipt):
+                resultDetails(for: receipt)
+
+            case .failed(_, let message):
+                Text("Couldn't read this receipt")
+                    .font(.title3.bold())
                     .foregroundStyle(Theme.ink)
+                Text(message)
+                    .foregroundStyle(.secondary)
+                Button("Retake", action: retake)
+                    .buttonStyle(.brandPrimary)
+                    .padding(.top, 12)
+                Button("Enter the amount myself") { dismiss() }
+                    .buttonStyle(BrandTextButtonStyle(color: .secondary))
             }
-
-            Button("Use this amount") {
-                onUseAmount(receipt.total)
-                dismiss()
-            }
-            .buttonStyle(.brandPrimary)
-            .disabled(isReading)
-            .padding(.top, 12)
-
-            Button("Retake") { rescan() }
-                .buttonStyle(BrandTextButtonStyle(color: .secondary))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
         .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
 
-    private func rescan() {
-        isReading = true
-        Task {
-            try? await Task.sleep(for: .seconds(1.2))
-            withAnimation { isReading = false }
+    @ViewBuilder
+    private var choosingButtons: some View {
+        // The document scanner needs a real camera, so the simulator only offers the photo library.
+        if VNDocumentCameraViewController.isSupported {
+            Button {
+                isShowingDocumentCamera = true
+            } label: {
+                Label("Scan receipt", systemImage: "doc.viewfinder")
+            }
+            .buttonStyle(.brandPrimary)
+
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label("Choose from Photos", systemImage: "photo.on.rectangle")
+            }
+            .buttonStyle(BrandTextButtonStyle(color: .secondary))
+        } else {
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label("Choose from Photos", systemImage: "photo.on.rectangle")
+            }
+            .buttonStyle(.brandPrimary)
         }
+    }
+
+    @ViewBuilder
+    private func resultDetails(for receipt: ReceiptScan) -> some View {
+        SectionCaption("Total detected")
+
+        if let total = receipt.total {
+            Text(total.lkr)
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(Theme.ink)
+
+            if !receipt.isTotalFromTotalLine {
+                Label("No TOTAL line was found, so this is the largest amount. Check it before using it.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.orange)
+            }
+
+            if !receipt.items.isEmpty {
+                Text(receipt.items.map { "\($0.name) \($0.price.lkr)" }.joined(separator: " · "))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Button("Use this amount") {
+                onUseReceipt(receipt)
+                dismiss()
+            }
+            .buttonStyle(.brandPrimary)
+            .padding(.top, 12)
+
+            Button("Retake", action: retake)
+                .buttonStyle(BrandTextButtonStyle(color: .secondary))
+        } else {
+            Text("No amount found")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.ink)
+            Text("Retake the photo with the total in view, or type the amount yourself.")
+                .foregroundStyle(.secondary)
+            Button("Retake", action: retake)
+                .buttonStyle(.brandPrimary)
+                .padding(.top, 12)
+        }
+    }
+
+    // MARK: Actions
+
+    private func loadPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                read(image)
+            } else {
+                step = .failed(nil, ReceiptScanError.unreadableImage.localizedDescription)
+            }
+        }
+    }
+
+    private func read(_ image: UIImage) {
+        step = .reading(image)
+        Task {
+            do {
+                let receipt = try await scanner.scan(image)
+                withAnimation { step = .result(image, receipt) }
+            } catch {
+                withAnimation { step = .failed(image, error.localizedDescription) }
+            }
+        }
+    }
+
+    private func retake() {
+        selectedPhoto = nil
+        withAnimation { step = .choosing }
     }
 }
 
-// MARK: - ReceiptPaperView
+// MARK: - ReceiptPhotoView
 
-private struct ReceiptPaperView: View {
-    let receipt: ReceiptScan
-    let highlightsTotal: Bool
+/// The receipt photo, with an orange box around the total that Vision found.
+private struct ReceiptPhotoView: View {
+    let image: UIImage
+    /// Vision's normalised coordinates (0–1, origin bottom-left).
+    let highlight: CGRect?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(receipt.restaurantName)
-                .font(.system(size: 26, weight: .bold, design: .monospaced))
-                .frame(maxWidth: .infinity)
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .overlay {
+                if let highlight {
+                    GeometryReader { proxy in
+                        // Vision measures from the bottom-left corner; SwiftUI from the top-left.
+                        let box = CGRect(
+                            x: highlight.minX * proxy.size.width,
+                            y: (1 - highlight.maxY) * proxy.size.height,
+                            width: highlight.width * proxy.size.width,
+                            height: highlight.height * proxy.size.height
+                        )
+                        .insetBy(dx: -10, dy: -8)
 
-            Text(receipt.timestamp)
-                .frame(maxWidth: .infinity)
-
-            DashedDivider()
-
-            ForEach(receipt.items) { item in
-                HStack {
-                    Text(item.name)
-                    Spacer()
-                    Text(item.price.lkr)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Theme.orange, lineWidth: 3)
+                            .background(Theme.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .frame(width: box.width, height: box.height)
+                            .position(x: box.midX, y: box.midY)
+                    }
+                    .transition(.opacity)
                 }
             }
-
-            DashedDivider()
-
-            HStack {
-                Text("TOTAL")
-                Spacer()
-                Text(receipt.total.lkr)
-            }
-            .fontWeight(.bold)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Theme.orange.opacity(highlightsTotal ? 0.12 : 0), in: RoundedRectangle(cornerRadius: 8))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Theme.orange, lineWidth: highlightsTotal ? 2.5 : 0)
-            }
-            .animation(.easeInOut, value: highlightsTotal)
-        }
-        .font(.system(.subheadline, design: .monospaced))
-        .foregroundStyle(Color(hex: 0x2B2B2B))
-        .padding(22)
-        .background(Color(hex: 0xFAFAF7))
-        .rotationEffect(.degrees(-1.5))
-        .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
-        .accessibilityElement(children: .combine)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
+            .accessibilityLabel("Photo of your receipt")
     }
 }
 
-// MARK: - DashedDivider
+// MARK: - DocumentCameraView
 
-private struct DashedDivider: View {
-    var body: some View {
-        GeometryReader { proxy in
-            Path { path in
-                path.move(to: .zero)
-                path.addLine(to: CGPoint(x: proxy.size.width, y: 0))
-            }
-            .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+/// VisionKit's document scanner: finds the receipt's edges and straightens the photo before Vision reads it.
+struct DocumentCameraView: UIViewControllerRepresentable {
+    let onScan: (UIImage) -> Void
+    let onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onScan: onScan, onCancel: onCancel)
+    }
+
+    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
+        let controller = VNDocumentCameraViewController()
+        controller.delegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: VNDocumentCameraViewController, context: Context) {}
+
+    final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+        private let onScan: (UIImage) -> Void
+        private let onCancel: () -> Void
+
+        init(onScan: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
+            self.onScan = onScan
+            self.onCancel = onCancel
         }
-        .frame(height: 1)
+
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
+            guard scan.pageCount > 0 else { return onCancel() }
+            onScan(scan.imageOfPage(at: 0))
+        }
+
+        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+            onCancel()
+        }
+
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
+            onCancel()
+        }
     }
 }
 
@@ -642,7 +834,7 @@ struct StampEarnedPopup: View {
 }
 
 #Preview {
-    ReceiptScanView(receipt: MockData.sampleReceipt) { _ in }
+    ReceiptScanView(scanner: MockReceiptScanner(), initialImage: UIImage(systemName: "doc.text")) { _ in }
 }
 
 #Preview {

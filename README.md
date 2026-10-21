@@ -3,23 +3,6 @@
 A budget-aware food exploration app for university students, built with SwiftUI.
 Students set a food quest, find restaurants on a map, log meals, earn cuisine stamps and track their spending.
 
-## Current status
-
-- **UI:** every screen from the Figma prototype is built in SwiftUI with working navigation.
-- **Backend:** Firebase Authentication (email and password) and Cloud Firestore store accounts, profiles, budgets,
-  bookmarks, visits, stamps and the restaurant list.
-- **Face ID / Touch ID:** turn on "Unlock with Face ID" in Profile. The app then asks for Face ID whenever it opens
-  or comes back from the background (LocalAuthentication).
-- **Notifications:** local reminders 30 minutes before a planned visit, and a weekly challenge reminder every Monday
-  at the time chosen in Profile (UserNotifications). Tapping one opens the restaurant or the weekly challenge.
-- **MapKit + Core Location geofencing:** restaurant pins come from Firestore, and distances and walking times are
-  measured from the student's real location. Every restaurant has a 100 m geofence. Walking into one shows
-  "You've arrived" (an in-app banner, or a notification when the app is closed), and Directions draws a MapKit
-  walking route. A visit only counts as location verified, and earns a stamp, when it is logged within 150 m
-  of the restaurant.
-- **Not wired up yet:** Core ML and Vision. Those screens show sample results,
-  and quests, trails and challenges still use sample data.
-
 ## Requirements
 
 - Xcode 26 or later
@@ -58,6 +41,23 @@ and enter latitude `6.9028`, longitude `79.8598`. Allow location during onboardi
 - **With the app closed:** choose **Always** when iOS asks to change location access, press ⇧⌘H, then move the
   location to Campus Bites. A notification appears; tapping it opens Log your visit.
 - From Terminal: `xcrun simctl location booted set 6.9010,79.8624`
+
+## Trying receipt scanning in the simulator
+
+The simulator has no camera, so add a receipt photo to its Photos app first: drag an image file onto the
+Simulator window, or run `xcrun simctl addmedia booted path/to/receipt.jpg`. Then go to Log your visit →
+Scan receipt → **Choose from Photos**. On a real iPhone, **Scan receipt** opens the document scanner.
+
+## Demo at NIBM Colombo (viva)
+
+**NIBM Canteen** is a sample restaurant placed on the NIBM building on Vidya Mawatha (6.9063905, 79.8708285,
+from OpenStreetMap). Its 100 m geofence covers the whole building, so the arrival alert and location-verified
+visits can be shown live on a real iPhone on campus.
+
+- The first debug run on a phone uploads it to Firestore (`restaurants/nibm-canteen`) alongside the other restaurants.
+- Opening the app inside NIBM shows "You've arrived at NIBM Canteen!". **Get directions → Start** shows it again on demand.
+- To move it (e.g. to the exact viva room), edit `latitude` and `longitude` on that Firestore document and reopen the app.
+- Simulator backup: **Features → Location → Custom Location…** `6.90635`, `79.87080`.
 
 ## Firebase setup
 
@@ -98,7 +98,8 @@ FoodPassport/
 │   ├── DatabaseService.swift Reads and writes: Firestore version and a mock for tests
 │   ├── BiometricService.swift      Face ID / Touch ID: LocalAuthentication version and a mock
 │   ├── NotificationService.swift   Reminders: UserNotifications version and a mock
-│   └── LocationService.swift       Location and geofences: Core Location version and a mock
+│   ├── LocationService.swift       Location and geofences: Core Location version and a mock
+│   └── ReceiptScanner.swift        Receipt reading: Vision text recognition, the receipt parser, and a mock
 ├── Views/
 │   ├── MainTabView.swift     Tab bar, screen routing, pop-up and toast hosts
 │   ├── OnboardingViews.swift Welcome, permissions, budget setup
