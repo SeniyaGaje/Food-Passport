@@ -81,7 +81,7 @@ struct ExploreView: View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color(hex: 0xE6E6EA), in: Capsule())
+            .background(Color(light: 0xE6E6EA, dark: 0x3A3532), in: Capsule())
         }
         .buttonStyle(.plain)
     }

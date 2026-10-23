@@ -40,7 +40,7 @@ struct HistoryView: View {
 
                 HStack(spacing: 8) {
                     ForEach(HistoryFilter.allCases) { option in
-                        FilterChip(title: option.rawValue, isSelected: option == filter, selectedColor: Theme.orange) {
+                        FilterChip(title: option.rawValue, isSelected: option == filter, selectedColor: Theme.orange, selectedForeground: .white) {
                             filter = option
                         }
                     }

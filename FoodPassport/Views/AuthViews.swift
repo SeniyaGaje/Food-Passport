@@ -329,8 +329,8 @@ struct FaceIDLockView: View {
                     .foregroundStyle(Theme.orange)
                     .symbolEffect(.pulse, options: .repeating)
                     .frame(width: 104, height: 104)
-                    .background(.white, in: Circle())
-                    .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
+                    .background(Theme.surface, in: Circle())
+                    .shadow(color: Theme.shadow.opacity(0.08), radius: 16, y: 6)
             }
             .buttonStyle(.plain)
             .disabled(isAuthenticating)

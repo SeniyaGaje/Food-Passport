@@ -30,8 +30,8 @@ struct PlaceDetailView: View {
                         .foregroundStyle(Theme.ink)
                         .padding(.horizontal, 20)
                         .frame(height: 54)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: Theme.shadow.opacity(0.04), radius: 6, y: 2)
                     }
 
                     Label("Prices last updated \(restaurant.pricesUpdated)", systemImage: "clock.arrow.circlepath")
@@ -91,7 +91,7 @@ struct PlaceDetailView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white)
+        .background(Theme.surface)
     }
 }
 
@@ -355,8 +355,8 @@ struct DirectionsView: View {
             }
         }
         .padding(20)
-        .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(0.1), radius: 20, y: 8)
     }
 
     // Actions

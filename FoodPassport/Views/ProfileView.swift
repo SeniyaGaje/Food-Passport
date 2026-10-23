@@ -6,6 +6,9 @@ struct ProfileView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.openURL) private var openURL
 
+    /// Saved on this device and read by `FoodPassportApp` to switch the whole app between light and dark.
+    @AppStorage(AppearanceSetting.darkModeKey) private var isDarkModeOn = false
+
     @State private var isShowingReminderSheet = false
     @State private var isConfirmingReset = false
     @State private var isConfirmingSignOut = false
@@ -53,7 +56,7 @@ struct ProfileView: View {
                             SettingsRow(systemImage: nil, title: "Reminder time", titleColor: .secondary) {
                                 SettingsValue(appState.weeklyReminderTime.formatted(date: .omitted, time: .shortened))
                             }
-                            .background(Color(hex: 0xF6F6F7))
+                            .background(Theme.insetFill)
                         }
                         .buttonStyle(.plain)
                     }
@@ -63,6 +66,13 @@ struct ProfileView: View {
                         systemImage: appState.biometryKind.systemImage,
                         title: "Unlock with \(appState.biometryKind.name)",
                         isOn: asyncBinding(appState.isFaceIDEnabled, set: appState.setFaceIDEnabled)
+                    )
+
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        systemImage: isDarkModeOn ? "moon.fill" : "sun.max",
+                        title: "Dark mode",
+                        isOn: $isDarkModeOn
                     )
 
                     SettingsDivider()
@@ -153,7 +163,7 @@ struct ProfileView: View {
 
     private var header: some View {
         VStack(spacing: 8) {
-            InitialsAvatar(initials: appState.profile.initials, size: 96, background: Theme.orange)
+            InitialsAvatar(initials: appState.profile.initials, size: 96, background: Theme.orange, foreground: .white)
 
             Text(appState.profile.name)
                 .font(.title.bold())
@@ -257,12 +267,12 @@ struct SettingsDivider: View {
 }
 
 extension View {
-    /// White rounded container that groups settings rows.
+    /// Rounded container (white in light mode) that groups settings rows.
     func settingsCard() -> some View {
         self
-            .background(.white)
+            .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
+            .shadow(color: Theme.shadow.opacity(0.06), radius: 12, y: 4)
     }
 }
 
@@ -284,7 +294,7 @@ struct MonthlyBudgetSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 SectionCaption("Amount limit")
-                CurrencyField(amount: $amount, background: Color(hex: 0xF6F6F7))
+                CurrencyField(amount: $amount, background: Theme.insetFill)
             }
 
             HStack(spacing: 12) {

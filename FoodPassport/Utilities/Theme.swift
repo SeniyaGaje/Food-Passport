@@ -3,29 +3,52 @@ import Foundation
 import MapKit
 
 /// Colours, gradients and sizes taken from the Figma prototype.
+///
+/// Every colour has a light value (from the prototype) and a dark value, so the app follows the
+/// "Dark mode" setting in Profile. Use these instead of `.white`, `.black` or `Color(hex:)` in views,
+/// otherwise a screen will mix light and dark colours.
 enum Theme {
 
-    // Brand
+    // Brand (the same in both modes, so the orange identity stays recognisable)
 
     static let orange = Color(hex: 0xF26B1D)
     static let orangeLight = Color(hex: 0xFF8A3D)
     static let orangeDark = Color(hex: 0xE5530E)
-    static let orangeTint = Color(hex: 0xFFEDE2)
+    static let orangeTint = Color(light: 0xFFEDE2, dark: 0x3D2414)
 
     // Neutrals
 
-    static let ink = Color(hex: 0x1C1C1E)
-    static let fieldGray = Color(hex: 0xEEEEF1)
-    static let buttonGray = Color(hex: 0xE4E4E6)
-    static let sheetBackground = Color(hex: 0xF8F5F2)
+    /// Main text colour, and the fill of selected chips and dark buttons.
+    static let ink = Color(light: 0x1C1C1E, dark: 0xF2F2F7)
+    /// Text and icons drawn on top of an `ink` fill.
+    static let onInk = Color(light: 0xFFFFFF, dark: 0x1C1C1E)
+    /// Cards, rows, fields and pop-ups.
+    static let surface = Color(light: 0xFFFFFF, dark: 0x262220)
+    static let fieldGray = Color(light: 0xEEEEF1, dark: 0x332E2B)
+    static let buttonGray = Color(light: 0xE4E4E6, dark: 0x3A3532)
+    static let sheetBackground = Color(light: 0xF8F5F2, dark: 0x1A1716)
+    /// Light grey fills such as inactive chips, icon circles and the profile header.
+    static let subtleFill = Color(light: 0xEDEDEF, dark: 0x332E2B)
+    /// Slightly recessed rows and fields inside a card, e.g. "Reminder time" and the budget amount field.
+    static let insetFill = Color(light: 0xF6F6F7, dark: 0x2E2A27)
+    /// Empty part of progress bars and chart columns.
+    static let track = Color(light: 0xECECEE, dark: 0x3A3532)
+    /// Thin borders and dividers.
+    static let hairline = Color(light: 0xE2E2E6, dark: 0x45403C)
+    /// Mid-grey for secondary icons, unselected pins and minor chart series.
+    static let mutedInk = Color(light: 0x6B6B70, dark: 0xA19C98)
+    /// Light grey for empty stars, unchecked circles and placeholders.
+    static let faintInk = Color(light: 0xC7C7CC, dark: 0x5C5652)
+    /// Drop shadows: soft in light mode, almost invisible in dark mode where cards are lifted by colour instead.
+    static let shadow = Color(light: 0x000000, dark: 0x000000, darkOpacity: 0.5)
 
     // Status
 
-    static let green = Color(hex: 0x1E9E57)
-    static let greenTint = Color(hex: 0xE3F5EA)
+    static let green = Color(light: 0x1E9E57, dark: 0x34C474)
+    static let greenTint = Color(light: 0xE3F5EA, dark: 0x163423)
     static let gold = Color(hex: 0xF5A524)
-    static let yellowTint = Color(hex: 0xFFF4D6)
-    static let destructive = Color(hex: 0xF0453A)
+    static let yellowTint = Color(light: 0xFFF4D6, dark: 0x3A2F12)
+    static let destructive = Color(light: 0xF0453A, dark: 0xFF5A4F)
 
     // Gradients
 
@@ -42,7 +65,11 @@ enum Theme {
     )
 
     static let backgroundGradient = LinearGradient(
-        colors: [Color(hex: 0xFFD3B6), Color(hex: 0xFAF0EA), Color(hex: 0xFFD9C2)],
+        colors: [
+            Color(light: 0xFFD3B6, dark: 0x2B1B12),
+            Color(light: 0xFAF0EA, dark: 0x141211),
+            Color(light: 0xFFD9C2, dark: 0x24170F)
+        ],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -67,6 +94,32 @@ extension Color {
             opacity: opacity
         )
     }
+
+    /// Creates a colour that switches between two hex values when the app changes between light and dark mode.
+    init(light: UInt32, dark: UInt32, lightOpacity: Double = 1, darkOpacity: Double = 1) {
+        self.init(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(hex: dark, alpha: darkOpacity)
+                : UIColor(hex: light, alpha: lightOpacity)
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: UInt32, alpha: Double) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: alpha
+        )
+    }
+}
+
+/// The app's appearance setting, chosen with the "Dark mode" toggle in Profile and saved on the device.
+enum AppearanceSetting {
+    /// `UserDefaults` key used with `@AppStorage`.
+    static let darkModeKey = "isDarkModeOn"
 }
 
 extension Cuisine {
@@ -115,13 +168,13 @@ struct CardStyle: ViewModifier {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(color: Theme.shadow.opacity(0.06), radius: 12, y: 4)
     }
 }
 
 extension View {
-    /// White rounded card with a soft shadow — the main surface used throughout the prototype.
+    /// Rounded card (white in light mode) with a soft shadow — the main surface used throughout the prototype.
     func cardStyle(padding: CGFloat = 16, cornerRadius: CGFloat = Theme.Radius.card) -> some View {
         modifier(CardStyle(padding: padding, cornerRadius: cornerRadius))
     }

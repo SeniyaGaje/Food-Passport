@@ -65,8 +65,8 @@ struct HomeView: View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(.white, in: Capsule())
-            .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+            .background(Theme.surface, in: Capsule())
+            .shadow(color: Theme.shadow.opacity(0.06), radius: 6, y: 2)
         }
         .accessibilityLabel("Period: \(period.rawValue)")
     }
@@ -148,7 +148,7 @@ struct WeeklySpendingCard: View {
                     y: .value("Spent", entry.amount),
                     width: .fixed(24)
                 )
-                .foregroundStyle(entry.isHighlighted ? Theme.ink : Color(hex: 0xEEEEEF))
+                .foregroundStyle(entry.isHighlighted ? Theme.ink : Color(light: 0xEEEEEF, dark: 0x3A3532))
                 .cornerRadius(8)
                 .accessibilityLabel(entry.day)
                 .accessibilityValue(entry.amount.lkr)
@@ -175,7 +175,7 @@ struct WeeklySpendingCard: View {
 struct CuisineBreakdownCard: View {
     let shares: [CuisineShare]
 
-    private let palette: [Color] = [Theme.ink, Color(hex: 0x6B6B70), Color(hex: 0xB0B0B5), Theme.orange]
+    private let palette: [Color] = [Theme.ink, Theme.mutedInk, Color(light: 0xB0B0B5, dark: 0x6E6864), Theme.orange]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {

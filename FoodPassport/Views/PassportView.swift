@@ -286,8 +286,8 @@ struct PlanStopRow: View {
         }
         .foregroundStyle(Theme.ink)
         .padding(18)
-        .background(.white.opacity(stop.fitsBudget ? 1 : 0.55), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(stop.fitsBudget ? 0.06 : 0.02), radius: 10, y: 4)
+        .background(Theme.surface.opacity(stop.fitsBudget ? 1 : 0.55), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(stop.fitsBudget ? 0.06 : 0.02), radius: 10, y: 4)
         .opacity(stop.fitsBudget ? 1 : 0.6)
         .accessibilityElement(children: .combine)
     }

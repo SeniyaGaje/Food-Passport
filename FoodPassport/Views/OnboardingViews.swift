@@ -77,7 +77,11 @@ struct WelcomeView: View {
         .padding(.top, 16)
         .padding(.bottom, 28)
         .background {
-            LinearGradient(colors: [Color(hex: 0xFFC9A6), Color(hex: 0xFCE3D4)], startPoint: .top, endPoint: .bottom)
+            LinearGradient(
+                colors: [Color(light: 0xFFC9A6, dark: 0x2B1B12), Color(light: 0xFCE3D4, dark: 0x1A1513)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
                 .ignoresSafeArea(edges: .top)
         }
     }

@@ -64,11 +64,12 @@ struct InitialsAvatar: View {
     let initials: String
     var size: CGFloat = 44
     var background: Color = Theme.ink
+    var foreground: Color = Theme.onInk
 
     var body: some View {
         Text(initials)
             .font(.system(size: size * 0.38, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(foreground)
             .frame(width: size, height: size)
             .background(background, in: Circle())
     }
@@ -79,17 +80,19 @@ struct FilterChip: View {
     let title: String
     let isSelected: Bool
     var selectedColor: Color = Theme.ink
+    /// Text colour on the selected fill; use `.white` when `selectedColor` is orange.
+    var selectedForeground: Color = Theme.onInk
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isSelected ? .white : Theme.ink)
+                .foregroundStyle(isSelected ? selectedForeground : Theme.ink)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
-                .background(isSelected ? selectedColor : .white, in: Capsule())
-                .shadow(color: .black.opacity(isSelected ? 0 : 0.05), radius: 4, y: 2)
+                .background(isSelected ? selectedColor : Theme.surface, in: Capsule())
+                .shadow(color: Theme.shadow.opacity(isSelected ? 0 : 0.05), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -122,8 +125,8 @@ struct SearchField: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 48)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(0.05), radius: 6, y: 2)
     }
 }
 
@@ -146,8 +149,8 @@ struct StatTile: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
-        .background(.white, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(0.06), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
     }
 }
@@ -155,7 +158,7 @@ struct StatTile: View {
 struct ProgressBar: View {
     let value: Double
     var tint: Color = Theme.ink
-    var track: Color = Color(hex: 0xECECEE)
+    var track: Color = Theme.track
     var height: CGFloat = 10
 
     private var clampedValue: Double {
@@ -181,7 +184,7 @@ struct RingProgress: View {
     let value: Double
     var lineWidth: CGFloat = 20
     var tint: Color = Theme.ink
-    var track: Color = Color(hex: 0xF0F0F2)
+    var track: Color = Color(light: 0xF0F0F2, dark: 0x3A3532)
 
     var body: some View {
         ZStack {
@@ -255,7 +258,7 @@ struct PillLabel: View {
 
         var foreground: Color {
             switch self {
-            case .gray: Color(hex: 0x55555A)
+            case .gray: Color(light: 0x55555A, dark: 0xC7C2BE)
             case .green: Theme.green
             case .orange: Theme.orange
             case .yellow: Color(hex: 0xE39500)
@@ -264,7 +267,7 @@ struct PillLabel: View {
 
         var background: Color {
             switch self {
-            case .gray: Color(hex: 0xEDEDEF)
+            case .gray: Theme.subtleFill
             case .green: Theme.greenTint
             case .orange: Theme.orangeTint
             case .yellow: Theme.yellowTint
@@ -338,8 +341,8 @@ struct InputField: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .frame(minHeight: 54)
-        .background(.white, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
-        .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(0.04), radius: 6, y: 2)
     }
 }
 
@@ -372,8 +375,8 @@ struct SecureInputField: View {
         }
         .padding(.horizontal, 18)
         .frame(height: 54)
-        .background(.white, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
-        .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(0.04), radius: 6, y: 2)
     }
 }
 
@@ -381,7 +384,7 @@ struct SecureInputField: View {
 struct CurrencyField: View {
     @Binding var amount: Int
     var currencyCode = "LKR"
-    var background: Color = .white
+    var background: Color = Theme.surface
 
     var body: some View {
         HStack(spacing: 8) {
@@ -396,7 +399,7 @@ struct CurrencyField: View {
         .background(background, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                .stroke(Color(light: 0x000000, dark: 0xFFFFFF, lightOpacity: 0.08, darkOpacity: 0.12), lineWidth: 1)
         }
     }
 }
@@ -419,8 +422,8 @@ struct AmountPresetPicker: View {
                         .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .foregroundStyle(isSelected ? .white : Theme.ink)
-                        .background(isSelected ? Theme.ink : .white, in: Capsule())
+                        .foregroundStyle(isSelected ? Theme.onInk : Theme.ink)
+                        .background(isSelected ? Theme.ink : Theme.surface, in: Capsule())
                         .overlay(Capsule().stroke(Theme.ink, lineWidth: isSelected ? 0 : 1.2))
                 }
                 .buttonStyle(.plain)
@@ -465,7 +468,7 @@ struct CountStepper: View {
                 .font(.headline)
                 .foregroundStyle(Theme.ink)
                 .frame(width: 38, height: 38)
-                .background(.white, in: Circle())
+                .background(Theme.surface, in: Circle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -500,7 +503,7 @@ struct SheetHeader: View {
     }
 }
 
-/// White rounded card used for centred pop-ups such as "New stamp earned!".
+/// Rounded card used for centred pop-ups such as "New stamp earned!".
 struct PopupCard<Content: View>: View {
     @ViewBuilder let content: Content
 
@@ -510,8 +513,8 @@ struct PopupCard<Content: View>: View {
         }
         .padding(24)
         .frame(maxWidth: 360)
-        .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.2), radius: 30, y: 12)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Theme.shadow.opacity(0.2), radius: 30, y: 12)
     }
 }
 
@@ -701,7 +704,7 @@ struct StampBadgeView: View {
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, Theme.green)
                     .font(.system(size: size * 0.3))
-                    .background(Circle().fill(.white))
+                    .background(Circle().fill(Theme.surface))
                     .offset(x: 2, y: 2)
             }
         }

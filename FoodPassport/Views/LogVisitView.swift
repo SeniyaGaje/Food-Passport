@@ -161,7 +161,7 @@ struct LogVisitView: View {
                         .font(.title3)
                         .foregroundStyle(Theme.ink)
                         .frame(width: 48, height: 48)
-                        .background(Color(hex: 0xE8E8EA), in: Circle())
+                        .background(Color(light: 0xE8E8EA, dark: 0x3A3532), in: Circle())
 
                     Text("Retake")
                         .font(.headline)
@@ -179,7 +179,7 @@ struct LogVisitView: View {
                         .font(.title2)
                         .foregroundStyle(Theme.ink)
                         .frame(width: 64, height: 64)
-                        .background(Color(hex: 0xE8E8EA), in: Circle())
+                        .background(Color(light: 0xE8E8EA, dark: 0x3A3532), in: Circle())
 
                     Text("Scan your meal")
                         .font(.headline)
@@ -392,7 +392,7 @@ struct MealCameraView: View {
                     .buttonStyle(BrandTextButtonStyle(color: .secondary))
             }
             .padding(20)
-            .background(.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .padding(20)
             .frame(maxHeight: .infinity, alignment: .bottom)
         default:
@@ -712,12 +712,12 @@ private struct PredictionRow: View {
 
             ProgressBar(
                 value: prediction.confidence,
-                tint: isSelected ? Theme.ink : Color(hex: 0xC7C7CC),
+                tint: isSelected ? Theme.ink : Theme.faintInk,
                 height: 6
             )
         }
         .padding(16)
-        .background(Color(hex: 0xF2F2F4), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color(light: 0xF2F2F4, dark: 0x332E2B), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(isSelected ? Theme.orange : .clear, lineWidth: 2)
@@ -885,7 +885,7 @@ struct ReceiptScanView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
-        .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }

@@ -100,7 +100,7 @@ struct QuestDetailView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: 0xEBEAEA), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(Color(light: 0xEBEAEA, dark: 0x2E2A27), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }
 
@@ -288,7 +288,7 @@ struct FoodTrailView: View {
                             .foregroundStyle(Theme.green)
                     }
 
-                    ProgressBar(value: trail.progress, tint: Color(hex: 0x555558), height: 12)
+                    ProgressBar(value: trail.progress, tint: Color(light: 0x555558, dark: 0xC7C2BE), height: 12)
 
                     ForEach(Array(trail.stops.enumerated()), id: \.element.id) { index, stop in
                         NavigationLink(value: AppRoute.placeDetail(stop.restaurant)) {
@@ -361,12 +361,12 @@ private struct TrailStopRow: View {
             }
         }
         .padding(18)
-        .background(.white.opacity(status == .visited ? 0.6 : 1), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(Theme.surface.opacity(status == .visited ? 0.6 : 1), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Theme.orange, lineWidth: status == .next ? 2 : 0)
         }
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
+        .shadow(color: Theme.shadow.opacity(0.05), radius: 10, y: 4)
         .accessibilityElement(children: .combine)
     }
 
@@ -378,7 +378,7 @@ private struct TrailStopRow: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(.secondary)
                 .frame(width: 36, height: 36)
-                .background(Color(hex: 0xEDEDEF), in: Circle())
+                .background(Theme.subtleFill, in: Circle())
         case .next:
             Text("\(number)")
                 .font(.headline)
@@ -390,7 +390,7 @@ private struct TrailStopRow: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
                 .frame(width: 36, height: 36)
-                .overlay(Circle().strokeBorder(Color(hex: 0xD8D8DC), lineWidth: 2))
+                .overlay(Circle().strokeBorder(Color(light: 0xD8D8DC, dark: 0x5C5652), lineWidth: 2))
         }
     }
 }

@@ -5,6 +5,7 @@ import FirebaseCore
 struct FoodPassportApp: App {
     @State private var appState: AppState
     @State private var router = AppRouter()
+    @AppStorage(AppearanceSetting.darkModeKey) private var isDarkModeOn = false
 
     init() {
         // Face ID, notifications and location are device features, so they always use the real services.
@@ -33,8 +34,8 @@ struct FoodPassportApp: App {
             RootView()
                 .environment(appState)
                 .environment(router)
-                // The prototype is designed for light mode only.
-                .preferredColorScheme(.light)
+                // Light by default, as in the prototype; the "Dark mode" toggle in Profile switches the whole app.
+                .preferredColorScheme(isDarkModeOn ? .dark : .light)
         }
     }
 }
