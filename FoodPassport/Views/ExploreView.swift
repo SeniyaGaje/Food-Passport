@@ -44,14 +44,14 @@ struct ExploreView: View {
             VStack(alignment: .leading, spacing: 14) {
                 ScreenHeader("Explore food", subtitle: "Around campus") {
                     HStack(spacing: 10) {
-                        displayModeButton
+                        displayModePicker
                         ProfileAvatarButton()
                     }
                 }
 
                 SearchField(placeholder: "Search places or cuisines", text: $searchText)
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, Theme.screenMargin)
 
             cuisineChips
 
@@ -67,23 +67,35 @@ struct ExploreView: View {
         .navigationTitle("Explore")
         .toolbar(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.25), value: displayMode)
+        .sensoryFeedback(.selection, trigger: displayMode)
     }
 
-    private var displayModeButton: some View {
-        Button {
-            displayMode = displayMode == .map ? .list : .map
+    /// Map / List switch that shows both options, with the current one filled.
+    private var displayModePicker: some View {
+        HStack(spacing: 2) {
+            displayModeButton(.map, systemImage: "map", label: "Map")
+            displayModeButton(.list, systemImage: "list.bullet", label: "List")
+        }
+        .padding(3)
+        .surfaceBackground(Capsule(), shadowStrength: 0.6)
+    }
+
+    private func displayModeButton(_ mode: DisplayMode, systemImage: String, label: String) -> some View {
+        let isSelected = displayMode == mode
+
+        return Button {
+            displayMode = mode
         } label: {
-            Label(
-                displayMode == .map ? "List" : "Map",
-                systemImage: displayMode == .map ? "list.bullet" : "map"
-            )
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(light: 0xE6E6EA, dark: 0x3A3532), in: Capsule())
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isSelected ? Theme.onInk : Theme.ink)
+                .frame(width: 40, height: 34)
+                .background(isSelected ? Theme.ink : .clear, in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(label) view")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var cuisineChips: some View {
@@ -98,10 +110,11 @@ struct ExploreView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 4)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.vertical, 6)
         }
         .scrollIndicators(.hidden)
+        .sensoryFeedback(.selection, trigger: selectedCuisine)
     }
 
     private var mapContent: some View {
@@ -118,7 +131,7 @@ struct ExploreView: View {
                 RestaurantCard(restaurant: restaurant, highlightsCuisine: true)
                     .id(restaurant.id)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.screenMargin)
                     .padding(.bottom, 16)
             }
         }
@@ -127,6 +140,13 @@ struct ExploreView: View {
     private var listContent: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
+                if !filteredRestaurants.isEmpty {
+                    Text(filteredRestaurants.count == 1 ? "1 place nearby" : "\(filteredRestaurants.count) places nearby")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 ForEach(filteredRestaurants) { restaurant in
                     RestaurantCard(restaurant: restaurant)
                 }
@@ -135,7 +155,8 @@ struct ExploreView: View {
                     ContentUnavailableView.search(text: searchText)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, 4)
             .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
@@ -202,9 +223,10 @@ struct RestaurantCard: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Text(restaurant.cuisine.rawValue)
-                                .foregroundStyle(highlightsCuisine ? Theme.green : Color.secondary)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(highlightsCuisine ? Theme.green : Theme.orange)
                             Text("•")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.tertiary)
                             Text(restaurant.distanceText)
                                 .foregroundStyle(.secondary)
                         }
@@ -213,10 +235,12 @@ struct RestaurantCard: View {
                         Text(restaurant.name)
                             .font(.title3.bold())
                             .foregroundStyle(Theme.ink)
+                            .lineLimit(2)
 
-                        Text(restaurant.priceRangeText)
+                        Label(restaurant.priceRangeText, systemImage: "banknote")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Theme.ink)
+                            .labelStyle(CompactLabelStyle())
                     }
 
                     Spacer(minLength: 0)

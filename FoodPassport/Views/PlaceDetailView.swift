@@ -3,59 +3,22 @@ import MapKit
 
 struct PlaceDetailView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isShowingPlanSheet = false
 
     let restaurant: Restaurant
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                FoodImageView(imageName: restaurant.imageName, cuisine: restaurant.cuisine)
-                    .frame(height: 240)
-
-                summary
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Popular dishes")
-                        .font(.title3.bold())
-                        .foregroundStyle(Theme.ink)
-
-                    ForEach(restaurant.popularDishes) { dish in
-                        HStack {
-                            Text(dish.name)
-                            Spacer()
-                            Text(dish.price.lkr)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 20)
-                        .frame(height: 54)
-                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .shadow(color: Theme.shadow.opacity(0.04), radius: 6, y: 2)
-                    }
-
-                    Label("Prices last updated \(restaurant.pricesUpdated)", systemImage: "clock.arrow.circlepath")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    VStack(spacing: 12) {
-                        Button("Plan visit") { isShowingPlanSheet = true }
-                            .buttonStyle(.brandPrimary)
-
-                        NavigationLink(value: AppRoute.directions(restaurant)) {
-                            Text("Get directions")
-                        }
-                        .buttonStyle(.brandSecondary)
-
-                        NavigationLink(value: AppRoute.logVisit(restaurant)) {
-                            Text("I'm here – Log visit")
-                        }
-                        .buttonStyle(.brandText)
-                    }
-                    .padding(.top, 8)
-                }
-                .padding(20)
+            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                hero
+                facts
+                dishes
+                actions
             }
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -72,26 +35,125 @@ struct PlaceDetailView: View {
         }
     }
 
-    private var summary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(restaurant.name)
-                    .font(.title.bold())
+    /// The photo keeps the same shape on every iPhone (its height follows the screen width),
+    /// with the name on a dark fade so it stays readable on any photo.
+    private var hero: some View {
+        FoodImageView(imageName: restaurant.imageName, cuisine: restaurant.cuisine)
+            .aspectRatio(1.45, contentMode: .fit)
+            .overlay {
+                LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 8) {
+                    PhotoTag(text: restaurant.cuisine.rawValue, systemImage: restaurant.cuisine.symbolName)
+                    Text(restaurant.name)
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                }
+                .padding(20)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
+            .shadow(color: Theme.shadow.opacity(0.14), radius: 18, y: 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(restaurant.name), \(restaurant.cuisine.rawValue)")
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var facts: some View {
+        // Side by side normally; stacked with larger text sizes, where the two wouldn't fit on one line.
+        let layout = dynamicTypeSize >= .xLarge
+            ? AnyLayout(VStackLayout(spacing: Theme.Spacing.s))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.s))
+
+        return layout {
+            FactTile(systemImage: "figure.walk", value: "\(restaurant.walkingMinutes) min walk", caption: "\(restaurant.distanceText) away")
+            FactTile(systemImage: "banknote", value: restaurant.priceRangeText, caption: "Typical meal")
+        }
+    }
+
+    private var dishes: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            SectionHeader("Popular dishes")
+
+            VStack(spacing: 0) {
+                ForEach(Array(restaurant.popularDishes.enumerated()), id: \.element.id) { index, dish in
+                    if index > 0 {
+                        Divider()
+                            .padding(.leading, 18)
+                    }
+                    HStack {
+                        Text(dish.name)
+                        Spacer(minLength: 12)
+                        Text(dish.price.lkr)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                    }
                     .foregroundStyle(Theme.ink)
-                Spacer()
-                PillLabel(text: restaurant.cuisine.rawValue, font: .subheadline.weight(.medium))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .cardBackground()
+
+            Label("Prices last updated \(restaurant.pricesUpdated)", systemImage: "clock.arrow.circlepath")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var actions: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            Button {
+                isShowingPlanSheet = true
+            } label: {
+                Label("Plan visit", systemImage: "calendar.badge.plus")
+            }
+            .buttonStyle(.brandPrimary)
+
+            NavigationLink(value: AppRoute.directions(restaurant)) {
+                Label("Get directions", systemImage: "figure.walk")
+            }
+            .buttonStyle(.brandSecondary)
+
+            NavigationLink(value: AppRoute.logVisit(restaurant)) {
+                Label("I'm here – Log visit", systemImage: "checkmark.circle")
+            }
+            .buttonStyle(.brandText)
+        }
+        .padding(.top, Theme.Spacing.xxs)
+    }
+}
+
+/// One key fact about a place, e.g. "5 min walk · 0.4 km away".
+private struct FactTile: View {
+    let systemImage: String
+    let value: String
+    let caption: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            IconTile(systemImage: systemImage, size: 38)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
-            HStack(spacing: 18) {
-                Label(restaurant.distanceText, systemImage: "mappin.and.ellipse")
-                Label(restaurant.priceRangeText, systemImage: "banknote")
-            }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface)
+        .cardStyle(padding: 12, cornerRadius: 18)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -161,22 +223,29 @@ struct PlanVisitSheet: View {
             }
 
             VStack(spacing: 0) {
-                Toggle("Remind me", isOn: $remindMe)
-                    .padding(.vertical, 12)
+                Toggle(isOn: $remindMe) {
+                    Label("Remind me", systemImage: "bell.badge")
+                }
+                .padding(.vertical, 12)
                 Divider()
-                Toggle("Count towards my quest", isOn: $countsTowardsQuest)
-                    .padding(.vertical, 12)
+                Toggle(isOn: $countsTowardsQuest) {
+                    Label("Count towards my quest", systemImage: "flag.checkered")
+                }
+                .padding(.vertical, 12)
             }
+            .labelStyle(CompactLabelStyle())
+            .foregroundStyle(Theme.ink)
             .tint(Theme.green)
             .padding(.horizontal, 18)
-            .background(Theme.fieldGray, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-            Spacer(minLength: 0)
+            .cardBackground(cornerRadius: 18, shadowStrength: 0.5)
         }
-        .padding(20)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
+        .padding(.bottom, 12)
+        .sensoryFeedback(.selection, trigger: selectedDayIndex)
+        .sensoryFeedback(.selection, trigger: selectedMinutes)
+        .fittedSheetHeight()
+        .brandSheetStyle()
     }
 
     private func planVisit() {
@@ -204,17 +273,22 @@ struct PlanVisitSheet: View {
     private func dayChip(for date: Date, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                Text(date.formatted(.dateTime.weekday(.abbreviated)))
+                Text(Calendar.current.isDateInToday(date) ? "Today" : date.formatted(.dateTime.weekday(.abbreviated)))
                     .font(.subheadline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 Text(date.formatted(.dateTime.day()))
                     .font(.title3.bold())
             }
             .foregroundStyle(isSelected ? .white : Theme.ink)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(isSelected ? Theme.orange : Theme.fieldGray, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background {
+                selectionBackground(isSelected: isSelected, cornerRadius: 14)
+            }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(date.formatted(date: .complete, time: .omitted))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -223,14 +297,28 @@ struct PlanVisitSheet: View {
             Text(date(on: .now, minutes: minutes).formatted(date: .omitted, time: .shortened))
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.7)
                 .foregroundStyle(isSelected ? .white : Theme.ink)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(isSelected ? Theme.orange : Theme.fieldGray, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background {
+                    selectionBackground(isSelected: isSelected, cornerRadius: 12)
+                }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Orange fill for the chosen chip, a plain card for the others.
+    @ViewBuilder
+    private func selectionBackground(isSelected: Bool, cornerRadius: CGFloat) -> some View {
+        if isSelected {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Theme.primaryGradient)
+        } else {
+            Color.clear
+                .cardBackground(cornerRadius: cornerRadius, shadowStrength: 0.4)
+        }
     }
 }
 
@@ -257,11 +345,11 @@ struct DirectionsView: View {
         Map(position: $position) {
             if let route {
                 MapPolyline(route.polyline)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                    .stroke(Theme.orange, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
             } else if let start = appState.userLocation?.coordinate {
                 // No walking route (e.g. offline): a dotted straight line still shows the direction.
                 MapPolyline(coordinates: [start, restaurant.coordinate])
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [1, 12]))
+                    .stroke(Theme.orange, style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [1, 12]))
             }
 
             UserAnnotation()
@@ -277,7 +365,7 @@ struct DirectionsView: View {
         }
         .safeAreaInset(edge: .bottom) {
             routeCard
-                .padding(.horizontal, 20)
+                .padding(.horizontal, Theme.screenMargin)
                 .padding(.bottom, 12)
         }
         .navigationTitleHidden("Directions")
@@ -308,11 +396,7 @@ struct DirectionsView: View {
     private var routeCard: some View {
         VStack(spacing: 18) {
             HStack(spacing: 14) {
-                Image(systemName: hasArrived ? "mappin.and.ellipse" : "figure.walk")
-                    .font(.title2)
-                    .foregroundStyle(Theme.orange)
-                    .frame(width: 56, height: 56)
-                    .background(Theme.orangeTint, in: Circle())
+                IconTile(systemImage: hasArrived ? "mappin.and.ellipse" : "figure.walk", size: 52)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hasArrived ? "You're here" : "\(walkingMinutes) min walk")
@@ -355,8 +439,7 @@ struct DirectionsView: View {
             }
         }
         .padding(20)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(0.1), radius: 20, y: 8)
+        .cardBackground(cornerRadius: Theme.Radius.sheet, shadowStrength: 2)
     }
 
     // Actions

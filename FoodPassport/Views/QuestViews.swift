@@ -7,40 +7,46 @@ struct QuestDetailView: View {
 
     let quest: Quest
 
+    /// The big "2/3" follows the student's text size setting.
+    @ScaledMetric(relativeTo: .largeTitle) private var ringNumberSize: CGFloat = 44
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 progressCard
                 budgetCard
 
-                Text("Your plan")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
-                    .padding(.top, 4)
+                SectionHeader("Your plan")
 
                 ForEach(quest.plan) { stop in
                     if stop.fitsBudget {
                         NavigationLink(value: AppRoute.placeDetail(stop.restaurant)) {
                             PlanStopRow(stop: stop)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressableCard)
                     } else {
                         Button {
                             router.present(.budgetLimit)
                         } label: {
                             PlanStopRow(stop: stop)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressableCard)
                     }
                 }
 
                 explanationCard
 
-                Button("Edit quest") { router.sheet = .editQuest }
-                    .buttonStyle(.brandTinted)
-                    .padding(.top, 4)
+                Button {
+                    router.sheet = .editQuest
+                } label: {
+                    Label("Edit quest", systemImage: "slider.horizontal.3")
+                }
+                .buttonStyle(.brandTinted)
+                .padding(.top, 4)
             }
-            .padding(20)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -55,18 +61,39 @@ struct QuestDetailView: View {
                 .multilineTextAlignment(.center)
 
             ZStack {
-                RingProgress(value: quest.cuisineProgress, lineWidth: 24)
+                RingProgress(
+                    value: quest.cuisineProgress,
+                    lineWidth: 22,
+                    tint: AnyShapeStyle(
+                        AngularGradient(
+                            colors: [Theme.orangeLight, Theme.orange, Theme.orangeDark],
+                            center: .center,
+                            startAngle: .degrees(0),
+                            endAngle: .degrees(360 * max(quest.cuisineProgress, 0.01))
+                        )
+                    )
+                )
                 VStack(spacing: 2) {
                     Text(verbatim: "\(quest.cuisinesTried)/\(quest.targetCuisines)")
-                        .font(.system(size: 44, weight: .bold))
+                        .font(.system(size: ringNumberSize, weight: .bold))
                         .foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText())
                     Text("cuisines tried")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 180, height: 180)
+            // About half the screen width, so the ring looks the same on a 17e and a Pro Max.
+            .containerRelativeFrame(.horizontal) { width, _ in
+                min(width * 0.5, 230)
+            }
+            .aspectRatio(1, contentMode: .fit)
             .accessibilityElement(children: .combine)
+
+            HStack(spacing: Theme.Spacing.xs) {
+                PillLabel(text: quest.duration.rawValue, systemImage: "calendar", style: .orange)
+                PillLabel(text: "\(max(quest.targetCuisines - quest.cuisinesTried, 0)) to go", systemImage: "flag.checkered")
+            }
         }
         .frame(maxWidth: .infinity)
         .cardStyle(padding: 24)
@@ -90,17 +117,23 @@ struct QuestDetailView: View {
     }
 
     private var explanationCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Why these picks?", systemImage: "lightbulb")
-                .textCase(.uppercase)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.secondary)
-            Text(quest.planExplanation)
-                .foregroundStyle(Theme.ink)
+        HStack(alignment: .top, spacing: 14) {
+            IconTile(systemImage: "lightbulb.fill", tint: Theme.gold, size: 40)
+
+            VStack(alignment: .leading, spacing: 6) {
+                SectionCaption("Why these picks?")
+                Text(quest.planExplanation)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(light: 0xEBEAEA, dark: 0x2E2A27), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(Theme.yellowTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.gold.opacity(0.25), lineWidth: 1)
+        }
     }
 }
 
@@ -154,7 +187,7 @@ struct QuestEditorSheet: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         SectionCaption("Budget")
-                        CurrencyField(amount: $budget, background: Theme.fieldGray)
+                        CurrencyField(amount: $budget)
                     }
 
                     durationPicker
@@ -176,8 +209,9 @@ struct QuestEditorSheet: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .brandSheetStyle()
+        .sensoryFeedback(.selection, trigger: duration)
+        .sensoryFeedback(.selection, trigger: cuisineCount)
     }
 
     private var cuisineCountRow: some View {
@@ -219,7 +253,11 @@ struct QuestEditorSheet: View {
                             .foregroundStyle(isSelected ? Theme.orange : Color.secondary)
                     }
                     .padding(16)
-                    .background(Theme.fieldGray, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .cardBackground(cornerRadius: 16, shadowStrength: 0.4)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Theme.orange, lineWidth: isSelected ? 1.5 : 0)
+                    }
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -238,9 +276,15 @@ struct QuestEditorSheet: View {
                     } label: {
                         Text(option.rawValue)
                             .font(.headline)
-                            .foregroundStyle(isSelected ? .white : Color.secondary)
+                            .foregroundStyle(isSelected ? .white : Theme.ink)
                             .frame(maxWidth: .infinity, minHeight: 46)
-                            .background(isSelected ? Theme.orange : Theme.fieldGray, in: Capsule())
+                            .background {
+                                if isSelected {
+                                    Capsule().fill(Theme.primaryGradient)
+                                } else {
+                                    Color.clear.surfaceBackground(Capsule(), shadowStrength: 0.4)
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -272,42 +316,50 @@ struct FoodTrailView: View {
                 Text(trail.summary)
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 20)
 
+                // Same shape on every iPhone: the map's height follows the screen width.
                 trailMap
-                    .frame(height: 260)
+                    .aspectRatio(1.5, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous)
+                            .strokeBorder(Theme.cardBorder, lineWidth: 1)
+                    }
+                    .shadow(color: Theme.shadow.opacity(0.1), radius: 14, y: 6)
 
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("\(trail.visitedCount) of \(trail.stops.count) stops")
                             .font(.headline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.ink)
                         Spacer()
                         Text(verbatim: "\(Int(trail.progress * 100))%")
                             .font(.headline)
+                            .monospacedDigit()
                             .foregroundStyle(Theme.green)
                     }
 
-                    ProgressBar(value: trail.progress, tint: Color(light: 0x555558, dark: 0xC7C2BE), height: 12)
-
-                    ForEach(Array(trail.stops.enumerated()), id: \.element.id) { index, stop in
-                        NavigationLink(value: AppRoute.placeDetail(stop.restaurant)) {
-                            TrailStopRow(number: index + 1, stop: stop, status: trail.status(of: stop))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if let next = trail.nextStop {
-                        NavigationLink(value: AppRoute.directions(next.restaurant)) {
-                            Text("Start trail")
-                        }
-                        .buttonStyle(.brandPrimary)
-                        .padding(.top, 4)
-                    }
+                    ProgressBar(value: trail.progress, tint: Theme.green, height: 10)
                 }
-                .padding(.horizontal, 20)
+                .cardStyle(padding: 18)
+
+                ForEach(Array(trail.stops.enumerated()), id: \.element.id) { index, stop in
+                    NavigationLink(value: AppRoute.placeDetail(stop.restaurant)) {
+                        TrailStopRow(number: index + 1, stop: stop, status: trail.status(of: stop))
+                    }
+                    .buttonStyle(.pressableCard)
+                }
+
+                if let next = trail.nextStop {
+                    NavigationLink(value: AppRoute.directions(next.restaurant)) {
+                        Label("Start trail", systemImage: "figure.walk")
+                    }
+                    .buttonStyle(.brandPrimary)
+                    .padding(.top, 4)
+                }
             }
-            .padding(.bottom, 24)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -342,7 +394,7 @@ private struct TrailStopRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(stop.restaurant.name)
-                    .font(.title3.bold())
+                    .font(.headline)
                     .foregroundStyle(status == .visited ? Color.secondary : Theme.ink)
                 Text("\(stop.restaurant.cuisine.rawValue) · \(stop.restaurant.distanceText)")
                     .font(.subheadline)
@@ -353,20 +405,20 @@ private struct TrailStopRow: View {
 
             switch status {
             case .visited:
-                PillLabel(text: "Visited", font: .subheadline.weight(.medium))
+                PillLabel(text: "Visited", systemImage: "checkmark", style: .green)
             case .next:
-                PillLabel(text: "Next stop", style: .orange, font: .subheadline.weight(.semibold))
+                PillLabel(text: "Next stop", style: .orange)
             case .upcoming:
                 EmptyView()
             }
         }
         .padding(18)
-        .background(Theme.surface.opacity(status == .visited ? 0.6 : 1), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .cardBackground(shadowStrength: status == .visited ? 0.3 : 1)
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                 .strokeBorder(Theme.orange, lineWidth: status == .next ? 2 : 0)
         }
-        .shadow(color: Theme.shadow.opacity(0.05), radius: 10, y: 4)
+        .opacity(status == .visited ? 0.75 : 1)
         .accessibilityElement(children: .combine)
     }
 
@@ -376,9 +428,9 @@ private struct TrailStopRow: View {
         case .visited:
             Image(systemName: "checkmark")
                 .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.green)
                 .frame(width: 36, height: 36)
-                .background(Theme.subtleFill, in: Circle())
+                .background(Theme.greenTint, in: Circle())
         case .next:
             Text("\(number)")
                 .font(.headline)
@@ -404,6 +456,7 @@ struct WeeklyChallengeView: View {
                 Text(challenge.title)
                     .font(.largeTitle.bold())
                     .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
 
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
@@ -427,18 +480,18 @@ struct WeeklyChallengeView: View {
                 }
                 .cardStyle(padding: 20)
 
-                Text("Suggested places")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
+                SectionHeader("Suggested places")
 
                 ForEach(challenge.suggestions) { stop in
                     NavigationLink(value: AppRoute.placeDetail(stop.restaurant)) {
                         SuggestedPlaceRow(stop: stop)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableCard)
                 }
             }
-            .padding(20)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -450,6 +503,7 @@ private struct SuggestedPlaceRow: View {
     let stop: PlannedStop
 
     var body: some View {
+        // The price sits under the name (not beside it), so long names stay on one line on narrow iPhones.
         HStack(spacing: 14) {
             FoodImageView(imageName: stop.restaurant.imageName, cuisine: stop.restaurant.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
@@ -458,16 +512,22 @@ private struct SuggestedPlaceRow: View {
                 Text(stop.restaurant.name)
                     .font(.headline)
                     .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
                 Text("\(stop.restaurant.cuisine.rawValue) · \(stop.restaurant.distanceText)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("Est. \(stop.estimatedCost.lkr)")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.orange)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            Text("Est. \(stop.estimatedCost.lkr)")
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .cardStyle(padding: 14)
         .accessibilityElement(children: .combine)
@@ -517,7 +577,11 @@ struct BudgetUpdatePopup: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.fieldGray, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Theme.insetFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Theme.cardBorder, lineWidth: 1)
+            }
 
             VStack(spacing: 10) {
                 Button("See updated plan", action: onSeeUpdatedPlan)

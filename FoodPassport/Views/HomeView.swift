@@ -9,26 +9,38 @@ struct HomeView: View {
 
     private let quest = MockData.activeQuest
 
+    /// "Good evening, John" — changes with the time of day.
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: .now)
+        let partOfDay = switch hour {
+        case 5..<12: "Good morning"
+        case 12..<17: "Good afternoon"
+        default: "Good evening"
+        }
+        let firstName = appState.profile.name.split(separator: " ").first.map(String.init) ?? ""
+        return firstName.isEmpty ? partOfDay : "\(partOfDay), \(firstName)"
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 12) {
-                    ScreenHeader("Your overview") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    ScreenHeader("Your overview", subtitle: greeting) {
                         ProfileAvatarButton()
                     }
                     periodMenu
                 }
 
-                HStack(spacing: 12) {
-                    StatTile(value: "\(appState.visits.count)", label: "Visits")
-                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines")
-                    StatTile(value: "\(appState.stamps.count)", label: "Stamps")
+                HStack(spacing: Theme.Spacing.s) {
+                    StatTile(value: "\(appState.visits.count)", label: "Visits", systemImage: "fork.knife")
+                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
+                    StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
                 NavigationLink(value: AppRoute.questDetail) {
                     QuestSummaryCard(quest: quest)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressableCard)
 
                 WeeklySpendingCard(entries: MockData.weeklySpending)
 
@@ -38,9 +50,9 @@ struct HomeView: View {
                     router.selectedTab = .history
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -57,16 +69,19 @@ struct HomeView: View {
             }
         } label: {
             HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.orange)
                 Text(period.rawValue)
                     .font(.subheadline.weight(.semibold))
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
             }
             .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Theme.surface, in: Capsule())
-            .shadow(color: Theme.shadow.opacity(0.06), radius: 6, y: 2)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .surfaceBackground(Capsule(), shadowStrength: 0.6)
         }
         .accessibilityLabel("Period: \(period.rawValue)")
     }
@@ -79,12 +94,21 @@ struct QuestSummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
-                Text(quest.title)
-                    .font(.title3.bold())
-                    .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Active quest")
+                        .textCase(.uppercase)
+                        .font(.caption.weight(.bold))
+                        .kerning(0.6)
+                        .opacity(0.85)
+                    Text(quest.title)
+                        .font(.title3.bold())
+                        .multilineTextAlignment(.leading)
+                }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.headline)
+                    .padding(10)
+                    .background(.white.opacity(0.18), in: Circle())
             }
 
             progressRow(
@@ -100,7 +124,7 @@ struct QuestSummaryCard: View {
             )
 
             Rectangle()
-                .fill(.white.opacity(0.35))
+                .fill(.white.opacity(0.3))
                 .frame(height: 1)
 
             if let next = quest.nextPick {
@@ -110,7 +134,9 @@ struct QuestSummaryCard: View {
         }
         .foregroundStyle(.white)
         .padding(20)
-        .background(Theme.questGradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background {
+            QuestCardBackground()
+        }
         .shadow(color: Theme.orange.opacity(0.35), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens quest details")
@@ -123,6 +149,7 @@ struct QuestSummaryCard: View {
                 Spacer()
                 Text(verbatim: "\(Int(value * 100))%")
                     .fontWeight(.semibold)
+                    .monospacedDigit()
             }
             .font(.subheadline)
 
@@ -138,17 +165,28 @@ struct WeeklySpendingCard: View {
         entries.first(where: \.isHighlighted)?.day
     }
 
+    private var total: Int {
+        entries.map(\.amount).reduce(0, +)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionCaption("Weekly spending")
+            HStack(alignment: .firstTextBaseline) {
+                SectionCaption("Weekly spending")
+                Spacer()
+                Text(total.lkr)
+                    .font(.headline)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.ink)
+            }
 
             Chart(entries) { entry in
                 BarMark(
                     x: .value("Day", entry.day),
                     y: .value("Spent", entry.amount),
-                    width: .fixed(24)
+                    width: .ratio(0.55)
                 )
-                .foregroundStyle(entry.isHighlighted ? Theme.ink : Color(light: 0xEEEEEF, dark: 0x3A3532))
+                .foregroundStyle(entry.isHighlighted ? AnyShapeStyle(Theme.primaryGradient) : AnyShapeStyle(Theme.track))
                 .cornerRadius(8)
                 .accessibilityLabel(entry.day)
                 .accessibilityValue(entry.amount.lkr)
@@ -161,7 +199,7 @@ struct WeeklySpendingCard: View {
                             Text(String(day.prefix(1)))
                                 .font(.subheadline)
                                 .fontWeight(day == highlightedDay ? .bold : .regular)
-                                .foregroundStyle(day == highlightedDay ? Theme.ink : Color.secondary)
+                                .foregroundStyle(day == highlightedDay ? Theme.orange : Color.secondary)
                         }
                     }
                 }
@@ -175,49 +213,78 @@ struct WeeklySpendingCard: View {
 struct CuisineBreakdownCard: View {
     let shares: [CuisineShare]
 
-    private let palette: [Color] = [Theme.ink, Theme.mutedInk, Color(light: 0xB0B0B5, dark: 0x6E6864), Theme.orange]
-
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionCaption("Cuisines explored")
 
-            HStack(spacing: 28) {
-                Chart(shares) { share in
-                    SectorMark(
-                        angle: .value("Share", share.percentage),
-                        innerRadius: .ratio(0.58),
-                        angularInset: 2
-                    )
-                    .foregroundStyle(color(for: share))
-                    .cornerRadius(3)
-                    .accessibilityLabel(share.cuisine.rawValue)
-                    .accessibilityValue("\(share.percentage) percent")
+            // Side by side when there's room; stacked with large text sizes.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 24) {
+                    donut
+                    legend
+                    Spacer(minLength: 0)
                 }
-                .frame(width: 120, height: 120)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(shares) { share in
-                        HStack(spacing: 10) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(color(for: share))
-                                .frame(width: 16, height: 16)
-                            Text(verbatim: "\(share.cuisine.rawValue) (\(share.percentage)%)")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.ink)
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 16) {
+                    donut
+                        .frame(maxWidth: .infinity)
+                    legend
                 }
-                .accessibilityHidden(true)
-
-                Spacer(minLength: 0)
             }
         }
         .cardStyle(padding: 20)
     }
 
+    private var donut: some View {
+        Chart(shares) { share in
+            SectorMark(
+                angle: .value("Share", share.percentage),
+                innerRadius: .ratio(0.62),
+                angularInset: 2
+            )
+            .foregroundStyle(color(for: share))
+            .cornerRadius(4)
+            .accessibilityLabel(share.cuisine.rawValue)
+            .accessibilityValue("\(share.percentage) percent")
+        }
+        .frame(width: 120, height: 120)
+        .overlay {
+            VStack(spacing: 0) {
+                Text("\(shares.count)")
+                    .font(.title2.bold())
+                    .foregroundStyle(Theme.ink)
+                Text(shares.count == 1 ? "cuisine" : "cuisines")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var legend: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(shares) { share in
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(color(for: share))
+                        .frame(width: 10, height: 10)
+                    Text(share.cuisine.rawValue)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.ink)
+                    Text(verbatim: "\(share.percentage)%")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .fixedSize()
+        .accessibilityHidden(true)
+    }
+
     private func color(for share: CuisineShare) -> Color {
         let index = shares.firstIndex(of: share) ?? 0
-        return palette[index % palette.count]
+        return Theme.chartPalette[index % Theme.chartPalette.count]
     }
 }
 
@@ -227,27 +294,20 @@ struct RecentActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Recent activity")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                Button("View history", action: onViewHistory)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-            }
+            SectionHeader("Recent activity", actionTitle: visits.isEmpty ? nil : "View history", action: onViewHistory)
 
             if visits.isEmpty {
-                Text("No visits yet — find a place in Explore and log your first meal.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .cardStyle()
+                EmptyStateView(
+                    systemImage: "fork.knife",
+                    title: "No visits yet",
+                    message: "Find a place in Explore and log your first meal to start your passport."
+                )
             } else {
                 ForEach(visits) { visit in
                     NavigationLink(value: AppRoute.visitDetail(visit)) {
                         VisitRow(visit: visit)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableCard)
                 }
             }
         }

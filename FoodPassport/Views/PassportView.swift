@@ -24,12 +24,9 @@ struct PassportView: View {
                 NavigationLink(value: AppRoute.questDetail) {
                     ActiveQuestCard(quest: quest)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressableCard)
 
-                Text("Challenges")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
-                    .padding(.top, 4)
+                SectionHeader("Challenges")
 
                 NavigationLink(value: AppRoute.foodTrail) {
                     ChallengeRow(
@@ -40,7 +37,7 @@ struct PassportView: View {
                         progress: trail.progress
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressableCard)
 
                 NavigationLink(value: AppRoute.weeklyChallenge) {
                     ChallengeRow(
@@ -51,11 +48,11 @@ struct PassportView: View {
                         footnote: "\(challenge.daysLeft) days left"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressableCard)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -80,7 +77,7 @@ struct PassportView: View {
                 .background(Theme.primaryGradient, in: Capsule())
                 .shadow(color: Theme.orange.opacity(0.3), radius: 8, y: 4)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressableCard)
         .accessibilityLabel("New quest")
     }
 
@@ -95,11 +92,19 @@ struct StampGridCard: View {
     var totalSlots = 6
     let onSelect: (Stamp) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    /// As many columns as fit (three on every iPhone in portrait), each at least 92 points wide.
+    private let columns = [GridItem(.adaptive(minimum: 92), spacing: 12)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            SectionCaption("Stamps earned")
+            HStack(alignment: .firstTextBaseline) {
+                SectionCaption("Stamps earned")
+                Spacer()
+                Text("\(stamps.count) of \(max(totalSlots, stamps.count))")
+                    .font(.footnote.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
 
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(stamps) { stamp in
@@ -115,7 +120,7 @@ struct StampGridCard: View {
                                 .lineLimit(2)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableCard)
                     .accessibilityLabel("\(stamp.cuisine.rawValue) stamp")
                     .accessibilityHint("Shows stamp details")
                 }
@@ -161,20 +166,23 @@ struct StampDetailSheet: View {
             }
 
             FoodImageView(imageName: stamp.imageName, cuisine: stamp.cuisine, cornerRadius: 24)
-                .frame(height: 180)
+                .aspectRatio(2, contentMode: .fit)
 
             if let visit {
-                Button("View visit") { onViewVisit(visit) }
-                    .buttonStyle(.brandPrimary)
-                    .padding(.top, 4)
+                Button {
+                    onViewVisit(visit)
+                } label: {
+                    Label("View visit", systemImage: "arrow.right.circle")
+                }
+                .buttonStyle(.brandPrimary)
+                .padding(.top, 4)
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(24)
-        .presentationDetents([.height(580), .large])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .fittedSheetHeight()
+        .brandSheetStyle()
     }
 }
 
@@ -190,18 +198,26 @@ struct ActiveQuestCard: View {
                     .font(.subheadline.weight(.semibold))
                     .opacity(0.85)
                 Spacer()
-                Text("View quest")
-                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 4) {
+                    Text("View quest")
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                }
+                .font(.subheadline.weight(.semibold))
             }
 
             Text(quest.title)
                 .font(.title3.bold())
 
             ProgressBar(value: quest.cuisineProgress, tint: .white, track: .white.opacity(0.3))
+
+            Text("\(quest.cuisinesTried) of \(quest.targetCuisines) cuisines · \(quest.remainingBudget.lkr) left")
+                .font(.footnote.weight(.medium))
+                .opacity(0.9)
         }
         .foregroundStyle(.white)
         .padding(20)
-        .background(Theme.questGradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background { QuestCardBackground() }
         .shadow(color: Theme.orange.opacity(0.35), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
     }
@@ -218,11 +234,7 @@ struct ChallengeRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(tint)
-                .frame(width: 56, height: 56)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            IconTile(systemImage: systemImage, tint: tint, size: 52)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -262,8 +274,8 @@ struct PlanStopRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Circle()
-                .strokeBorder(Color.secondary, lineWidth: 2)
-                .frame(width: 30, height: 30)
+                .strokeBorder(stop.fitsBudget ? Theme.orange : Theme.faintInk, lineWidth: 2)
+                .frame(width: 28, height: 28)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(stop.restaurant.name)
@@ -282,12 +294,12 @@ struct PlanStopRow: View {
 
             Text("Est. \(stop.estimatedCost.lkr)")
                 .font(.headline)
+                .monospacedDigit()
                 .fixedSize()
         }
         .foregroundStyle(Theme.ink)
         .padding(18)
-        .background(Theme.surface.opacity(stop.fitsBudget ? 1 : 0.55), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(stop.fitsBudget ? 0.06 : 0.02), radius: 10, y: 4)
+        .cardBackground(shadowStrength: stop.fitsBudget ? 1 : 0.3)
         .opacity(stop.fitsBudget ? 1 : 0.6)
         .accessibilityElement(children: .combine)
     }

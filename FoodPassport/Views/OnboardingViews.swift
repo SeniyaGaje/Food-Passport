@@ -31,58 +31,74 @@ private struct OnboardingDestination: View {
 }
 
 struct WelcomeView: View {
+    /// The app name grows with the student's text size setting.
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 40
+
+    /// Colours of the header band; the photo fades into the lower one.
+    private let headerTop = Color(light: 0xFFC9A6, dark: 0x2B1B12)
+    private let headerBottom = Color(light: 0xFCE3D4, dark: 0x1A1513)
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            ZStack(alignment: .bottom) {
-                FoodImageView(imageName: "welcome_hero", cuisine: .sriLankan)
-                    .overlay(alignment: .bottom) {
-                        LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 240)
-                    }
-                    .ignoresSafeArea(edges: .bottom)
-
-                VStack(spacing: 8) {
-                    NavigationLink(value: OnboardingRoute.signUp) {
-                        Text("Get started")
-                    }
-                    .buttonStyle(.brandPrimary)
-
-                    NavigationLink(value: OnboardingRoute.signIn) {
-                        Text("I already have an account")
-                    }
-                    .buttonStyle(BrandTextButtonStyle(color: .white))
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 8)
+        // The photo fills the whole screen on every iPhone; the header and buttons sit on top of it.
+        FoodImageView(imageName: "welcome_hero", cuisine: .sriLankan)
+            .ignoresSafeArea()
+            .overlay(alignment: .top) {
+                header
             }
-        }
-        .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .bottom) {
+                buttons
+            }
+            .toolbar(.hidden, for: .navigationBar)
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
-            AppLogo(size: 84)
+        VStack(spacing: 0) {
+            VStack(spacing: 10) {
+                AppLogo(size: 84)
 
-            Text("FoodPassport")
-                .font(.system(size: 40, weight: .bold))
-                .foregroundStyle(Theme.ink)
+                Text("FoodPassport")
+                    .font(.system(size: titleSize, weight: .bold))
+                    .foregroundStyle(Theme.ink)
 
-            Text("Every new cuisine is a new stamp")
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                Text("Every new cuisine is a new stamp")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 16)
+            .padding(.bottom, 20)
+            .padding(.horizontal, Theme.screenMargin)
+            .background {
+                LinearGradient(colors: [headerTop, headerBottom], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea(edges: .top)
+            }
+
+            // The text sits on a solid band; below it the band fades into the photo instead of a hard edge.
+            LinearGradient(colors: [headerBottom, headerBottom.opacity(0)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 72)
+                .allowsHitTesting(false)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 16)
-        .padding(.bottom, 28)
+    }
+
+    private var buttons: some View {
+        VStack(spacing: 8) {
+            NavigationLink(value: OnboardingRoute.signUp) {
+                Text("Get started")
+            }
+            .buttonStyle(.brandPrimary)
+
+            NavigationLink(value: OnboardingRoute.signIn) {
+                Text("I already have an account")
+            }
+            .buttonStyle(BrandTextButtonStyle(color: .white))
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, 80)
+        .padding(.bottom, 8)
         .background {
-            LinearGradient(
-                colors: [Color(light: 0xFFC9A6, dark: 0x2B1B12), Color(light: 0xFCE3D4, dark: 0x1A1513)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-                .ignoresSafeArea(edges: .top)
+            LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 }
@@ -99,32 +115,43 @@ struct PermissionsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Before we begin")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Theme.ink)
+        // Scrolls on smaller iPhones or with large text; the buttons stay pinned at the bottom.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Before we begin")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
 
-            Text("FoodPassport works best with these permissions. You can change them anytime in Settings.")
-                .foregroundStyle(.secondary)
+                Text("FoodPassport works best with these permissions. You can change them anytime in Settings.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            ForEach(OnboardingPermission.allCases) { permission in
-                PermissionCard(permission: permission, isGranted: answers[permission] == true)
+                ForEach(OnboardingPermission.allCases) { permission in
+                    PermissionCard(permission: permission, isGranted: answers[permission] == true)
+                }
             }
-
-            Spacer()
-
-            if let nextPermission {
-                Button(nextPermission.buttonTitle) { ask(for: nextPermission) }
-                    .buttonStyle(.brandPrimary)
-
-                Button("Continue") { router.onboardingPath.append(.budgetSetup) }
-                    .buttonStyle(BrandTextButtonStyle(color: .secondary))
-            } else {
-                Button("Continue") { router.onboardingPath.append(.budgetSetup) }
-                    .buttonStyle(.brandPrimary)
-            }
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.vertical, Theme.Spacing.xs)
         }
-        .padding(24)
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 4) {
+                if let nextPermission {
+                    Button(nextPermission.buttonTitle) { ask(for: nextPermission) }
+                        .buttonStyle(.brandPrimary)
+
+                    Button("Continue") { router.onboardingPath.append(.budgetSetup) }
+                        .buttonStyle(BrandTextButtonStyle(color: .secondary))
+                } else {
+                    Button("Continue") { router.onboardingPath.append(.budgetSetup) }
+                        .buttonStyle(.brandPrimary)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.top, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.xs)
+        }
         .appBackground()
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -202,11 +229,7 @@ private struct PermissionCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            Image(systemName: permission.systemImage)
-                .font(.title2)
-                .foregroundStyle(permission.tint)
-                .frame(width: 56, height: 56)
-                .background(permission.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            IconTile(systemImage: permission.systemImage, tint: permission.tint, size: 52)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -228,6 +251,11 @@ private struct PermissionCard: View {
             }
         }
         .cardStyle()
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.green.opacity(isGranted ? 0.6 : 0), lineWidth: 1.5)
+        }
+        .animation(.easeOut(duration: 0.25), value: isGranted)
         .accessibilityElement(children: .combine)
         .accessibilityValue(isGranted ? "Allowed" : "Not allowed yet")
     }
@@ -240,38 +268,51 @@ struct BudgetSetupView: View {
     @State private var budget = 3000
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Set your monthly food budget")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Theme.ink)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Set your monthly food budget")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
 
-            Text("We'll plan quests that help you try new cuisines without overspending.")
-                .foregroundStyle(.secondary)
+                Text("We'll plan quests that help you try new cuisines without overspending.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            AmountPresetPicker(presets: [3000, 5000, 8000], selection: $budget)
-                .padding(.top, 8)
+                AmountPresetPicker(presets: [3000, 5000, 8000], selection: $budget)
+                    .padding(.top, 8)
 
-            VStack(alignment: .leading, spacing: 8) {
-                SectionCaption("Amount limit")
-                CurrencyField(amount: $budget)
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionCaption("Amount limit")
+                    CurrencyField(amount: $budget)
+                }
+
+                Label("You can change this anytime in Profile.", systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-
-            Text("You can change this anytime in Profile.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button("Start exploring") {
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.vertical, Theme.Spacing.xs)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom) {
+            Button {
                 appState.updateMonthlyBudget(budget)
                 router.reset()
                 appState.enterApp()
+            } label: {
+                Label("Start exploring", systemImage: "arrow.right")
             }
             .buttonStyle(.brandPrimary)
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.top, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.xs)
         }
-        .padding(24)
         .appBackground()
         .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.selection, trigger: budget)
     }
 }
 

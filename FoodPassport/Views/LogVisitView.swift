@@ -55,9 +55,9 @@ struct LogVisitView: View {
                         Button {
                             isShowingReceiptScanner = true
                         } label: {
-                            Label("Scan receipt", systemImage: "doc.text.viewfinder")
+                            Label(isAmountFromReceipt ? "Rescan receipt" : "Scan receipt", systemImage: "doc.text.viewfinder")
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Theme.ink)
+                                .foregroundStyle(Theme.orange)
                         }
                     }
                     InputField(placeholder: "Amount spent", text: $amount, prefix: amount.isEmpty ? nil : "LKR")
@@ -72,12 +72,16 @@ struct LogVisitView: View {
                     InputField(placeholder: "Add details about your experience...", text: $notes, isMultiline: true)
                 }
 
-                Button("Save visit", action: saveVisit)
-                    .buttonStyle(.brandPrimary)
-                    .disabled(!canSave)
-                    .padding(.top, 4)
+                Button(action: saveVisit) {
+                    Label("Save visit", systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.brandPrimary)
+                .disabled(!canSave)
+                .padding(.top, 4)
             }
-            .padding(20)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollDismissesKeyboard(.interactively)
         .appBackground()
@@ -153,50 +157,57 @@ struct LogVisitView: View {
     @ViewBuilder
     private var mealScanArea: some View {
         if hasMealPhoto {
+            // After a scan: confirmation that the dish was filled in, with a way to try again.
             Button {
                 isShowingMealCamera = true
             } label: {
-                VStack(spacing: 8) {
-                    Image(systemName: "camera")
-                        .font(.title3)
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: 48, height: 48)
-                        .background(Color(light: 0xE8E8EA, dark: 0x3A3532), in: Circle())
+                HStack(spacing: 14) {
+                    IconTile(systemImage: "checkmark", tint: Theme.green, size: 44)
 
-                    Text("Retake")
-                        .font(.headline)
-                        .foregroundStyle(Theme.ink)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Meal recognised")
+                            .font(.headline)
+                            .foregroundStyle(Theme.ink)
+                        Text("Dish and cuisine filled in below")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Label("Retake", systemImage: "camera")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.orange)
                 }
-                .frame(maxWidth: .infinity)
+                .cardStyle(padding: 14)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressableCard)
         } else {
             Button {
                 isShowingMealCamera = true
             } label: {
                 VStack(spacing: 12) {
-                    Image(systemName: "camera")
-                        .font(.title2)
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: 64, height: 64)
-                        .background(Color(light: 0xE8E8EA, dark: 0x3A3532), in: Circle())
+                    IconTile(systemImage: "camera.fill", size: 60)
 
                     Text("Scan your meal")
                         .font(.headline)
                         .foregroundStyle(Theme.ink)
 
-                    Text("The dish is recognised on your device")
+                    Label("The dish is recognised on your device", systemImage: "iphone")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .labelStyle(CompactLabelStyle())
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 28)
-                .background {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color(.systemGray4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                .padding(.vertical, 26)
+                .background(Theme.orangeTint.opacity(0.45), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .strokeBorder(Theme.orange.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
                 }
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressableCard)
         }
     }
 
@@ -681,8 +692,7 @@ struct MealRecognitionSheet: View {
         }
         .padding(20)
         .presentationDetents([.fraction(0.75), .large])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .brandSheetStyle()
     }
 }
 
@@ -712,12 +722,12 @@ private struct PredictionRow: View {
 
             ProgressBar(
                 value: prediction.confidence,
-                tint: isSelected ? Theme.ink : Theme.faintInk,
+                tint: isSelected ? Theme.orange : Theme.faintInk,
                 height: 6
             )
         }
         .padding(16)
-        .background(Color(light: 0xF2F2F4, dark: 0x332E2B), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .cardBackground(cornerRadius: 16, shadowStrength: 0.4)
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(isSelected ? Theme.orange : .clear, lineWidth: 2)
@@ -885,7 +895,7 @@ struct ReceiptScanView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
@@ -919,7 +929,8 @@ struct ReceiptScanView: View {
 
         if let total = receipt.total {
             Text(total.lkr)
-                .font(.system(size: 34, weight: .bold))
+                .font(.largeTitle.bold())
+                .monospacedDigit()
                 .foregroundStyle(Theme.ink)
 
             if !receipt.isTotalFromTotalLine {
@@ -1073,26 +1084,43 @@ struct StampEarnedPopup: View {
     let onViewPassport: () -> Void
     let onDone: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the "stamp pressed onto the page" animation when the pop-up appears.
+    @State private var isStamped = false
+
     var body: some View {
         PopupCard {
             ZStack {
                 Circle()
                     .strokeBorder(Theme.orange, style: StrokeStyle(lineWidth: 3, dash: [7, 5]))
                     .frame(width: 150, height: 150)
+                    .rotationEffect(.degrees(isStamped ? 0 : -40))
 
                 Circle()
-                    .fill(Theme.orange)
+                    .fill(Theme.primaryGradient)
                     .frame(width: 122, height: 122)
                     .overlay {
                         VStack(spacing: 6) {
                             Image(systemName: cuisine.symbolName)
                                 .font(.title.weight(.bold))
+                                .symbolEffect(.bounce, value: isStamped)
                             Text(cuisine.rawValue.uppercased())
                                 .font(.caption.weight(.heavy))
+                                .multilineTextAlignment(.center)
                         }
                         .foregroundStyle(.white)
                     }
+                    .shadow(color: Theme.orange.opacity(0.4), radius: 12, y: 6)
             }
+            .rotationEffect(.degrees(cuisine.stampTilt))
+            .scaleEffect(isStamped || reduceMotion ? 1 : 1.35)
+            .opacity(isStamped || reduceMotion ? 1 : 0)
+            .onAppear {
+                withAnimation(.spring(duration: 0.5, bounce: 0.45).delay(0.1)) {
+                    isStamped = true
+                }
+            }
+            .sensoryFeedback(.success, trigger: isStamped)
             .accessibilityHidden(true)
 
             VStack(spacing: 6) {
@@ -1103,8 +1131,8 @@ struct StampEarnedPopup: View {
                     .foregroundStyle(.secondary)
             }
 
-            ProgressBar(value: quest.cuisineProgress)
-                .frame(width: 180)
+            ProgressBar(value: quest.cuisineProgress, tint: Theme.orange)
+                .frame(maxWidth: 200)
 
             VStack(spacing: 10) {
                 Button("View passport", action: onViewPassport)

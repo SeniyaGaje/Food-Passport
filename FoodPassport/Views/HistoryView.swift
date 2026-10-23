@@ -48,15 +48,16 @@ struct HistoryView: View {
 
                 content
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
         .appBackground()
         .navigationTitle("History")
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: filter)
     }
 
     @ViewBuilder
@@ -73,14 +74,22 @@ struct HistoryView: View {
             }
         } else {
             ForEach(sections, id: \.group) { section in
-                SectionCaption(section.group.title)
-                    .padding(.top, 8)
+                HStack(alignment: .firstTextBaseline) {
+                    SectionCaption(section.group.title)
+                    Spacer()
+                    Text(section.visits.map(\.amount).reduce(0, +).lkr)
+                        .font(.footnote.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Spent \(section.visits.map(\.amount).reduce(0, +).lkr)")
+                }
+                .padding(.top, 8)
 
                 ForEach(section.visits) { visit in
                     NavigationLink(value: AppRoute.visitDetail(visit)) {
                         VisitRow(visit: visit)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableCard)
                 }
             }
         }
@@ -108,29 +117,14 @@ private struct EmptyHistoryView: View {
     let onExplore: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "fork.knife")
-                .font(.system(size: 52, weight: .light))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 200, height: 200)
-                .background(Theme.orangeTint.opacity(0.7), in: Circle())
-
-            VStack(spacing: 6) {
-                Text("No visits yet")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
-                Text("Start exploring and your visits will show up here.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-            }
-
-            Button("Explore places", action: onExplore)
-                .buttonStyle(.brandPrimary)
-                .padding(.top, 8)
-        }
-        .padding(.top, 48)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity)
+        EmptyStateView(
+            systemImage: "fork.knife",
+            title: "No visits yet",
+            message: "Start exploring and your visits will show up here.",
+            actionTitle: "Explore places",
+            action: onExplore
+        )
+        .padding(.top, 24)
     }
 }
 
@@ -144,51 +138,48 @@ struct VisitDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine)
-                    .frame(height: 240)
+                hero
 
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(visit.dishName)
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(Theme.ink)
-                        Spacer()
-                        if visit.isAutoDetected {
-                            PillLabel(text: "Auto-detected", style: .orange)
-                        }
+                HStack(spacing: Theme.Spacing.xs) {
+                    PillLabel(text: visit.cuisine.rawValue, systemImage: visit.cuisine.symbolName, style: .green)
+                    if visit.isAutoDetected {
+                        PillLabel(text: "Auto-detected", systemImage: "sparkles", style: .orange)
                     }
-
-                    PillLabel(text: visit.cuisine.rawValue, style: .green, font: .subheadline.weight(.medium))
-
-                    restaurantCard
-                    amountCard
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionCaption("Rating")
-                        StarRatingView(rating: visit.rating)
-                    }
-
-                    if !visit.notes.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            SectionCaption("Notes")
-                            Text(visit.notes)
-                                .foregroundStyle(Theme.ink)
-                                .cardStyle()
-                        }
-                    }
-
-                    Text(visit.date.formatted(date: .complete, time: .shortened))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Button("Delete visit", role: .destructive) {
-                        isConfirmingDelete = true
-                    }
-                    .buttonStyle(BrandTextButtonStyle(color: Theme.destructive))
                 }
-                .padding(.horizontal, 20)
+
+                restaurantCard
+                amountCard
+
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionCaption("Rating")
+                    StarRatingView(rating: visit.rating, size: 24)
+                }
+                .cardStyle(padding: 18)
+
+                if !visit.notes.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionCaption("Notes")
+                        Text(visit.notes)
+                            .foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .cardStyle(padding: 18)
+                }
+
+                Label(visit.date.formatted(date: .complete, time: .shortened), systemImage: "calendar")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Button(role: .destructive) {
+                    isConfirmingDelete = true
+                } label: {
+                    Label("Delete visit", systemImage: "trash")
+                }
+                .buttonStyle(BrandTextButtonStyle(color: Theme.destructive))
             }
-            .padding(.bottom, 24)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -202,6 +193,31 @@ struct VisitDetailView: View {
         } message: {
             Text("This will remove the visit from your history and passport.")
         }
+    }
+
+    /// Meal photo with the dish name on a dark fade; same shape on every iPhone.
+    private var hero: some View {
+        FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine)
+            .aspectRatio(1.45, contentMode: .fit)
+            .overlay {
+                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 6) {
+                    PhotoTag(text: visit.date.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)), systemImage: "calendar")
+                    Text(visit.dishName)
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                }
+                .padding(20)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
+            .shadow(color: Theme.shadow.opacity(0.14), radius: 18, y: 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(visit.dishName)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var restaurantCard: some View {
@@ -243,7 +259,8 @@ struct VisitDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 SectionCaption("Amount spent")
                 Text(visit.amount.lkr)
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.title.bold())
+                    .monospacedDigit()
                     .foregroundStyle(Theme.ink)
             }
 

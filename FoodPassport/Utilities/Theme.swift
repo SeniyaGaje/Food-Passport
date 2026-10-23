@@ -41,6 +41,8 @@ enum Theme {
     static let faintInk = Color(light: 0xC7C7CC, dark: 0x5C5652)
     /// Drop shadows: soft in light mode, almost invisible in dark mode where cards are lifted by colour instead.
     static let shadow = Color(light: 0x000000, dark: 0x000000, darkOpacity: 0.5)
+    /// Hairline around cards and fields, so surfaces keep a crisp edge — especially on the dark background.
+    static let cardBorder = Color(light: 0x000000, dark: 0xFFFFFF, lightOpacity: 0.05, darkOpacity: 0.08)
 
     // Status
 
@@ -74,13 +76,38 @@ enum Theme {
         endPoint: .bottom
     )
 
+    /// Warm colours for charts, so every series stays on-brand in both light and dark mode.
+    static let chartPalette: [Color] = [
+        orange,
+        gold,
+        Color(light: 0x9C5B36, dark: 0xD08A5E),
+        mutedInk,
+    ]
+
     // Shape
 
     enum Radius {
+        static let small: CGFloat = 12
         static let card: CGFloat = 22
         static let button: CGFloat = 18
         static let field: CGFloat = 16
+        static let sheet: CGFloat = 28
     }
+
+    // Layout
+    // Every screen uses the same side margin and spacing steps, so layouts line up on every iPhone size.
+
+    enum Spacing {
+        static let xxs: CGFloat = 4
+        static let xs: CGFloat = 8
+        static let s: CGFloat = 12
+        static let m: CGFloat = 16
+        static let l: CGFloat = 20
+        static let xl: CGFloat = 24
+    }
+
+    /// Side margin for screen content.
+    static let screenMargin: CGFloat = 20
 }
 
 extension Color {
@@ -141,6 +168,13 @@ extension Cuisine {
         }
     }
 
+    /// A small fixed tilt for this cuisine's passport stamp, so the stamps look hand-pressed but never move around.
+    var stampTilt: Double {
+        let tilts: [Double] = [-8, 6, -4, 9, -6, 4, -10, 7, -3, 5, -7, 8]
+        let index = Self.allCases.firstIndex(of: self) ?? 0
+        return tilts[index % tilts.count]
+    }
+
     /// Warm gradient shown in place of a food photo until real images are added.
     var placeholderColors: [Color] {
         switch self {
@@ -168,8 +202,7 @@ struct CardStyle: ViewModifier {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .shadow(color: Theme.shadow.opacity(0.06), radius: 12, y: 4)
+            .cardBackground(cornerRadius: cornerRadius)
     }
 }
 
@@ -177,6 +210,52 @@ extension View {
     /// Rounded card (white in light mode) with a soft shadow — the main surface used throughout the prototype.
     func cardStyle(padding: CGFloat = 16, cornerRadius: CGFloat = Theme.Radius.card) -> some View {
         modifier(CardStyle(padding: padding, cornerRadius: cornerRadius))
+    }
+
+    /// The card surface on its own: fill, hairline border and a two-layer shadow
+    /// (a tight one for the edge and a soft one for depth). Used by cards, fields, chips and pop-ups.
+    func cardBackground(cornerRadius: CGFloat = Theme.Radius.card, shadowStrength: Double = 1) -> some View {
+        surfaceBackground(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous), shadowStrength: shadowStrength)
+    }
+
+    /// `cardBackground` for any shape, e.g. a `Capsule` for chips.
+    func surfaceBackground<S: InsettableShape>(_ shape: S, shadowStrength: Double = 1) -> some View {
+        self
+            .background(Theme.surface, in: shape)
+            .overlay { shape.strokeBorder(Theme.cardBorder, lineWidth: 1) }
+            .shadow(color: Theme.shadow.opacity(0.04 * shadowStrength), radius: 1, y: 1)
+            .shadow(color: Theme.shadow.opacity(0.07 * shadowStrength), radius: 14, y: 6)
+    }
+}
+
+/// Sizes a bottom sheet to its content, so it is never cut off on a smaller iPhone or with larger text.
+private struct FittedSheetHeight: ViewModifier {
+    @State private var contentHeight: CGFloat = 420
+
+    func body(content: Content) -> some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                contentHeight = newHeight
+            }
+            .presentationDetents([.height(contentHeight)])
+    }
+}
+
+extension View {
+    /// Rounded corners, a drag indicator and the warm sheet background shared by every bottom sheet.
+    func brandSheetStyle() -> some View {
+        self
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(Theme.Radius.sheet)
+            .presentationBackground(Theme.sheetBackground)
+    }
+
+    /// Makes a short sheet exactly as tall as its content instead of using a fixed height.
+    func fittedSheetHeight() -> some View {
+        modifier(FittedSheetHeight())
     }
 }
 
@@ -274,6 +353,18 @@ struct BrandTextButtonStyle: ButtonStyle {
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.6 : 1)
     }
+}
+
+/// For cards that open another screen: the card shrinks slightly while pressed, so it feels like a button.
+struct PressableCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .pressedEffect(configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == PressableCardButtonStyle {
+    static var pressableCard: PressableCardButtonStyle { PressableCardButtonStyle() }
 }
 
 extension ButtonStyle where Self == BrandPrimaryButtonStyle {

@@ -15,36 +15,39 @@ struct ProfileView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: Theme.Spacing.l) {
                 header
 
-                HStack(spacing: 12) {
-                    StatTile(value: "\(appState.visits.count)", label: "Visits")
-                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", valueColor: Theme.green)
-                    StatTile(value: "\(appState.stamps.count)", label: "Stamps")
+                HStack(spacing: Theme.Spacing.s) {
+                    StatTile(value: "\(appState.visits.count)", label: "Visits", systemImage: "fork.knife")
+                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill", valueColor: Theme.green)
+                    StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
-                VStack(spacing: 0) {
+                settingsSection("Budget") {
                     Button {
                         router.sheet = .monthlyBudget
                     } label: {
-                        SettingsRow(systemImage: "creditcard", title: "Monthly budget") {
+                        SettingsRow(systemImage: "creditcard.fill", tint: Theme.orange, title: "Monthly budget") {
                             SettingsValue(appState.profile.monthlyBudget.lkr)
                         }
                     }
                     .buttonStyle(.plain)
+                }
 
-                    SettingsDivider()
+                settingsSection("Reminders") {
                     SettingsToggleRow(
-                        systemImage: "bell",
-                        title: "Planned-visit reminders",
+                        systemImage: "bell.fill",
+                        tint: .red,
+                        title: "Planned visits",
                         isOn: asyncBinding(appState.plannedVisitRemindersEnabled, set: appState.setPlannedVisitReminders)
                     )
 
                     SettingsDivider()
                     SettingsToggleRow(
-                        systemImage: "clock",
-                        title: "Weekly challenge reminder",
+                        systemImage: "clock.fill",
+                        tint: .purple,
+                        title: "Weekly challenge",
                         isOn: asyncBinding(appState.weeklyChallengeReminderEnabled, set: appState.setWeeklyChallengeReminder)
                     )
 
@@ -56,21 +59,24 @@ struct ProfileView: View {
                             SettingsRow(systemImage: nil, title: "Reminder time", titleColor: .secondary) {
                                 SettingsValue(appState.weeklyReminderTime.formatted(date: .omitted, time: .shortened))
                             }
-                            .background(Theme.insetFill)
                         }
                         .buttonStyle(.plain)
                     }
+                }
+                .animation(.easeInOut(duration: 0.2), value: appState.weeklyChallengeReminderEnabled)
 
-                    SettingsDivider()
+                settingsSection("Privacy & display") {
                     SettingsToggleRow(
                         systemImage: appState.biometryKind.systemImage,
+                        tint: Theme.green,
                         title: "Unlock with \(appState.biometryKind.name)",
                         isOn: asyncBinding(appState.isFaceIDEnabled, set: appState.setFaceIDEnabled)
                     )
 
                     SettingsDivider()
                     SettingsToggleRow(
-                        systemImage: isDarkModeOn ? "moon.fill" : "sun.max",
+                        systemImage: isDarkModeOn ? "moon.fill" : "sun.max.fill",
+                        tint: .indigo,
                         title: "Dark mode",
                         isOn: $isDarkModeOn
                     )
@@ -81,28 +87,26 @@ struct ProfileView: View {
                             openURL(url)
                         }
                     } label: {
-                        SettingsRow(systemImage: "location", title: "Location access") {
+                        SettingsRow(systemImage: "location.fill", tint: .blue, title: "Location access") {
                             SettingsValue(appState.locationPermission.label)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                settingsSection(nil) {
+                    NavigationLink(value: AppRoute.about) {
+                        SettingsRow(systemImage: "info", tint: Theme.mutedInk, title: "About FoodPassport") {
+                            SettingsValue(nil)
                         }
                     }
                     .buttonStyle(.plain)
 
                     SettingsDivider()
-                    NavigationLink(value: AppRoute.about) {
-                        SettingsRow(systemImage: "info.circle", title: "About FoodPassport") {
-                            SettingsValue(nil)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-                .settingsCard()
-                .animation(.easeInOut(duration: 0.2), value: appState.weeklyChallengeReminderEnabled)
-
-                VStack(spacing: 0) {
                     Button {
                         isConfirmingSignOut = true
                     } label: {
-                        SettingsRow(systemImage: "rectangle.portrait.and.arrow.right", title: "Sign out") {
+                        SettingsRow(systemImage: "rectangle.portrait.and.arrow.right", tint: Theme.mutedInk, title: "Sign out") {
                             EmptyView()
                         }
                     }
@@ -112,22 +116,22 @@ struct ProfileView: View {
                     Button {
                         isConfirmingReset = true
                     } label: {
-                        SettingsRow(systemImage: "trash", title: "Reset all data", titleColor: Theme.destructive) {
+                        SettingsRow(systemImage: "trash.fill", tint: Theme.destructive, title: "Reset all data", titleColor: Theme.destructive) {
                             EmptyView()
                         }
                     }
                     .buttonStyle(.plain)
                 }
-                .settingsCard()
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 24)
+            .padding(.horizontal, Theme.screenMargin)
+            .padding(.top, Theme.Spacing.m)
+            .padding(.bottom, Theme.Spacing.xl)
         }
         .scrollIndicators(.hidden)
         .appBackground()
         .navigationTitle("Profile")
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: isDarkModeOn)
         .sheet(isPresented: $isShowingReminderSheet) {
             ReminderTimeSheet(time: appState.weeklyReminderTime) { newTime in
                 Task { await appState.setWeeklyReminderTime(newTime) }
@@ -152,6 +156,20 @@ struct ProfileView: View {
         }
     }
 
+    /// A group of settings rows in one card, with an optional caption above it.
+    private func settingsSection<Content: View>(_ title: String?, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if let title {
+                SectionCaption(title)
+                    .padding(.leading, 6)
+            }
+            VStack(spacing: 0) {
+                content()
+            }
+            .settingsCard()
+        }
+    }
+
     /// A switch binding whose change needs async work first, such as a Face ID check or a permission prompt.
     /// The switch shows the saved value, so it only stays on once AppState has accepted the change.
     private func asyncBinding(_ value: Bool, set: @escaping (Bool) async -> Void) -> Binding<Bool> {
@@ -163,28 +181,42 @@ struct ProfileView: View {
 
     private var header: some View {
         VStack(spacing: 8) {
-            InitialsAvatar(initials: appState.profile.initials, size: 96, background: Theme.orange, foreground: .white)
+            InitialsAvatar(initials: appState.profile.initials, size: 92, background: Theme.orange, foreground: .white)
+                .padding(5)
+                .overlay { Circle().strokeBorder(Theme.primaryGradient, lineWidth: 2.5) }
+                .shadow(color: Theme.orange.opacity(0.25), radius: 14, y: 6)
+                .padding(.bottom, 4)
 
             Text(appState.profile.name)
                 .font(.title.bold())
                 .foregroundStyle(Theme.ink)
 
-            Text("Member since \(appState.profile.memberSince.formatted(.dateTime.month(.abbreviated).year()))")
+            Label("Member since \(appState.profile.memberSince.formatted(.dateTime.month(.abbreviated).year()))", systemImage: "calendar")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
     }
 }
 
-/// A settings row with an icon, title and trailing accessory (value, chevron, etc.).
+/// A settings row with a coloured icon, title and trailing accessory (value, chevron, etc.).
 struct SettingsRow<Accessory: View>: View {
     let systemImage: String?
+    var tint: Color = Theme.mutedInk
     let title: String
     var titleColor: Color = Theme.ink
     let accessory: Accessory
 
-    init(systemImage: String?, title: String, titleColor: Color = Theme.ink, @ViewBuilder accessory: () -> Accessory) {
+    init(
+        systemImage: String?,
+        tint: Color = Theme.mutedInk,
+        title: String,
+        titleColor: Color = Theme.ink,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
         self.systemImage = systemImage
+        self.tint = tint
         self.title = title
         self.titleColor = titleColor
         self.accessory = accessory()
@@ -192,49 +224,44 @@ struct SettingsRow<Accessory: View>: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Group {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Color.clear
-                }
+            if let systemImage {
+                IconTile(systemImage: systemImage, tint: tint, size: 30, isFilled: true)
+            } else {
+                // Keeps the title lined up with the rows above that have an icon.
+                Color.clear
+                    .frame(width: 30, height: 30)
             }
-            .frame(width: 28)
 
             Text(title)
                 .foregroundStyle(titleColor)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             accessory
         }
-        .padding(.horizontal, 18)
-        .frame(minHeight: 60)
+        .padding(.horizontal, 16)
+        .frame(minHeight: 56)
         .contentShape(Rectangle())
     }
 }
 
 struct SettingsToggleRow: View {
     let systemImage: String
+    var tint: Color = Theme.mutedInk
     let title: String
     @Binding var isOn: Bool
 
     var body: some View {
         Toggle(isOn: $isOn) {
             HStack(spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28)
+                IconTile(systemImage: systemImage, tint: tint, size: 30, isFilled: true)
                 Text(title)
                     .foregroundStyle(Theme.ink)
             }
         }
         .tint(Theme.green)
-        .padding(.horizontal, 18)
-        .frame(minHeight: 60)
+        .padding(.horizontal, 16)
+        .frame(minHeight: 56)
     }
 }
 
@@ -270,9 +297,8 @@ extension View {
     /// Rounded container (white in light mode) that groups settings rows.
     func settingsCard() -> some View {
         self
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: Theme.shadow.opacity(0.06), radius: 12, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .cardBackground()
     }
 }
 
@@ -310,9 +336,8 @@ struct MonthlyBudgetSheet: View {
         }
         .padding(24)
         .onAppear { amount = appState.profile.monthlyBudget }
-        .presentationDetents([.height(420)])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .fittedSheetHeight()
+        .brandSheetStyle()
     }
 }
 
@@ -346,9 +371,8 @@ struct ReminderTimeSheet: View {
         }
         .padding(24)
         .onAppear { draft = time }
-        .presentationDetents([.height(440)])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .fittedSheetHeight()
+        .brandSheetStyle()
     }
 }
 
@@ -395,12 +419,11 @@ struct AboutView: View {
     }
 
     private func featureRow(_ systemImage: String, _ text: String) -> some View {
-        Label {
+        HStack(spacing: 14) {
+            IconTile(systemImage: systemImage, size: 36)
             Text(text)
                 .foregroundStyle(Theme.ink)
-        } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(Theme.orange)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

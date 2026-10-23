@@ -27,8 +27,11 @@ struct FormErrorText: View {
     var body: some View {
         Label(message, systemImage: "exclamationmark.circle.fill")
             .font(.subheadline)
-            .foregroundStyle(.red)
+            .foregroundStyle(Theme.destructive)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Theme.destructive.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+            .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
@@ -233,9 +236,7 @@ struct ForgotPasswordView: View {
     var body: some View {
         VStack(spacing: 20) {
             if isLinkSent {
-                Image(systemName: "envelope.badge.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Theme.orange)
+                PopupIcon(systemImage: "envelope.badge.fill")
                     .padding(.top, 8)
 
                 Text("Check your inbox")
@@ -248,6 +249,9 @@ struct ForgotPasswordView: View {
                 Button("Done") { dismiss() }
                     .buttonStyle(.brandPrimary)
             } else {
+                PopupIcon(systemImage: "key.fill")
+                    .padding(.top, 8)
+
                 Text("Reset password")
                     .font(.title2.bold())
 
@@ -271,10 +275,8 @@ struct ForgotPasswordView: View {
             }
         }
         .padding(24)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(Theme.sheetBackground)
+        .fittedSheetHeight()
+        .brandSheetStyle()
     }
 
     private func sendResetLink() {
@@ -329,8 +331,7 @@ struct FaceIDLockView: View {
                     .foregroundStyle(Theme.orange)
                     .symbolEffect(.pulse, options: .repeating)
                     .frame(width: 104, height: 104)
-                    .background(Theme.surface, in: Circle())
-                    .shadow(color: Theme.shadow.opacity(0.08), radius: 16, y: 6)
+                    .surfaceBackground(Circle(), shadowStrength: 1.5)
             }
             .buttonStyle(.plain)
             .disabled(isAuthenticating)

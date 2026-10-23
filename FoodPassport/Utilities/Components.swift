@@ -43,6 +43,105 @@ extension ScreenHeader where Trailing == EmptyView {
     }
 }
 
+/// Bold title above a group of cards, with an optional action on the right, e.g. "Recent activity · View history".
+struct SectionHeader: View {
+    let title: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    init(_ title: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        self.title = title
+        self.actionTitle = actionTitle
+        self.action = action
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.title2.bold())
+                .foregroundStyle(Theme.ink)
+                .accessibilityAddTraits(.isHeader)
+
+            Spacer(minLength: 8)
+
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.orange)
+            }
+        }
+        .padding(.top, 6)
+    }
+}
+
+/// Rounded-square icon used by rows, cards and settings, so icons look the same on every screen.
+/// `isFilled` draws a white symbol on a solid tint (settings rows); otherwise the symbol sits on a soft tint.
+struct IconTile: View {
+    let systemImage: String
+    var tint: Color = Theme.orange
+    var size: CGFloat = 48
+    var isFilled = false
+
+    /// Grows the tile a little with the student's text size, but not so much that rows break.
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
+
+    var body: some View {
+        let side = size * min(scale, 1.35)
+
+        Image(systemName: systemImage)
+            .font(.system(size: side * 0.42, weight: .semibold))
+            .foregroundStyle(isFilled ? .white : tint)
+            .frame(width: side, height: side)
+            .background(
+                isFilled ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.14)),
+                in: RoundedRectangle(cornerRadius: side * 0.28, style: .continuous)
+            )
+            .accessibilityHidden(true)
+    }
+}
+
+/// Friendly placeholder for a list with nothing in it yet, e.g. "No visits yet".
+struct EmptyStateView: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(Theme.orange)
+                .frame(width: 92, height: 92)
+                .background(Theme.orangeTint, in: Circle())
+                .overlay { Circle().strokeBorder(Theme.orange.opacity(0.2), lineWidth: 1) }
+                .accessibilityHidden(true)
+
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.title3.bold())
+                    .foregroundStyle(Theme.ink)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.brandPrimary)
+                    .padding(.top, 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .padding(.horizontal, 20)
+        .cardBackground()
+    }
+}
+
 struct AppLogo: View {
     var size: CGFloat = 80
     var cornerRadius: CGFloat?
@@ -56,6 +155,7 @@ struct AppLogo: View {
                     .font(.system(size: size * 0.46, weight: .semibold))
                     .foregroundStyle(.white)
             }
+            .shadow(color: Theme.orange.opacity(0.3), radius: size * 0.14, y: size * 0.07)
             .accessibilityHidden(true)
     }
 }
@@ -91,10 +191,17 @@ struct FilterChip: View {
                 .foregroundStyle(isSelected ? selectedForeground : Theme.ink)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
-                .background(isSelected ? selectedColor : Theme.surface, in: Capsule())
-                .shadow(color: Theme.shadow.opacity(isSelected ? 0 : 0.05), radius: 4, y: 2)
+                .background {
+                    if isSelected {
+                        Capsule().fill(selectedColor)
+                    } else {
+                        Color.clear.surfaceBackground(Capsule(), shadowStrength: 0.6)
+                    }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.2), value: isSelected)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -124,9 +231,8 @@ struct SearchField: View {
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 48)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(0.05), radius: 6, y: 2)
+        .frame(minHeight: 48)
+        .cardBackground(cornerRadius: 14, shadowStrength: 0.6)
     }
 }
 
@@ -134,23 +240,38 @@ struct SearchField: View {
 struct StatTile: View {
     let value: String
     let label: String
+    var systemImage: String?
     var valueColor: Color = Theme.ink
+
+    /// The number's size follows the student's text size setting (Dynamic Type).
+    @ScaledMetric(relativeTo: .largeTitle) private var valueSize: CGFloat = 30
 
     var body: some View {
         VStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.orange)
+                    .padding(.bottom, 2)
+            }
+
             Text(value)
-                .font(.system(size: 34, weight: .bold))
+                .font(.system(size: valueSize, weight: .bold))
                 .foregroundStyle(valueColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .contentTransition(.numericText())
 
             Text(label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(0.06), radius: 12, y: 4)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 6)
+        .cardBackground()
         .accessibilityElement(children: .combine)
     }
 }
@@ -174,6 +295,7 @@ struct ProgressBar: View {
             }
         }
         .frame(height: height)
+        .animation(.spring(duration: 0.5), value: clampedValue)
         .accessibilityElement()
         .accessibilityValue(Text(verbatim: "\(Int(clampedValue * 100))%"))
     }
@@ -183,7 +305,7 @@ struct ProgressBar: View {
 struct RingProgress: View {
     let value: Double
     var lineWidth: CGFloat = 20
-    var tint: Color = Theme.ink
+    var tint: AnyShapeStyle = AnyShapeStyle(Theme.ink)
     var track: Color = Color(light: 0xF0F0F2, dark: 0x3A3532)
 
     var body: some View {
@@ -192,10 +314,11 @@ struct RingProgress: View {
                 .stroke(track, lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: min(max(value, 0), 1))
-                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .padding(lineWidth / 2)
+        .animation(.spring(duration: 0.6), value: value)
         .accessibilityHidden(true)
     }
 }
@@ -244,6 +367,18 @@ struct StarRatingView: View {
             case .decrement: rating = max(rating - 1, 0)
             @unknown default: break
             }
+        }
+    }
+}
+
+/// Icon and text with a small gap and a muted icon, e.g. the price line on restaurant cards.
+struct CompactLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon
+                .foregroundStyle(.secondary)
+                .imageScale(.small)
+            configuration.title
         }
     }
 }
@@ -310,9 +445,24 @@ struct SectionCaption: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.subheadline.weight(.semibold))
+            .font(.footnote.weight(.semibold))
             .foregroundStyle(.secondary)
-            .kerning(0.3)
+            .kerning(0.6)
+    }
+}
+
+/// Field surface shared by the text inputs: card background plus an orange outline while typing.
+private struct FieldBackground: ViewModifier {
+    let isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .cardBackground(cornerRadius: Theme.Radius.field, shadowStrength: 0.5)
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
+                    .strokeBorder(Theme.orange, lineWidth: isFocused ? 1.5 : 0)
+            }
+            .animation(.easeOut(duration: 0.15), value: isFocused)
     }
 }
 
@@ -322,6 +472,8 @@ struct InputField: View {
     @Binding var text: String
     var prefix: String?
     var isMultiline = false
+
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -334,15 +486,16 @@ struct InputField: View {
             if isMultiline {
                 TextField(placeholder, text: $text, axis: .vertical)
                     .lineLimit(3...6)
+                    .focused($isFocused)
             } else {
                 TextField(placeholder, text: $text)
+                    .focused($isFocused)
             }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .frame(minHeight: 54)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(0.04), radius: 6, y: 2)
+        .modifier(FieldBackground(isFocused: isFocused))
     }
 }
 
@@ -351,6 +504,7 @@ struct SecureInputField: View {
     let placeholder: String
     @Binding var text: String
     @State private var isRevealed = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -361,6 +515,7 @@ struct SecureInputField: View {
                     SecureField(placeholder, text: $text)
                 }
             }
+            .focused($isFocused)
             .textContentType(.password)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -370,13 +525,15 @@ struct SecureInputField: View {
             } label: {
                 Image(systemName: isRevealed ? "eye.slash" : "eye")
                     .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
         }
-        .padding(.horizontal, 18)
-        .frame(height: 54)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(0.04), radius: 6, y: 2)
+        .padding(.leading, 18)
+        .padding(.trailing, 6)
+        .frame(minHeight: 54)
+        .modifier(FieldBackground(isFocused: isFocused))
     }
 }
 
@@ -395,11 +552,11 @@ struct CurrencyField: View {
         .font(.title3.bold())
         .foregroundStyle(Theme.ink)
         .padding(.horizontal, 18)
-        .frame(height: 58)
+        .frame(minHeight: 58)
         .background(background, in: RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                .stroke(Color(light: 0x000000, dark: 0xFFFFFF, lightOpacity: 0.08, darkOpacity: 0.12), lineWidth: 1)
+                .strokeBorder(Theme.cardBorder, lineWidth: 1)
         }
     }
 }
@@ -410,25 +567,31 @@ struct AmountPresetPicker: View {
     @Binding var selection: Int
 
     var body: some View {
-        HStack(spacing: 10) {
-            ForEach(presets, id: \.self) { amount in
-                let isSelected = amount == selection
-                Button {
-                    selection = amount
-                } label: {
-                    Text(amount.lkr)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .foregroundStyle(isSelected ? Theme.onInk : Theme.ink)
-                        .background(isSelected ? Theme.ink : Theme.surface, in: Capsule())
-                        .overlay(Capsule().stroke(Theme.ink, lineWidth: isSelected ? 0 : 1.2))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
+        // One row when the amounts fit; one per line with large text sizes.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) { presetButtons }
+            VStack(spacing: 10) { presetButtons }
+        }
+    }
+
+    private var presetButtons: some View {
+        ForEach(presets, id: \.self) { amount in
+            let isSelected = amount == selection
+            Button {
+                selection = amount
+            } label: {
+                Text(amount.lkr)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(isSelected ? Theme.onInk : Theme.ink)
+                    .background(isSelected ? Theme.ink : Theme.surface, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.ink, lineWidth: isSelected ? 0 : 1.2))
             }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
     }
 }
@@ -513,8 +676,7 @@ struct PopupCard<Content: View>: View {
         }
         .padding(24)
         .frame(maxWidth: 360)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: Theme.shadow.opacity(0.2), radius: 30, y: 12)
+        .cardBackground(cornerRadius: Theme.Radius.sheet, shadowStrength: 3)
     }
 }
 
@@ -522,12 +684,18 @@ struct PopupCard<Content: View>: View {
 struct PopupIcon: View {
     let systemImage: String
 
+    /// Flipped once the pop-up appears, so the icon gives a single bounce to draw the eye.
+    @State private var hasAppeared = false
+
     var body: some View {
         Image(systemName: systemImage)
             .font(.title.weight(.semibold))
             .foregroundStyle(Theme.orange)
+            .symbolEffect(.bounce, value: hasAppeared)
             .frame(width: 76, height: 76)
             .background(Theme.orangeTint, in: Circle())
+            .overlay { Circle().strokeBorder(Theme.orange.opacity(0.2), lineWidth: 1) }
+            .onAppear { hasAppeared = true }
             .accessibilityHidden(true)
     }
 }
@@ -672,6 +840,46 @@ private struct FoodSymbolPattern: View {
     }
 }
 
+/// The orange quest gradient with a large, faint globe in the corner, shared by the Home and Passport quest cards.
+struct QuestCardBackground: View {
+    var cornerRadius: CGFloat = 24
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Theme.questGradient)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "globe.asia.australia.fill")
+                    .font(.system(size: 150))
+                    .foregroundStyle(.white.opacity(0.1))
+                    .rotationEffect(.degrees(-12))
+                    .offset(x: 40, y: 40)
+                    .accessibilityHidden(true)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+/// Small frosted tag drawn on top of a photo, e.g. the cuisine on Place Detail.
+struct PhotoTag: View {
+    let text: String
+    var systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage)
+            }
+            Text(text)
+        }
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(.black.opacity(0.35), in: Capsule())
+        .overlay { Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1) }
+    }
+}
+
 /// A passport stamp. Pass `nil` for an empty "?" slot that hasn't been earned yet.
 struct StampBadgeView: View {
     let cuisine: Cuisine?
@@ -681,17 +889,27 @@ struct StampBadgeView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             if let cuisine {
+                // Looks like a rubber passport stamp: a solid ring, a dashed inner ring and a slight tilt.
                 Circle()
                     .fill(Theme.orangeTint)
-                    .overlay(Circle().strokeBorder(Theme.orange, lineWidth: 3))
+                    .overlay(Circle().strokeBorder(Theme.orange, lineWidth: max(2, size * 0.035)))
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                Theme.orange.opacity(0.55),
+                                style: StrokeStyle(lineWidth: max(1, size * 0.016), dash: [size * 0.04, size * 0.03])
+                            )
+                            .padding(size * 0.1)
+                    }
                     .overlay {
                         Image(systemName: cuisine.symbolName)
                             .font(.system(size: size * 0.32, weight: .semibold))
                             .foregroundStyle(Theme.orange)
                     }
+                    .rotationEffect(.degrees(cuisine.stampTilt))
             } else {
                 Circle()
-                    .strokeBorder(Color(.systemGray4), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                    .strokeBorder(Theme.faintInk, style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
                     .overlay {
                         Text("?")
                             .font(.system(size: size * 0.28, weight: .semibold))
@@ -717,40 +935,61 @@ struct StampBadgeView: View {
 struct VisitRow: View {
     let visit: Visit
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// With very large text there isn't room for the amount beside the dish, so it moves underneath.
+    private var stacksAmount: Bool {
+        dynamicTypeSize >= .xxxLarge
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
 
+            // Only the amount keeps its full width; everything else can shrink,
+            // so the row fits inside the margins on the narrowest iPhone.
             VStack(alignment: .leading, spacing: 4) {
                 Text(visit.dishName)
                     .font(.headline)
                     .foregroundStyle(Theme.ink)
+                    .lineLimit(2)
 
-                Text(visit.restaurant.name)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                HStack(spacing: 8) {
-                    StarRatingView(rating: visit.rating, size: 12, filledColor: Theme.ink)
-
+                HStack(spacing: 4) {
+                    Text(visit.restaurant.name)
+                        .lineLimit(1)
                     if visit.isLocationVerified {
-                        PillLabel(text: "Verified", systemImage: "checkmark", font: .caption2.weight(.semibold))
-                            .fixedSize()
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(Theme.green)
+                            .accessibilityLabel("Location verified")
                     }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+                StarRatingView(rating: visit.rating, size: 12, filledColor: Theme.gold)
+
+                if stacksAmount {
+                    amountText
                 }
             }
 
             Spacer(minLength: 8)
 
-            Text(visit.amount.lkr)
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
-                .fixedSize()
+            if !stacksAmount {
+                amountText
+                    .fixedSize()
+            }
         }
         .cardStyle(padding: 14)
         .accessibilityElement(children: .combine)
+    }
+
+    private var amountText: some View {
+        Text(visit.amount.lkr)
+            .font(.headline)
+            .monospacedDigit()
+            .foregroundStyle(Theme.ink)
     }
 }
 
@@ -837,6 +1076,8 @@ struct BookmarkButton: View {
             Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                 .font(.title3)
                 .foregroundStyle(isBookmarked ? Theme.orange : Color.secondary)
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: isBookmarked)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
