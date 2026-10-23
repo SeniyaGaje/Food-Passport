@@ -3,15 +3,13 @@ import Foundation
 import UIKit
 import Vision
 
-// MARK: - DishLabel
-
 /// One thing the recogniser can say a photo shows, with its MobileCLIP text embedding.
 /// Made by Tools/make_dish_embeddings.py from Tools/dishes.json and bundled as ML/DishEmbeddings.json.
 struct DishLabel: Decodable, Equatable {
     enum Kind: String, Decodable {
         /// A dish the app knows, with a cuisine (e.g. Kottu Roti).
         case dish
-        /// Food that isn't one of the app's dishes (e.g. a burger).
+        /// Food that isn't one of the app's dishes (e.g. fruit or a drink).
         case otherFood
         /// Not a meal at all (e.g. a receipt or a selfie).
         case notFood
@@ -32,18 +30,14 @@ struct DishLabel: Decodable, Equatable {
     }
 }
 
-// MARK: - MealRecognition
-
 enum MealRecognition: Equatable {
     /// Up to three dishes, most likely first.
     case dishes([MealPrediction])
-    /// Food, but not a dish the app knows. Carries what it looks like, e.g. "Burger".
+    /// Food, but not a dish the app knows. Carries what it looks like, e.g. "Drink".
     case unknownFood(String)
     /// Not a meal. Carries what it looks like, e.g. "Receipt".
     case notFood(String)
 }
-
-// MARK: - MealRecognitionError
 
 enum MealRecognitionError: LocalizedError {
     case unreadableImage
@@ -57,8 +51,6 @@ enum MealRecognitionError: LocalizedError {
     }
 }
 
-// MARK: - MealRecognizer
-
 /// Recognises the dish in a photo. The views only use this protocol, so previews and tests can use the mock.
 protocol MealRecognizer {
     /// Loads the model ahead of time so the first photo is recognised quickly.
@@ -66,8 +58,6 @@ protocol MealRecognizer {
     /// - Parameter menu: the dishes on the menu of the restaurant being logged, which are favoured.
     func recognize(_ image: UIImage, menu: [String]) async throws -> MealRecognition
 }
-
-// MARK: - CoreMLMealRecognizer
 
 /// `MealRecognizer` that runs Apple's MobileCLIP-S1 image model with Core ML, entirely on the device.
 ///
@@ -140,8 +130,6 @@ final class CoreMLMealRecognizer: MealRecognizer {
     }
 }
 
-// MARK: - MealClassifier
-
 /// Turns a photo embedding into dish predictions. Separate from Core ML so it can be unit tested.
 enum MealClassifier {
     /// CLIP's learned "temperature": similarities (−1…1) are multiplied by 100 before softmax.
@@ -201,8 +189,6 @@ enum MealClassifier {
         return exponentials.map { $0 / sum }
     }
 }
-
-// MARK: - MockMealRecognizer
 
 /// `MealRecognizer` for previews and tests: returns a fixed result without running the model.
 struct MockMealRecognizer: MealRecognizer {

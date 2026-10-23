@@ -1,8 +1,6 @@
 import SwiftUI
 import MapKit
 
-// MARK: - HistoryView
-
 /// History tab: all logged visits grouped by date, with search and period filters.
 struct HistoryView: View {
     @Environment(AppState.self) private var appState
@@ -89,8 +87,6 @@ struct HistoryView: View {
     }
 }
 
-// MARK: - HistoryFilter
-
 private enum HistoryFilter: String, CaseIterable, Identifiable {
     case all = "All"
     case thisWeek = "This week"
@@ -106,8 +102,6 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
         }
     }
 }
-
-// MARK: - EmptyHistoryView
 
 /// "No visits yet" state shown when the student hasn't logged anything.
 private struct EmptyHistoryView: View {
@@ -139,8 +133,6 @@ private struct EmptyHistoryView: View {
         .frame(maxWidth: .infinity)
     }
 }
-
-// MARK: - VisitDetailView
 
 struct VisitDetailView: View {
     @Environment(AppState.self) private var appState
@@ -270,8 +262,6 @@ struct VisitDetailView: View {
     }
 }
 
-// MARK: - ReceiptThumbnail
-
 /// Tiny receipt illustration next to "From receipt".
 private struct ReceiptThumbnail: View {
     var body: some View {
@@ -290,7 +280,7 @@ private struct ReceiptThumbnail: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     HistoryView()

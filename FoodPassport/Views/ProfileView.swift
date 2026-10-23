@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - ProfileView
-
 /// Profile tab: account summary, lifetime stats and settings.
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
@@ -168,8 +166,6 @@ struct ProfileView: View {
     }
 }
 
-// MARK: - SettingsRow
-
 /// A settings row with an icon, title and trailing accessory (value, chevron, etc.).
 struct SettingsRow<Accessory: View>: View {
     let systemImage: String?
@@ -210,8 +206,6 @@ struct SettingsRow<Accessory: View>: View {
     }
 }
 
-// MARK: - SettingsToggleRow
-
 struct SettingsToggleRow: View {
     let systemImage: String
     let title: String
@@ -234,8 +228,6 @@ struct SettingsToggleRow: View {
     }
 }
 
-// MARK: - SettingsValue
-
 /// Grey value text followed by a chevron.
 struct SettingsValue: View {
     let text: String?
@@ -257,16 +249,12 @@ struct SettingsValue: View {
     }
 }
 
-// MARK: - SettingsDivider
-
 struct SettingsDivider: View {
     var body: some View {
         Divider()
             .padding(.leading, 60)
     }
 }
-
-// MARK: - View
 
 extension View {
     /// White rounded container that groups settings rows.
@@ -277,8 +265,6 @@ extension View {
             .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
     }
 }
-
-// MARK: - MonthlyBudgetSheet
 
 struct MonthlyBudgetSheet: View {
     @Environment(AppState.self) private var appState
@@ -320,8 +306,6 @@ struct MonthlyBudgetSheet: View {
     }
 }
 
-// MARK: - ReminderTimeSheet
-
 struct ReminderTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
     let time: Date
@@ -357,8 +341,6 @@ struct ReminderTimeSheet: View {
         .presentationCornerRadius(28)
     }
 }
-
-// MARK: - AboutView
 
 struct AboutView: View {
     private var appVersion: String {
@@ -413,7 +395,7 @@ struct AboutView: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     ProfileView()

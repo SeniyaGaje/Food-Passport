@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - MainTabView
-
 /// The five-tab shell (Home, Explore, Passport, History, Profile), each with its own navigation stack.
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
@@ -79,8 +77,6 @@ struct MainTabView: View {
     }
 }
 
-// MARK: - AppRouteDestination
-
 /// Maps a pushed `AppRoute` to its screen.
 struct AppRouteDestination: View {
     let route: AppRoute
@@ -107,8 +103,6 @@ struct AppRouteDestination: View {
     }
 }
 
-// MARK: - AppSheetContent
-
 /// Maps a global `AppSheet` to its sheet content.
 struct AppSheetContent: View {
     let sheet: AppSheet
@@ -124,8 +118,6 @@ struct AppSheetContent: View {
         }
     }
 }
-
-// MARK: - PopupHost
 
 /// Shows the current `AppPopup` centred over a dimmed background with a fade-and-scale animation.
 struct PopupHost: View {
@@ -193,8 +185,6 @@ struct PopupHost: View {
     }
 }
 
-// MARK: - TopMessageHost
-
 /// Shows in-app notification banners and toasts at the top of the screen.
 struct TopMessageHost: View {
     @Environment(AppRouter.self) private var router
@@ -219,7 +209,7 @@ struct TopMessageHost: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     MainTabView()

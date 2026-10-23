@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - PassportView
-
 /// Passport tab: earned stamps, the active quest and challenges.
 struct PassportView: View {
     @Environment(AppState.self) private var appState
@@ -91,8 +89,6 @@ struct PassportView: View {
     }
 }
 
-// MARK: - StampGridCard
-
 /// "Stamps earned" grid: earned stamps followed by empty "Next cuisine" slots.
 struct StampGridCard: View {
     let stamps: [Stamp]
@@ -115,6 +111,8 @@ struct StampGridCard: View {
                             Text(stamp.cuisine.rawValue)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(Theme.ink)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
                         }
                     }
                     .buttonStyle(.plain)
@@ -136,8 +134,6 @@ struct StampGridCard: View {
         .cardStyle(padding: 20)
     }
 }
-
-// MARK: - StampDetailSheet
 
 struct StampDetailSheet: View {
     let stamp: Stamp
@@ -182,8 +178,6 @@ struct StampDetailSheet: View {
     }
 }
 
-// MARK: - ActiveQuestCard
-
 /// Orange "Active quest" card on the Passport tab.
 struct ActiveQuestCard: View {
     let quest: Quest
@@ -212,8 +206,6 @@ struct ActiveQuestCard: View {
         .accessibilityElement(children: .combine)
     }
 }
-
-// MARK: - ChallengeRow
 
 /// Challenge row with a tinted icon, e.g. "Campus Food Trail" or "Weekly challenge".
 struct ChallengeRow: View {
@@ -263,8 +255,6 @@ struct ChallengeRow: View {
     }
 }
 
-// MARK: - PlanStopRow
-
 /// A place in the quest plan with its estimated cost; faded when it no longer fits the budget.
 struct PlanStopRow: View {
     let stop: PlannedStop
@@ -303,7 +293,7 @@ struct PlanStopRow: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     PassportView()

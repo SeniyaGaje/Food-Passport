@@ -2,26 +2,24 @@ import SwiftUI
 import Foundation
 import MapKit
 
-// MARK: - Theme
-
 /// Colours, gradients and sizes taken from the Figma prototype.
 enum Theme {
 
-    // MARK: Brand
+    // Brand
 
     static let orange = Color(hex: 0xF26B1D)
     static let orangeLight = Color(hex: 0xFF8A3D)
     static let orangeDark = Color(hex: 0xE5530E)
     static let orangeTint = Color(hex: 0xFFEDE2)
 
-    // MARK: Neutrals
+    // Neutrals
 
     static let ink = Color(hex: 0x1C1C1E)
     static let fieldGray = Color(hex: 0xEEEEF1)
     static let buttonGray = Color(hex: 0xE4E4E6)
     static let sheetBackground = Color(hex: 0xF8F5F2)
 
-    // MARK: Status
+    // Status
 
     static let green = Color(hex: 0x1E9E57)
     static let greenTint = Color(hex: 0xE3F5EA)
@@ -29,7 +27,7 @@ enum Theme {
     static let yellowTint = Color(hex: 0xFFF4D6)
     static let destructive = Color(hex: 0xF0453A)
 
-    // MARK: Gradients
+    // Gradients
 
     static let primaryGradient = LinearGradient(
         colors: [orangeLight, orangeDark],
@@ -49,7 +47,7 @@ enum Theme {
         endPoint: .bottom
     )
 
-    // MARK: Shape
+    // Shape
 
     enum Radius {
         static let card: CGFloat = 22
@@ -57,8 +55,6 @@ enum Theme {
         static let field: CGFloat = 16
     }
 }
-
-// MARK: - Color
 
 extension Color {
     /// Creates a colour from a hex value such as `0xF26B1D`.
@@ -73,8 +69,6 @@ extension Color {
     }
 }
 
-// MARK: - Cuisine
-
 extension Cuisine {
     /// SF Symbol used for this cuisine's passport stamp and image placeholders.
     var symbolName: String {
@@ -85,6 +79,12 @@ extension Cuisine {
         case .italian: "fork.knife"
         case .japanese: "fish.fill"
         case .thai: "carrot.fill"
+        case .american: "star.fill"
+        case .mexican: "sun.max.fill"
+        case .korean: "frying.pan.fill"
+        case .middleEastern: "moon.stars.fill"
+        case .french: "cup.and.saucer.fill"
+        case .vietnamese: "mug.fill"
         }
     }
 
@@ -97,11 +97,15 @@ extension Cuisine {
         case .italian: [Color(hex: 0xA9CF73), Color(hex: 0x4F8B3B)]
         case .japanese: [Color(hex: 0x8EC5E8), Color(hex: 0x3C78A8)]
         case .thai: [Color(hex: 0xC9A2E0), Color(hex: 0x7A4BA3)]
+        case .american: [Color(hex: 0xF4A3A3), Color(hex: 0xB8323B)]
+        case .mexican: [Color(hex: 0xF5D76E), Color(hex: 0x3E8E4E)]
+        case .korean: [Color(hex: 0xF29C9C), Color(hex: 0x2F4F8F)]
+        case .middleEastern: [Color(hex: 0xE8C39E), Color(hex: 0x9A5B2E)]
+        case .french: [Color(hex: 0xA7C4F2), Color(hex: 0x2B4C9B)]
+        case .vietnamese: [Color(hex: 0xB5E3B0), Color(hex: 0x2E7D5B)]
         }
     }
 }
-
-// MARK: - CardStyle
 
 struct CardStyle: ViewModifier {
     var padding: CGFloat
@@ -116,16 +120,12 @@ struct CardStyle: ViewModifier {
     }
 }
 
-// MARK: - View
-
 extension View {
     /// White rounded card with a soft shadow — the main surface used throughout the prototype.
     func cardStyle(padding: CGFloat = 16, cornerRadius: CGFloat = Theme.Radius.card) -> some View {
         modifier(CardStyle(padding: padding, cornerRadius: cornerRadius))
     }
 }
-
-// MARK: - AppBackground
 
 /// The soft peach gradient behind every screen.
 struct AppBackground: View {
@@ -135,15 +135,11 @@ struct AppBackground: View {
     }
 }
 
-// MARK: - View
-
 extension View {
     func appBackground() -> some View {
         background { AppBackground() }
     }
 }
-
-// MARK: - HiddenNavigationTitle
 
 /// Gives a screen a navigation title (used as the next screen's back-button label) without displaying it.
 /// Matches prototype screens that show only a back button above their own content.
@@ -167,15 +163,11 @@ private struct HiddenNavigationTitle: ViewModifier {
     }
 }
 
-// MARK: - View
-
 extension View {
     func navigationTitleHidden(_ title: String) -> some View {
         modifier(HiddenNavigationTitle(title: title))
     }
 }
-
-// MARK: - BrandPrimaryButtonStyle
 
 /// Full-width orange gradient button for the main action on a screen.
 struct BrandPrimaryButtonStyle: ButtonStyle {
@@ -193,8 +185,6 @@ struct BrandPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - BrandSecondaryButtonStyle
-
 /// Full-width grey button for secondary actions such as "Get directions".
 struct BrandSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -207,8 +197,6 @@ struct BrandSecondaryButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - BrandTintedButtonStyle
-
 /// Full-width light-orange button, e.g. "Done" and "Adjust budget" in pop-ups.
 struct BrandTintedButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -220,8 +208,6 @@ struct BrandTintedButtonStyle: ButtonStyle {
             .pressedEffect(configuration.isPressed)
     }
 }
-
-// MARK: - BrandTextButtonStyle
 
 /// Text-only button with a full-width tap area, e.g. "Continue" or "I'm here – Log visit".
 struct BrandTextButtonStyle: ButtonStyle {
@@ -237,31 +223,21 @@ struct BrandTextButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - ButtonStyle
-
 extension ButtonStyle where Self == BrandPrimaryButtonStyle {
     static var brandPrimary: BrandPrimaryButtonStyle { BrandPrimaryButtonStyle() }
 }
-
-// MARK: - ButtonStyle
 
 extension ButtonStyle where Self == BrandSecondaryButtonStyle {
     static var brandSecondary: BrandSecondaryButtonStyle { BrandSecondaryButtonStyle() }
 }
 
-// MARK: - ButtonStyle
-
 extension ButtonStyle where Self == BrandTintedButtonStyle {
     static var brandTinted: BrandTintedButtonStyle { BrandTintedButtonStyle() }
 }
 
-// MARK: - ButtonStyle
-
 extension ButtonStyle where Self == BrandTextButtonStyle {
     static var brandText: BrandTextButtonStyle { BrandTextButtonStyle() }
 }
-
-// MARK: - View
 
 private extension View {
     func pressedEffect(_ isPressed: Bool) -> some View {
@@ -272,8 +248,6 @@ private extension View {
     }
 }
 
-// MARK: - String
-
 extension String {
     /// The text without leading or trailing spaces and new lines, e.g. for form input.
     var trimmed: String {
@@ -281,16 +255,12 @@ extension String {
     }
 }
 
-// MARK: - Int
-
 extension Int {
     /// Formats an amount in Sri Lankan rupees, e.g. `3000.lkr` → "LKR 3,000".
     var lkr: String {
         "LKR \(formatted(.number))"
     }
 }
-
-// MARK: - MKCoordinateRegion
 
 extension MKCoordinateRegion {
     /// A region that contains every coordinate, with some breathing room around the edges.
@@ -315,8 +285,6 @@ extension MKCoordinateRegion {
         return MKCoordinateRegion(center: center, span: span)
     }
 }
-
-// MARK: - View
 
 extension View {
     /// Injects the shared app state and router so previews can render views that read them from the environment.

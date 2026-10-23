@@ -1,8 +1,6 @@
 import Foundation
 import FirebaseFirestore
 
-// MARK: - DatabaseService
-
 /// Reads and writes the student's data.
 /// `AppState` only talks to this protocol, so the app can run on Cloud Firestore or on the
 /// in-memory mock (previews, unit tests, or before a Firebase project has been set up).
@@ -34,8 +32,6 @@ protocol DatabaseService {
     func deleteVisitsAndStamps(userID: String) async throws
 }
 
-// MARK: - FirestoreDatabaseService
-
 /// `DatabaseService` backed by Cloud Firestore.
 /// Firestore caches data on the device, so reads work offline and writes sync once the device is back online.
 /// Create it only after `FirebaseApp.configure()` has run.
@@ -43,7 +39,7 @@ final class FirestoreDatabaseService: DatabaseService {
     private let db = Firestore.firestore()
     private let encoder = Firestore.Encoder()
 
-    // MARK: Paths
+    // Paths
 
     private var restaurantsCollection: CollectionReference {
         db.collection("restaurants")
@@ -61,7 +57,7 @@ final class FirestoreDatabaseService: DatabaseService {
         userDocument(userID).collection("stamps")
     }
 
-    // MARK: Restaurants
+    // Restaurants
 
     func fetchRestaurants() async throws -> [Restaurant] {
         let snapshot = try await restaurantsCollection.order(by: "distanceKm").getDocuments()
@@ -95,7 +91,7 @@ final class FirestoreDatabaseService: DatabaseService {
         batch.commit { _ in }
     }
 
-    // MARK: Profile
+    // Profile
 
     func fetchProfile(userID: String) async throws -> UserProfile? {
         let document = try await userDocument(userID).getDocument()
@@ -107,7 +103,7 @@ final class FirestoreDatabaseService: DatabaseService {
         try await userDocument(userID).setData(encoder.encode(profile))
     }
 
-    // MARK: Visits
+    // Visits
 
     func fetchVisits(userID: String) async throws -> [Visit] {
         let snapshot = try await visitsCollection(userID).order(by: "date", descending: true).getDocuments()
@@ -122,7 +118,7 @@ final class FirestoreDatabaseService: DatabaseService {
         try await visitsCollection(userID).document(id).delete()
     }
 
-    // MARK: Stamps
+    // Stamps
 
     func fetchStamps(userID: String) async throws -> [Stamp] {
         let snapshot = try await stampsCollection(userID).order(by: "earnedDate").getDocuments()
@@ -137,7 +133,7 @@ final class FirestoreDatabaseService: DatabaseService {
         try await stampsCollection(userID).document(cuisine.rawValue).delete()
     }
 
-    // MARK: Reset
+    // Reset
 
     func deleteVisitsAndStamps(userID: String) async throws {
         let visits = try await visitsCollection(userID).getDocuments()
@@ -151,8 +147,6 @@ final class FirestoreDatabaseService: DatabaseService {
         try await batch.commit()
     }
 }
-
-// MARK: - MockDatabaseService
 
 /// In-memory `DatabaseService` for previews, unit tests and running without Firebase.
 /// Holds a single user's data, so the `userID` arguments are ignored.

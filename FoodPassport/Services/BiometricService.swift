@@ -1,8 +1,6 @@
 import Foundation
 import LocalAuthentication
 
-// MARK: - BiometryKind
-
 /// The biometric sensor the device has set up, used for labels such as "Unlock with Touch ID".
 enum BiometryKind: Equatable {
     case faceID
@@ -28,8 +26,6 @@ enum BiometryKind: Equatable {
     }
 }
 
-// MARK: - BiometricService
-
 /// Checks the student's face or fingerprint before showing their passport.
 /// `AppState` only talks to this protocol, so unit tests can use the mock instead of a real sensor.
 protocol BiometricService {
@@ -38,8 +34,6 @@ protocol BiometricService {
     /// Shows the system Face ID / Touch ID prompt. Returns normally on success and throws a `BiometricError` otherwise.
     func authenticate(reason: String) async throws
 }
-
-// MARK: - BiometricError
 
 enum BiometricError: LocalizedError, Equatable {
     case notAvailable
@@ -59,8 +53,6 @@ enum BiometricError: LocalizedError, Equatable {
         }
     }
 }
-
-// MARK: - LocalBiometricService
 
 /// `BiometricService` backed by Apple's LocalAuthentication framework.
 final class LocalBiometricService: BiometricService {
@@ -105,8 +97,6 @@ final class LocalBiometricService: BiometricService {
         }
     }
 }
-
-// MARK: - MockBiometricService
 
 /// In-memory `BiometricService` for previews and unit tests.
 final class MockBiometricService: BiometricService {

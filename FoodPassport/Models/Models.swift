@@ -1,8 +1,6 @@
 import Foundation
 import CoreLocation
 
-// MARK: - Cuisine
-
 enum Cuisine: String, CaseIterable, Identifiable, Hashable, Codable {
     case sriLankan = "Sri Lankan"
     case indian = "Indian"
@@ -10,19 +8,21 @@ enum Cuisine: String, CaseIterable, Identifiable, Hashable, Codable {
     case italian = "Italian"
     case japanese = "Japanese"
     case thai = "Thai"
+    case american = "American"
+    case mexican = "Mexican"
+    case korean = "Korean"
+    case middleEastern = "Middle Eastern"
+    case french = "French"
+    case vietnamese = "Vietnamese"
 
     var id: String { rawValue }
 }
-
-// MARK: - Dish
 
 struct Dish: Identifiable, Hashable, Codable {
     var id: String { name }
     let name: String
     let price: Int
 }
-
-// MARK: - Restaurant
 
 /// Stored in Firestore under `restaurants/{id}`.
 struct Restaurant: Identifiable, Hashable, Codable {
@@ -61,8 +61,6 @@ struct Restaurant: Identifiable, Hashable, Codable {
     }
 }
 
-// MARK: - Restaurant formatting
-
 extension Restaurant {
     var distanceText: String {
         "\(distanceKm.formatted(.number.precision(.fractionLength(1)))) km"
@@ -72,8 +70,6 @@ extension Restaurant {
         "LKR \(priceRange.lowerBound.formatted())–\(priceRange.upperBound.formatted())"
     }
 }
-
-// MARK: - Visit
 
 /// Stored in Firestore under `users/{uid}/visits/{id}`. The restaurant is copied into the visit
 /// so History still shows it even if the restaurant's details change later.
@@ -91,8 +87,6 @@ struct Visit: Identifiable, Hashable, Codable {
     let isFromReceipt: Bool
     let imageName: String
 }
-
-// MARK: - VisitDateGroup
 
 /// Section headings used by the History list.
 enum VisitDateGroup: Int, CaseIterable, Comparable {
@@ -131,8 +125,6 @@ enum VisitDateGroup: Int, CaseIterable, Comparable {
     }
 }
 
-// MARK: - Stamp
-
 /// A cuisine stamp in the student's passport, earned by a location-verified visit.
 /// Stored in Firestore under `users/{uid}/stamps/{cuisine}`.
 struct Stamp: Identifiable, Hashable, Codable {
@@ -144,16 +136,12 @@ struct Stamp: Identifiable, Hashable, Codable {
     let imageName: String
 }
 
-// MARK: - QuestType
-
 enum QuestType: String, CaseIterable, Identifiable {
     case newCuisines = "New cuisines"
     case foodTrail = "Food trail"
 
     var id: Self { self }
 }
-
-// MARK: - QuestDuration
 
 enum QuestDuration: String, CaseIterable, Identifiable {
     case thisWeek = "This week"
@@ -162,8 +150,6 @@ enum QuestDuration: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-// MARK: - PlannedStop
-
 /// A suggested place in the quest plan, with its estimated cost.
 struct PlannedStop: Identifiable, Hashable {
     var id: Restaurant.ID { restaurant.id }
@@ -171,8 +157,6 @@ struct PlannedStop: Identifiable, Hashable {
     let estimatedCost: Int
     var fitsBudget = true
 }
-
-// MARK: - Quest
 
 struct Quest: Hashable {
     let title: String
@@ -201,8 +185,6 @@ struct Quest: Hashable {
     }
 }
 
-// MARK: - BudgetUpdate
-
 /// What the Adaptive Food Quest changed after the latest visit.
 struct BudgetUpdate: Hashable {
     let actualCost: Int
@@ -213,23 +195,17 @@ struct BudgetUpdate: Hashable {
     var overspend: Int { actualCost - estimatedCost }
 }
 
-// MARK: - TrailStopStatus
-
 enum TrailStopStatus {
     case visited
     case next
     case upcoming
 }
 
-// MARK: - TrailStop
-
 struct TrailStop: Identifiable, Hashable {
     var id: Restaurant.ID { restaurant.id }
     let restaurant: Restaurant
     let isVisited: Bool
 }
-
-// MARK: - FoodTrail
 
 struct FoodTrail: Identifiable, Hashable {
     let id: String
@@ -255,8 +231,6 @@ struct FoodTrail: Identifiable, Hashable {
     }
 }
 
-// MARK: - WeeklyChallenge
-
 struct WeeklyChallenge: Hashable {
     let title: String
     let details: String
@@ -269,8 +243,6 @@ struct WeeklyChallenge: Hashable {
         Double(completed) / Double(max(target, 1))
     }
 }
-
-// MARK: - UserProfile
 
 /// Stored in Firestore as the `users/{uid}` document.
 struct UserProfile: Hashable, Codable {
@@ -289,8 +261,6 @@ struct UserProfile: Hashable, Codable {
     }
 }
 
-// MARK: - DashboardPeriod
-
 enum DashboardPeriod: String, CaseIterable, Identifiable {
     case thisWeek = "This week"
     case thisMonth = "This month"
@@ -300,8 +270,6 @@ enum DashboardPeriod: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-// MARK: - DailySpending
-
 struct DailySpending: Identifiable, Hashable {
     var id: String { day }
     let day: String
@@ -309,15 +277,11 @@ struct DailySpending: Identifiable, Hashable {
     var isHighlighted = false
 }
 
-// MARK: - CuisineShare
-
 struct CuisineShare: Identifiable, Hashable {
     var id: Cuisine { cuisine }
     let cuisine: Cuisine
     let percentage: Int
 }
-
-// MARK: - MealPrediction
 
 /// One of the top results returned by the on-device meal recogniser.
 struct MealPrediction: Identifiable, Hashable {
@@ -331,8 +295,6 @@ struct MealPrediction: Identifiable, Hashable {
     /// True when the dish is on the menu of the restaurant being logged.
     var isOnMenu = false
 }
-
-// MARK: - ReceiptScan
 
 /// What Vision read from a photo of a receipt.
 struct ReceiptScan: Hashable {

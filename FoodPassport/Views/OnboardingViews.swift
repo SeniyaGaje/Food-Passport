@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - OnboardingFlowView
-
 /// Navigation stack for Welcome → Sign up / Sign in → Permissions → Budget setup.
 struct OnboardingFlowView: View {
     @Environment(AppRouter.self) private var router
@@ -19,8 +17,6 @@ struct OnboardingFlowView: View {
     }
 }
 
-// MARK: - OnboardingDestination
-
 private struct OnboardingDestination: View {
     let route: OnboardingRoute
 
@@ -33,8 +29,6 @@ private struct OnboardingDestination: View {
         }
     }
 }
-
-// MARK: - WelcomeView
 
 struct WelcomeView: View {
     var body: some View {
@@ -88,8 +82,6 @@ struct WelcomeView: View {
         }
     }
 }
-
-// MARK: - PermissionsView
 
 /// "Before we begin" — explains each permission before it is requested.
 struct PermissionsView: View {
@@ -152,8 +144,6 @@ struct PermissionsView: View {
     }
 }
 
-// MARK: - OnboardingPermission
-
 private enum OnboardingPermission: CaseIterable, Identifiable {
     case location
     case notifications
@@ -202,8 +192,6 @@ private enum OnboardingPermission: CaseIterable, Identifiable {
     }
 }
 
-// MARK: - PermissionCard
-
 private struct PermissionCard: View {
     let permission: OnboardingPermission
     let isGranted: Bool
@@ -240,8 +228,6 @@ private struct PermissionCard: View {
         .accessibilityValue(isGranted ? "Allowed" : "Not allowed yet")
     }
 }
-
-// MARK: - BudgetSetupView
 
 /// Last onboarding step: set a monthly food budget.
 struct BudgetSetupView: View {
@@ -285,7 +271,7 @@ struct BudgetSetupView: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     OnboardingFlowView()

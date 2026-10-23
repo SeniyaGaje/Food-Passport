@@ -2,8 +2,6 @@ import Foundation
 import UIKit
 import Vision
 
-// MARK: - TextRow
-
 /// One line of a receipt as Vision read it: the words on one row, joined left to right.
 nonisolated struct TextRow: Sendable, Equatable {
     var text: String
@@ -11,15 +9,11 @@ nonisolated struct TextRow: Sendable, Equatable {
     var boundingBox: CGRect
 }
 
-// MARK: - ReceiptScanner
-
 /// Reads the total (and items) from a photo of a receipt.
 /// The views only use this protocol, so previews and tests can use the mock instead of running Vision.
 protocol ReceiptScanner {
     func scan(_ image: UIImage) async throws -> ReceiptScan
 }
-
-// MARK: - ReceiptScanError
 
 enum ReceiptScanError: LocalizedError {
     case unreadableImage
@@ -32,8 +26,6 @@ enum ReceiptScanError: LocalizedError {
         }
     }
 }
-
-// MARK: - VisionReceiptScanner
 
 /// `ReceiptScanner` that uses Vision's on-device text recognition. The photo never leaves the phone.
 struct VisionReceiptScanner: ReceiptScanner {
@@ -88,8 +80,6 @@ struct VisionReceiptScanner: ReceiptScanner {
         }
     }
 }
-
-// MARK: - ReceiptParser
 
 /// Turns receipt rows into a `ReceiptScan`. Kept separate from Vision so it can be unit tested with plain text.
 enum ReceiptParser {
@@ -147,7 +137,7 @@ enum ReceiptParser {
         )
     }
 
-    // MARK: Lines
+    // Lines
 
     /// The row with the strongest total keyword; the lowest one on the receipt if several score the same.
     static func indexOfTotalLine(in lines: [String]) -> Int? {
@@ -189,7 +179,7 @@ enum ReceiptParser {
         ignoredWords.contains { line.containsWords($0) }
     }
 
-    // MARK: Amounts
+    // Amounts
 
     private static let datePattern = #/\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/#
     private static let timePattern = #/(?i)\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?m\.?)?/#
@@ -224,8 +214,6 @@ enum ReceiptParser {
     }
 }
 
-// MARK: - String + whole words
-
 private extension String {
     /// True when `phrase` appears as whole words, ignoring case and punctuation:
     /// "TOTAL:" contains "total", but "Hotel" doesn't contain "tel" and "Subtotal" doesn't contain "total".
@@ -235,8 +223,6 @@ private extension String {
     }
 }
 
-// MARK: - MockReceiptScanner
-
 /// `ReceiptScanner` for previews and tests: returns a fixed result without running Vision.
 struct MockReceiptScanner: ReceiptScanner {
     var result: Result<ReceiptScan, ReceiptScanError> = .success(MockData.sampleReceipt)
@@ -245,8 +231,6 @@ struct MockReceiptScanner: ReceiptScanner {
         try result.get()
     }
 }
-
-// MARK: - CGImagePropertyOrientation
 
 extension CGImagePropertyOrientation {
     /// Vision needs the photo's orientation to read text that was photographed sideways or upside down.

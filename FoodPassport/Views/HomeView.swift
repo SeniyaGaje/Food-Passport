@@ -1,8 +1,6 @@
 import SwiftUI
 import Charts
 
-// MARK: - HomeView
-
 /// Home tab dashboard: summary tiles, active quest, spending chart, cuisines and recent activity.
 struct HomeView: View {
     @Environment(AppState.self) private var appState
@@ -74,8 +72,6 @@ struct HomeView: View {
     }
 }
 
-// MARK: - QuestSummaryCard
-
 /// Orange card on the dashboard showing quest progress, budget used and the next suggested place.
 struct QuestSummaryCard: View {
     let quest: Quest
@@ -135,8 +131,6 @@ struct QuestSummaryCard: View {
     }
 }
 
-// MARK: - WeeklySpendingCard
-
 struct WeeklySpendingCard: View {
     let entries: [DailySpending]
 
@@ -177,8 +171,6 @@ struct WeeklySpendingCard: View {
         .cardStyle(padding: 20)
     }
 }
-
-// MARK: - CuisineBreakdownCard
 
 struct CuisineBreakdownCard: View {
     let shares: [CuisineShare]
@@ -229,8 +221,6 @@ struct CuisineBreakdownCard: View {
     }
 }
 
-// MARK: - RecentActivitySection
-
 struct RecentActivitySection: View {
     let visits: [Visit]
     let onViewHistory: () -> Void
@@ -264,7 +254,7 @@ struct RecentActivitySection: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     HomeView()

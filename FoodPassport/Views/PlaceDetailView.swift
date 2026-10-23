@@ -1,8 +1,6 @@
 import SwiftUI
 import MapKit
 
-// MARK: - PlaceDetailView
-
 struct PlaceDetailView: View {
     @Environment(AppState.self) private var appState
     @State private var isShowingPlanSheet = false
@@ -96,8 +94,6 @@ struct PlaceDetailView: View {
         .background(.white)
     }
 }
-
-// MARK: - PlanVisitSheet
 
 /// Bottom sheet for choosing a date and time to visit a restaurant.
 struct PlanVisitSheet: View {
@@ -238,8 +234,6 @@ struct PlanVisitSheet: View {
     }
 }
 
-// MARK: - DirectionsView
-
 /// Walking route from the student to a restaurant. Start turns on the arrival alert for when they get there.
 struct DirectionsView: View {
     @Environment(AppState.self) private var appState
@@ -293,7 +287,7 @@ struct DirectionsView: View {
         }
     }
 
-    // MARK: Route details
+    // Route details
 
     private var walkingMinutes: Int {
         guard let route else { return liveRestaurant.walkingMinutes }
@@ -365,7 +359,7 @@ struct DirectionsView: View {
         .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
     }
 
-    // MARK: Actions
+    // Actions
 
     /// Asks MapKit for a walking route from the student's location to the restaurant.
     private func loadRoute() async {
@@ -396,7 +390,7 @@ struct DirectionsView: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     PlaceDetailView(restaurant: MockData.campusBites)

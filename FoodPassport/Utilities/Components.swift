@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - ScreenHeader
-
 /// Large bold title (with optional subtitle) and trailing controls, used at the top of each tab.
 struct ScreenHeader<Trailing: View>: View {
     let title: String
@@ -39,15 +37,11 @@ struct ScreenHeader<Trailing: View>: View {
     }
 }
 
-// MARK: - ScreenHeader
-
 extension ScreenHeader where Trailing == EmptyView {
     init(_ title: String, subtitle: String? = nil) {
         self.init(title, subtitle: subtitle) { EmptyView() }
     }
 }
-
-// MARK: - AppLogo
 
 struct AppLogo: View {
     var size: CGFloat = 80
@@ -66,8 +60,6 @@ struct AppLogo: View {
     }
 }
 
-// MARK: - InitialsAvatar
-
 struct InitialsAvatar: View {
     let initials: String
     var size: CGFloat = 44
@@ -81,8 +73,6 @@ struct InitialsAvatar: View {
             .background(background, in: Circle())
     }
 }
-
-// MARK: - FilterChip
 
 /// Capsule filter button, e.g. the cuisine filters on Explore and period filters on History.
 struct FilterChip: View {
@@ -105,8 +95,6 @@ struct FilterChip: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
-
-// MARK: - SearchField
 
 struct SearchField: View {
     let placeholder: String
@@ -139,8 +127,6 @@ struct SearchField: View {
     }
 }
 
-// MARK: - StatTile
-
 /// Big number with a label underneath, e.g. "3 Visits".
 struct StatTile: View {
     let value: String
@@ -166,8 +152,6 @@ struct StatTile: View {
     }
 }
 
-// MARK: - ProgressBar
-
 struct ProgressBar: View {
     let value: Double
     var tint: Color = Theme.ink
@@ -192,8 +176,6 @@ struct ProgressBar: View {
     }
 }
 
-// MARK: - RingProgress
-
 /// Circular progress ring, e.g. "2/3 cuisines tried" on Quest Detail.
 struct RingProgress: View {
     let value: Double
@@ -214,8 +196,6 @@ struct RingProgress: View {
         .accessibilityHidden(true)
     }
 }
-
-// MARK: - StarRatingView
 
 struct StarRatingView: View {
     @Binding private var rating: Int
@@ -264,8 +244,6 @@ struct StarRatingView: View {
         }
     }
 }
-
-// MARK: - PillLabel
 
 /// Small capsule tag, e.g. "Location verified ✓", "Auto-detected" or a cuisine name.
 struct PillLabel: View {
@@ -319,8 +297,6 @@ struct PillLabel: View {
     }
 }
 
-// MARK: - SectionCaption
-
 /// Small uppercase grey label above a field or inside a card, e.g. "DISH" or "WEEKLY SPENDING".
 struct SectionCaption: View {
     let text: String
@@ -336,8 +312,6 @@ struct SectionCaption: View {
             .kerning(0.3)
     }
 }
-
-// MARK: - InputField
 
 /// Rounded white text field from the prototype forms.
 struct InputField: View {
@@ -368,8 +342,6 @@ struct InputField: View {
         .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
     }
 }
-
-// MARK: - SecureInputField
 
 /// Password field with a show/hide toggle.
 struct SecureInputField: View {
@@ -405,8 +377,6 @@ struct SecureInputField: View {
     }
 }
 
-// MARK: - CurrencyField
-
 /// Large amount field with a currency prefix, used for budgets.
 struct CurrencyField: View {
     @Binding var amount: Int
@@ -430,8 +400,6 @@ struct CurrencyField: View {
         }
     }
 }
-
-// MARK: - AmountPresetPicker
 
 /// Row of preset amounts, e.g. LKR 3,000 / 5,000 / 8,000.
 struct AmountPresetPicker: View {
@@ -461,8 +429,6 @@ struct AmountPresetPicker: View {
         }
     }
 }
-
-// MARK: - CountStepper
 
 /// − value + control from the quest editor.
 struct CountStepper: View {
@@ -507,8 +473,6 @@ struct CountStepper: View {
     }
 }
 
-// MARK: - SheetHeader
-
 /// "Cancel · Title · Action" bar at the top of bottom sheets.
 struct SheetHeader: View {
     let title: String
@@ -536,8 +500,6 @@ struct SheetHeader: View {
     }
 }
 
-// MARK: - PopupCard
-
 /// White rounded card used for centred pop-ups such as "New stamp earned!".
 struct PopupCard<Content: View>: View {
     @ViewBuilder let content: Content
@@ -553,8 +515,6 @@ struct PopupCard<Content: View>: View {
     }
 }
 
-// MARK: - PopupIcon
-
 /// Round tinted icon at the top of a pop-up.
 struct PopupIcon: View {
     let systemImage: String
@@ -568,8 +528,6 @@ struct PopupIcon: View {
             .accessibilityHidden(true)
     }
 }
-
-// MARK: - ToastView
 
 /// Dark confirmation message, e.g. "Visit logged! You earned a Sri Lankan stamp ✓".
 struct ToastView: View {
@@ -586,8 +544,6 @@ struct ToastView: View {
             .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
     }
 }
-
-// MARK: - NotificationBannerView
 
 /// Looks like an iOS notification; used in-app to preview notifications such as the arrival alert.
 struct NotificationBannerView: View {
@@ -636,8 +592,6 @@ struct NotificationBannerView: View {
     }
 }
 
-// MARK: - FoodImageView
-
 /// Shows a photo from the asset catalog when one exists, otherwise a cuisine-coloured placeholder.
 /// To use real photos, add images to Assets.xcassets with the same names as in MockData
 /// (e.g. "restaurant_campus_bites", "dish_kottu", "welcome_hero").
@@ -683,8 +637,6 @@ struct FoodImageView: View {
     }
 }
 
-// MARK: - FoodSymbolPattern
-
 /// Tiled food icons used to fill large placeholders such as the welcome hero.
 private struct FoodSymbolPattern: View {
     let size: CGSize
@@ -716,8 +668,6 @@ private struct FoodSymbolPattern: View {
         .clipped()
     }
 }
-
-// MARK: - StampBadgeView
 
 /// A passport stamp. Pass `nil` for an empty "?" slot that hasn't been earned yet.
 struct StampBadgeView: View {
@@ -760,8 +710,6 @@ struct StampBadgeView: View {
     }
 }
 
-// MARK: - VisitRow
-
 /// A logged visit as shown in History and Recent activity.
 struct VisitRow: View {
     let visit: Visit
@@ -803,8 +751,6 @@ struct VisitRow: View {
     }
 }
 
-// MARK: - RestaurantPin
-
 /// Fork-and-knife pin for a restaurant on the map; orange and larger when selected.
 struct RestaurantPin: View {
     var isSelected = false
@@ -830,8 +776,6 @@ struct RestaurantPin: View {
         .animation(.spring(duration: 0.25), value: isSelected)
     }
 }
-
-// MARK: - NumberedMapMarker
 
 /// Numbered stop marker on a food trail map.
 struct NumberedMapMarker: View {
@@ -865,8 +809,6 @@ struct NumberedMapMarker: View {
     }
 }
 
-// MARK: - ProfileAvatarButton
-
 /// The "JD" avatar in screen headers; tapping it opens the Profile tab.
 struct ProfileAvatarButton: View {
     @Environment(AppState.self) private var appState
@@ -882,8 +824,6 @@ struct ProfileAvatarButton: View {
         .accessibilityLabel("Profile")
     }
 }
-
-// MARK: - BookmarkButton
 
 struct BookmarkButton: View {
     let isBookmarked: Bool

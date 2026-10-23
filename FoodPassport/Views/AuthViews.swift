@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - AuthHeader
-
 /// Logo, title and subtitle shared by the Sign in and Sign up screens.
 struct AuthHeader: View {
     let title: String
@@ -22,8 +20,6 @@ struct AuthHeader: View {
     }
 }
 
-// MARK: - FormErrorText
-
 /// Red message under a form, e.g. "Incorrect email or password."
 struct FormErrorText: View {
     let message: String
@@ -35,8 +31,6 @@ struct FormErrorText: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-
-// MARK: - SignInView
 
 struct SignInView: View {
     @Environment(AppState.self) private var appState
@@ -123,8 +117,6 @@ struct SignInView: View {
         }
     }
 }
-
-// MARK: - SignUpView
 
 struct SignUpView: View {
     @Environment(AppState.self) private var appState
@@ -230,8 +222,6 @@ struct SignUpView: View {
     }
 }
 
-// MARK: - ForgotPasswordView
-
 struct ForgotPasswordView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -302,8 +292,6 @@ struct ForgotPasswordView: View {
         }
     }
 }
-
-// MARK: - FaceIDLockView
 
 /// Covers the app when it opens or returns from the background while "Unlock with Face ID" is on.
 struct FaceIDLockView: View {
@@ -394,7 +382,7 @@ struct FaceIDLockView: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     AuthHeader(title: "Welcome back", subtitle: "Sign in to continue your food quest.")

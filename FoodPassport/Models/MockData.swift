@@ -5,11 +5,11 @@ import CoreLocation
 /// Replaced by Cloud Firestore data when the Firebase backend is integrated.
 enum MockData {
 
-    // MARK: Locations (University of Colombo area)
+    // Locations (University of Colombo area)
 
     static let userLocation = CLLocationCoordinate2D(latitude: 6.9028, longitude: 79.8598)
 
-    // MARK: Restaurants
+    // Restaurants
 
     static let campusBites = Restaurant(
         id: "campus-bites",
@@ -137,7 +137,7 @@ enum MockData {
 
     static let restaurants = [campusBites, spiceRoute, dragonWok, hoppersHut, pastaCorner, nibmCanteen]
 
-    // MARK: Profile, visits and stamps
+    // Profile, visits and stamps
 
     static let profile = UserProfile(
         name: "John Doe",
@@ -209,7 +209,7 @@ enum MockData {
         ),
     ]
 
-    // MARK: Quests and challenges
+    // Quests and challenges
 
     static let activeQuest = Quest(
         title: "Try 3 new cuisines this month",
@@ -270,7 +270,7 @@ enum MockData {
         ]
     )
 
-    // MARK: Dashboard
+    // Dashboard
 
     static let weeklySpending: [DailySpending] = [
         DailySpending(day: "Mon", amount: 250),
@@ -287,7 +287,7 @@ enum MockData {
         CuisineShare(cuisine: .indian, percentage: 33),
     ]
 
-    // MARK: Scanning (stand-ins for Core ML / Vision results)
+    // Scanning (stand-ins for Core ML / Vision results)
 
     static let mealPredictions: [MealPrediction] = [
         MealPrediction(label: "Kottu", dishName: "Kottu Roti", confidence: 0.87, cuisine: .sriLankan),
@@ -308,7 +308,7 @@ enum MockData {
         totalBoundingBox: CGRect(x: 0.1, y: 0.2, width: 0.8, height: 0.06)
     )
 
-    // MARK: Helpers
+    // Helpers
 
     private static func date(daysAgo: Int, hour: Int) -> Date {
         let calendar = Calendar.current

@@ -1,8 +1,6 @@
 import AVFoundation
 import UIKit
 
-// MARK: - CameraService
-
 /// The back camera, for photographing a meal (AVFoundation).
 ///
 /// Starting the camera and taking photos block for a moment, so every use of the capture session happens on
@@ -92,7 +90,7 @@ nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, 
         isConfigured = true
     }
 
-    // MARK: AVCapturePhotoCaptureDelegate
+    // AVCapturePhotoCaptureDelegate
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         let result: Result<UIImage, Error>

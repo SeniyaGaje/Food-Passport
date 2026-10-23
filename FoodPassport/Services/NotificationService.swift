@@ -1,15 +1,11 @@
 import Foundation
 import UserNotifications
 
-// MARK: - NotificationPermission
-
 enum NotificationPermission: Equatable {
     case notDetermined
     case allowed
     case denied
 }
-
-// MARK: - NotificationDestination
 
 /// The screen to open when the student taps a notification.
 enum NotificationDestination: Equatable {
@@ -42,8 +38,6 @@ enum NotificationDestination: Equatable {
         }
     }
 }
-
-// MARK: - LocalReminder
 
 /// A notification scheduled on the device, such as a planned-visit reminder.
 struct LocalReminder: Equatable {
@@ -104,8 +98,6 @@ struct LocalReminder: Equatable {
     }
 }
 
-// MARK: - NotificationService
-
 /// Asks for notification permission and schedules local reminders.
 /// `AppState` only talks to this protocol, so unit tests can use the mock instead of the real notification centre.
 protocol NotificationService: AnyObject {
@@ -123,8 +115,6 @@ protocol NotificationService: AnyObject {
     func cancelReminders(withIDPrefix prefix: String) async
     func cancelAllReminders()
 }
-
-// MARK: - UserNotificationService
 
 /// `NotificationService` backed by the UserNotifications framework.
 /// It is also the notification centre's delegate, so it shows banners while the app is open and handles taps.
@@ -188,7 +178,7 @@ final class UserNotificationService: NSObject, NotificationService, UNUserNotifi
         center.removeAllPendingNotificationRequests()
     }
 
-    // MARK: UNUserNotificationCenterDelegate
+    // UNUserNotificationCenterDelegate
 
     /// Shows the banner even when FoodPassport is already open.
     nonisolated func userNotificationCenter(
@@ -217,8 +207,6 @@ final class UserNotificationService: NSObject, NotificationService, UNUserNotifi
         completionHandler()
     }
 }
-
-// MARK: - MockNotificationService
 
 /// In-memory `NotificationService` for previews and unit tests. Records what would have been scheduled.
 final class MockNotificationService: NotificationService {

@@ -1,8 +1,6 @@
 import SwiftUI
 import MapKit
 
-// MARK: - QuestDetailView
-
 /// Active quest progress, budget and the adaptive plan of suggested places.
 struct QuestDetailView: View {
     @Environment(AppRouter.self) private var router
@@ -105,8 +103,6 @@ struct QuestDetailView: View {
         .background(Color(hex: 0xEBEAEA), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }
-
-// MARK: - QuestEditorSheet
 
 /// Bottom sheet for creating or editing a quest.
 struct QuestEditorSheet: View {
@@ -259,8 +255,6 @@ struct QuestEditorSheet: View {
     }
 }
 
-// MARK: - FoodTrailView
-
 /// A food trail: map of numbered stops, progress and the list of stops.
 struct FoodTrailView: View {
     let trail: FoodTrail
@@ -337,8 +331,6 @@ struct FoodTrailView: View {
     }
 }
 
-// MARK: - TrailStopRow
-
 private struct TrailStopRow: View {
     let number: Int
     let stop: TrailStop
@@ -403,8 +395,6 @@ private struct TrailStopRow: View {
     }
 }
 
-// MARK: - WeeklyChallengeView
-
 struct WeeklyChallengeView: View {
     let challenge: WeeklyChallenge
 
@@ -456,8 +446,6 @@ struct WeeklyChallengeView: View {
     }
 }
 
-// MARK: - SuggestedPlaceRow
-
 private struct SuggestedPlaceRow: View {
     let stop: PlannedStop
 
@@ -485,8 +473,6 @@ private struct SuggestedPlaceRow: View {
         .accessibilityElement(children: .combine)
     }
 }
-
-// MARK: - BudgetUpdatePopup
 
 /// "Budget update" — explains how the Adaptive Food Quest replanned after a visit cost more than estimated.
 struct BudgetUpdatePopup: View {
@@ -544,8 +530,6 @@ struct BudgetUpdatePopup: View {
     }
 }
 
-// MARK: - BudgetLimitPopup
-
 /// "Budget limit reached" — shown when no remaining suggestion fits the quest budget.
 struct BudgetLimitPopup: View {
     let quest: Quest
@@ -586,7 +570,7 @@ struct BudgetLimitPopup: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     QuestDetailView(quest: MockData.activeQuest)

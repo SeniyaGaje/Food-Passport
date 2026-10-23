@@ -1,8 +1,6 @@
 import SwiftUI
 import MapKit
 
-// MARK: - ExploreView
-
 /// Explore tab: search, cuisine filters, and a map or list of nearby restaurants.
 struct ExploreView: View {
     private enum DisplayMode {
@@ -145,8 +143,6 @@ struct ExploreView: View {
     }
 }
 
-// MARK: - ExploreMapView
-
 /// Map centred on campus with a pin for each restaurant.
 struct ExploreMapView: View {
     let restaurants: [Restaurant]
@@ -188,8 +184,6 @@ struct ExploreMapView: View {
         }
     }
 }
-
-// MARK: - RestaurantCard
 
 /// Restaurant summary card used in the Explore list and under the map.
 struct RestaurantCard: View {
@@ -239,7 +233,7 @@ struct RestaurantCard: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     ExploreView()

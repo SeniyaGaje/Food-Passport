@@ -3,8 +3,6 @@ import CoreLocation
 import Observation
 import SwiftUI
 
-// MARK: - AppState
-
 /// App-wide session state shared through the environment: who is signed in, their data, and their device settings.
 /// Every outside system (Firebase, Face ID, notifications, settings storage) is passed in (dependency injection),
 /// so the same code runs on the real services in the app and on in-memory mocks in previews and unit tests.
@@ -34,7 +32,7 @@ final class AppState {
     /// Set when the student taps a notification; `MainTabView` opens the matching screen.
     var notificationDestination: NotificationDestination?
 
-    // MARK: Location state
+    // Location state
 
     private(set) var locationPermission: LocationPermission = .notDetermined
     /// The student's latest real location, or nil before it is known or without permission.
@@ -47,7 +45,7 @@ final class AppState {
     private var lastArrivalAlerts: [Restaurant.ID: Date] = [:]
     static let arrivalAlertCooldown: TimeInterval = 3 * 60 * 60
 
-    // MARK: Device settings
+    // Device settings
     // Stored in UserDefaults rather than Firestore because they belong to this phone, not to the account.
 
     private(set) var isFaceIDEnabled = false {
@@ -74,7 +72,7 @@ final class AppState {
         static let weeklyReminderMinute = "weeklyReminderMinute"
     }
 
-    // MARK: Services
+    // Services
 
     private let auth: AuthService
     private let database: DatabaseService
@@ -127,7 +125,7 @@ final class AppState {
         Set(visits.map(\.cuisine)).count
     }
 
-    // MARK: Session
+    // Session
 
     /// Called once at launch: skips onboarding when a user is still signed in from last time.
     func restoreSession() async {
@@ -202,7 +200,7 @@ final class AppState {
         isLocked = false
     }
 
-    // MARK: Location and arrivals (Core Location + geofencing)
+    // Location and arrivals (Core Location + geofencing)
 
     /// Onboarding's "Allow location" button. Returns whether location was allowed.
     func requestLocationPermission() async -> Bool {
@@ -304,7 +302,7 @@ final class AppState {
         return restaurants.map { $0.withDistance(from: userLocation) }
     }
 
-    // MARK: Face ID
+    // Face ID
 
     var biometryKind: BiometryKind {
         biometrics.availableBiometry
@@ -345,7 +343,7 @@ final class AppState {
         }
     }
 
-    // MARK: Reminders (local notifications)
+    // Reminders (local notifications)
 
     var weeklyReminderTime: Date {
         Calendar.current.date(bySettingHour: weeklyReminderHour, minute: weeklyReminderMinute, second: 0, of: .now) ?? .now
@@ -459,7 +457,7 @@ final class AppState {
         }
     }
 
-    // MARK: Visits and stamps
+    // Visits and stamps
 
     /// Adds a logged visit and saves it.
     /// Returns the new stamp when this is the first location-verified visit for the visit's cuisine.
@@ -501,7 +499,7 @@ final class AppState {
         save { database, userID in try await database.deleteVisitsAndStamps(userID: userID) }
     }
 
-    // MARK: Profile
+    // Profile
 
     func updateMonthlyBudget(_ amount: Int) {
         profile.monthlyBudget = amount
@@ -526,7 +524,7 @@ final class AppState {
         save { database, userID in try await database.saveProfile(profile, userID: userID) }
     }
 
-    // MARK: Saving
+    // Saving
 
     /// Runs a database write in the background. The screen has already been updated, so the student never waits.
     /// Firestore keeps the change in its offline cache straight away and syncs it when the device is online.
@@ -559,8 +557,6 @@ final class AppState {
     }
 }
 
-// MARK: - AppRouter
-
 /// Owns navigation state for the whole app: selected tab, each tab's stack, and global pop-ups/sheets.
 @Observable
 final class AppRouter {
@@ -573,7 +569,7 @@ final class AppRouter {
     var toast: ToastMessage?
     var banner: InAppBanner?
 
-    // MARK: Tab navigation
+    // Tab navigation
 
     func path(for tab: AppTab) -> Binding<[AppRoute]> {
         Binding(
@@ -601,7 +597,7 @@ final class AppRouter {
         tabPaths[selectedTab] = path
     }
 
-    // MARK: Pop-ups, toasts and banners
+    // Pop-ups, toasts and banners
 
     func present(_ popup: AppPopup) {
         self.popup = popup
@@ -656,8 +652,6 @@ final class AppRouter {
     }
 }
 
-// MARK: - AppRoute
-
 private extension AppRoute {
     var isVisitLoggingStep: Bool {
         switch self {
@@ -666,8 +660,6 @@ private extension AppRoute {
         }
     }
 }
-
-// MARK: - AppTab
 
 enum AppTab: String, CaseIterable, Identifiable {
     case home
@@ -699,8 +691,6 @@ enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - AppRoute
-
 /// Screens that can be pushed onto any tab's navigation stack.
 enum AppRoute: Hashable {
     case placeDetail(Restaurant)
@@ -713,8 +703,6 @@ enum AppRoute: Hashable {
     case about
 }
 
-// MARK: - OnboardingRoute
-
 /// Screens in the welcome → sign up → permissions → budget flow.
 enum OnboardingRoute: Hashable {
     case signIn
@@ -723,16 +711,12 @@ enum OnboardingRoute: Hashable {
     case budgetSetup
 }
 
-// MARK: - AppPopup
-
 /// Centred pop-ups shown over the whole app (prototype: Stamp Earned, Budget Update, Budget Limit).
 enum AppPopup: Equatable {
     case stampEarned(Cuisine)
     case budgetUpdate
     case budgetLimit
 }
-
-// MARK: - AppSheet
 
 /// Sheets that can be opened from more than one screen.
 enum AppSheet: String, Identifiable {
@@ -743,15 +727,11 @@ enum AppSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
-// MARK: - ToastMessage
-
 /// Short confirmation message shown at the top of the screen.
 struct ToastMessage: Equatable, Identifiable {
     let id = UUID()
     let text: String
 }
-
-// MARK: - InAppBanner
 
 /// In-app stand-in for a local notification, e.g. the geofence arrival alert.
 struct InAppBanner: Equatable, Identifiable {

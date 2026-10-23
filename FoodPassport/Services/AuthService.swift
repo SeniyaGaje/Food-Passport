@@ -1,8 +1,6 @@
 import Foundation
 import FirebaseAuth
 
-// MARK: - AuthService
-
 /// Signs the student up, in and out.
 /// `AppState` only talks to this protocol, so the app can run on Firebase Auth or on the
 /// in-memory mock (previews, unit tests, or before a Firebase project has been set up).
@@ -20,8 +18,6 @@ protocol AuthService {
 
     func signOut() throws
 }
-
-// MARK: - AuthServiceError
 
 /// Sign-in problems, worded for the student rather than the developer.
 enum AuthServiceError: LocalizedError, Equatable {
@@ -43,8 +39,6 @@ enum AuthServiceError: LocalizedError, Equatable {
         }
     }
 }
-
-// MARK: - FirebaseAuthService
 
 /// `AuthService` backed by Firebase Authentication (email and password).
 /// Create it only after `FirebaseApp.configure()` has run.
@@ -102,8 +96,6 @@ final class FirebaseAuthService: AuthService {
         }
     }
 }
-
-// MARK: - MockAuthService
 
 /// In-memory `AuthService` for previews, unit tests and running without Firebase.
 /// Accepts any email with a non-empty password.

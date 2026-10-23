@@ -3,8 +3,6 @@ import AVFoundation
 import PhotosUI
 import VisionKit
 
-// MARK: - LogVisitView
-
 /// "Log your visit" form — dish, cuisine, amount, rating and notes, with meal and receipt scanning.
 struct LogVisitView: View {
     @Environment(AppState.self) private var appState
@@ -210,8 +208,6 @@ struct LogVisitView: View {
     }
 }
 
-// MARK: - MealCameraView
-
 /// Full-screen camera for photographing a meal. The dish is recognised on the device with Core ML (MobileCLIP).
 struct MealCameraView: View {
     private enum Step {
@@ -310,7 +306,7 @@ struct MealCameraView: View {
         }
     }
 
-    // MARK: Viewfinder
+    // Viewfinder
 
     @ViewBuilder
     private var viewfinder: some View {
@@ -430,7 +426,7 @@ struct MealCameraView: View {
         .background(Color(hex: 0x1C1C1E))
     }
 
-    // MARK: Controls
+    // Controls
 
     private var topControls: some View {
         HStack {
@@ -499,7 +495,7 @@ struct MealCameraView: View {
         .accessibilityLabel(label)
     }
 
-    // MARK: Actions
+    // Actions
 
     private func startCamera() async {
         guard CameraService.isAvailable else {
@@ -547,7 +543,7 @@ struct MealCameraView: View {
                     step = .problem(photo, title: "No dish found", message: "Retake the photo with your plate in the middle of the frame, or enter the dish yourself.")
                 case .unknownFood(let lookalike):
                     step = .problem(photo, title: "Not one of our dishes yet",
-                                    message: "This looks like \(lookalike.lowercased()), which FoodPassport can't recognise yet. Enter the dish yourself.")
+                                    message: "This looks like \(lookalike == "Drink" ? "a drink" : lookalike.lowercased()), which FoodPassport can't recognise yet. Enter the dish yourself.")
                 case .notFood(let lookalike):
                     step = .problem(photo, title: "This doesn't look like a meal", message: notAMealMessage(lookalike))
                 }
@@ -585,8 +581,6 @@ struct MealCameraView: View {
     }
 }
 
-// MARK: - CameraPreview
-
 /// Live picture from `CameraService`, filling the viewfinder.
 private struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
@@ -610,8 +604,6 @@ private struct CameraPreview: UIViewRepresentable {
         }
     }
 }
-
-// MARK: - MealRecognitionSheet
 
 /// "We found matches!" — the top three dishes from the on-device recogniser.
 struct MealRecognitionSheet: View {
@@ -694,8 +686,6 @@ struct MealRecognitionSheet: View {
     }
 }
 
-// MARK: - PredictionRow
-
 private struct PredictionRow: View {
     let prediction: MealPrediction
     let isSelected: Bool
@@ -737,8 +727,6 @@ private struct PredictionRow: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
-
-// MARK: - ReceiptScanView
 
 /// Reads the total from a photo of a receipt with Vision, on the device, and highlights it on the photo.
 struct ReceiptScanView: View {
@@ -821,7 +809,7 @@ struct ReceiptScanView: View {
         }
     }
 
-    // MARK: Photo
+    // Photo
 
     @ViewBuilder
     private var photoArea: some View {
@@ -862,7 +850,7 @@ struct ReceiptScanView: View {
         }
     }
 
-    // MARK: Bottom card
+    // Bottom card
 
     private var bottomCard: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -969,7 +957,7 @@ struct ReceiptScanView: View {
         }
     }
 
-    // MARK: Actions
+    // Actions
 
     private func loadPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
@@ -999,8 +987,6 @@ struct ReceiptScanView: View {
         withAnimation { step = .choosing }
     }
 }
-
-// MARK: - ReceiptPhotoView
 
 /// The receipt photo, with an orange box around the total that Vision found.
 private struct ReceiptPhotoView: View {
@@ -1038,8 +1024,6 @@ private struct ReceiptPhotoView: View {
             .accessibilityLabel("Photo of your receipt")
     }
 }
-
-// MARK: - DocumentCameraView
 
 /// VisionKit's document scanner: finds the receipt's edges and straightens the photo before Vision reads it.
 struct DocumentCameraView: UIViewControllerRepresentable {
@@ -1081,8 +1065,6 @@ struct DocumentCameraView: UIViewControllerRepresentable {
         }
     }
 }
-
-// MARK: - StampEarnedPopup
 
 /// "New stamp earned!" pop-up shown after a verified visit adds a new cuisine.
 struct StampEarnedPopup: View {
@@ -1135,7 +1117,7 @@ struct StampEarnedPopup: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     LogVisitView(restaurant: MockData.campusBites)

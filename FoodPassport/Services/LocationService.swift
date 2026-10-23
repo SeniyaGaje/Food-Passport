@@ -1,8 +1,6 @@
 import Foundation
 import CoreLocation
 
-// MARK: - LocationPermission
-
 enum LocationPermission: Equatable {
     case notDetermined
     /// Location while the app is open. Arrivals are detected only while FoodPassport is on screen.
@@ -26,8 +24,6 @@ enum LocationPermission: Equatable {
     }
 }
 
-// MARK: - Geofence
-
 /// Distances used for arrival alerts and visit verification.
 enum Geofence {
     /// Walking inside this distance of a restaurant counts as arriving there.
@@ -38,8 +34,6 @@ enum Geofence {
     /// iOS lets one app monitor at most 20 regions at a time.
     static let maxMonitoredRestaurants = 20
 }
-
-// MARK: - LocationService
 
 /// Finds the student's location and watches restaurant geofences.
 /// `AppState` only talks to this protocol, so unit tests can move a mock "student" around instead of using GPS.
@@ -68,8 +62,6 @@ protocol LocationService: AnyObject {
     func monitorArrivals(at restaurants: [Restaurant])
     func stopMonitoringArrivals()
 }
-
-// MARK: - CoreLocationService
 
 /// `LocationService` backed by Core Location: live location updates plus `CLCircularRegion` monitoring.
 final class CoreLocationService: NSObject, LocationService, CLLocationManagerDelegate {
@@ -156,7 +148,7 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
         }
     }
 
-    // MARK: CLLocationManagerDelegate
+    // CLLocationManagerDelegate
     // Core Location calls these on the thread that created the manager, which is the main thread here.
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -189,8 +181,6 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
         // Usually a temporary "location unknown". Core Location keeps trying, and the last known location is kept.
     }
 }
-
-// MARK: - MockLocationService
 
 /// In-memory `LocationService` for previews and unit tests. Tests move the "student" with `simulateMove(to:)`.
 final class MockLocationService: LocationService {

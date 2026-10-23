@@ -53,25 +53,36 @@ Scan receipt → **Choose from Photos**. On a real iPhone, **Scan receipt** open
 Log your visit → **Scan your meal** takes a photo with the camera (AVFoundation) or picks one from Photos, and
 recognises the dish on the device. It shows the top three dishes with their likelihood, suggests the cuisine,
 and fills in the dish and cuisine. Photos that aren't a meal (a receipt, a selfie) or aren't one of the app's
-dishes (a burger) get a clear message instead of a wrong guess.
+dishes (fruit, a drink, a salad) get a clear message instead of a wrong guess.
 
 Ready-made food models such as Food-101 have no Sri Lankan dishes, so the app uses **MobileCLIP-S1**, Apple's
 on-device image and text model, from [apple/coreml-mobileclip](https://huggingface.co/apple/coreml-mobileclip):
 
 1. **Ahead of time:** `Tools/make_dish_embeddings.py` runs MobileCLIP's *text* model on short descriptions of
-   46 labels in `Tools/dishes.json`: 35 dishes across six cuisines, plus "other food" (burger, cake, drinks…)
-   and "not a meal" (receipt, person, room…). It writes one 512-number embedding per label to
-   `FoodPassport/ML/DishEmbeddings.json`.
+   95 labels in `Tools/dishes.json`: 86 dishes across 12 cuisines (Sri Lankan, Indian, Chinese, Italian,
+   Japanese, Thai, American, Mexican, Korean, Middle Eastern, French and Vietnamese), about 25 of them desserts,
+   plus "other food" (fruit, drinks, salad) and "not a meal" (receipt, person, room…). It writes one 512-number
+   embedding per label to `FoodPassport/ML/DishEmbeddings.json`. The model itself isn't retrained: adding a dish
+   only needs a description.
 2. **On the phone:** Core ML runs MobileCLIP's *image* model (`FoodPassport/ML/MobileCLIPImageEncoder.mlpackage`)
    through Vision, which centre-crops the photo to 256 × 256, to get the photo's embedding.
 3. **Scoring:** the photo is compared with every label (cosine similarity × 100, then softmax). Dishes on the
    restaurant's menu count double. If "not a meal" or "other food" is at least 50% likely, the app says so;
    otherwise it offers the top three dishes, and asks the student to check when the best is under 40%.
 
-**Accuracy:** on 37 test photos (Wikimedia Commons and the prototype's photos, not shipped), the right dish came
-first 81% of the time and was in the top three 92% of the time. Every kottu, string hoppers, pizza and sushi
-photo was right. The usual mistakes are between similar dishes (hoppers / pol roti, noodles / string hoppers).
-MobileCLIP-S0 (23 MB) and S2 (71 MB) were also tested: S0 was slightly less accurate, and S2 no better than S1.
+**Accuracy** on test photos from Wikimedia Commons and the prototype (not shipped):
+
+| Photos | Right first time | Right in the top three |
+|---|---|---|
+| Original set: Sri Lankan, Indian, Chinese, Italian, Japanese, Thai (37) | 78% | 89% |
+| Desserts (45) | 80% | 93% |
+| American, Mexican, Korean, Middle Eastern, French, Vietnamese and other new dishes (51) | 80% | 92% |
+
+Every kottu, string hoppers, pizza, sushi, burger and pho photo was right. The usual mistakes are between
+similar dishes: hoppers / pol roti, kavum / kokis, chocolate cake / brownie, crêpes / pancakes, and Korean /
+American fried chicken. Adding the 49 new labels cost the original set one photo in each column (biryani was
+taken for mandi). MobileCLIP-S0 (23 MB) and S2 (71 MB) were also tested: S0 was slightly less accurate, and S2
+no better than S1.
 
 To add or change dishes, edit `Tools/dishes.json`, then:
 
@@ -165,7 +176,7 @@ Tools/
 └── make_dish_embeddings.py       Turns dishes.json into ML/DishEmbeddings.json
 ```
 
-Each file is split into `// MARK: -` sections, so use the Xcode jump bar to find a specific view.
+Each file holds a screen area and its smaller views; use the Xcode jump bar to find a specific view.
 The project uses Xcode folder-synced groups, so any file added inside `FoodPassport/` is picked up automatically.
 
 ## Photos

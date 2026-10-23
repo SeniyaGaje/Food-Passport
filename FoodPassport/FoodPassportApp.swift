@@ -1,8 +1,6 @@
 import SwiftUI
 import FirebaseCore
 
-// MARK: - FoodPassportApp
-
 @main
 struct FoodPassportApp: App {
     @State private var appState: AppState
@@ -40,8 +38,6 @@ struct FoodPassportApp: App {
         }
     }
 }
-
-// MARK: - RootView
 
 /// Decides which top-level flow is on screen: launch, onboarding/auth, the main tabs, or the Face ID lock.
 struct RootView: View {
@@ -113,8 +109,6 @@ struct RootView: View {
     }
 }
 
-// MARK: - LaunchView
-
 /// Shown briefly at launch while the signed-in user's passport loads.
 struct LaunchView: View {
     var body: some View {
@@ -128,7 +122,7 @@ struct LaunchView: View {
     }
 }
 
-// MARK: - Previews
+// Previews
 
 #Preview {
     RootView()
