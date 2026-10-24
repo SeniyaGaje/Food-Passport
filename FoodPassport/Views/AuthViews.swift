@@ -64,7 +64,8 @@ struct SignInView: View {
 
                     Button("Forgot password?") { isShowingForgotPassword = true }
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.orange)
+                        .foregroundStyle(Theme.orangeText)
+                        .frame(minHeight: 44)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, 4)
                 }
@@ -90,7 +91,8 @@ struct SignInView: View {
                         .foregroundStyle(.secondary)
                     NavigationLink("Sign up", value: OnboardingRoute.signUp)
                         .fontWeight(.semibold)
-                        .foregroundStyle(Theme.orange)
+                        .foregroundStyle(Theme.orangeText)
+                        .frame(minHeight: 44)
                 }
                 .font(.subheadline)
                 .frame(maxWidth: .infinity)
@@ -193,7 +195,8 @@ struct SignUpView: View {
                         .foregroundStyle(.secondary)
                     NavigationLink("Sign in", value: OnboardingRoute.signIn)
                         .fontWeight(.semibold)
-                        .foregroundStyle(Theme.orange)
+                        .foregroundStyle(Theme.orangeText)
+                        .frame(minHeight: 44)
                 }
                 .font(.subheadline)
                 .frame(maxWidth: .infinity)
@@ -303,64 +306,25 @@ struct FaceIDLockView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Face ID pops up by itself once each time the app opens.
     /// After that the student taps to try again, so cancelling doesn't keep bringing it back.
     @State private var hasPromptedAutomatically = false
     @State private var isAuthenticating = false
 
+    /// "Face ID" or "Touch ID", depending on the phone.
+    private var biometryName: String {
+        appState.biometryKind.name
+    }
+
     var body: some View {
-        let biometryName = appState.biometryKind.name
-
-        VStack(spacing: 20) {
-            Spacer()
-
-            AppLogo(size: 80)
-
-            VStack(spacing: 8) {
-                Text("FoodPassport is locked")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
-                Text("Your visits and spending stay private. Unlock to continue.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+        // Fits the screen normally; scrolls if it doesn't (with the largest text sizes).
+        ViewThatFits(in: .vertical) {
+            lockContent
+            ScrollView {
+                lockContent
             }
-
-            Spacer()
-
-            Button(action: unlock) {
-                Image(systemName: appState.biometryKind.systemImage)
-                    .font(.system(size: 52))
-                    .foregroundStyle(Theme.orange)
-                    .symbolEffect(.pulse, options: .repeating)
-                    .frame(width: 104, height: 104)
-                    .surfaceBackground(Circle(), shadowStrength: 1.5)
-            }
-            .buttonStyle(.plain)
-            .disabled(isAuthenticating)
-            .accessibilityLabel("Unlock with \(biometryName)")
-
-            if let lockMessage = appState.lockMessage {
-                FormErrorText(message: lockMessage)
-                    .multilineTextAlignment(.center)
-            } else {
-                Text("Tap to unlock with \(biometryName)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Button("Unlock with \(biometryName)", action: unlock)
-                .buttonStyle(.brandPrimary)
-                .disabled(isAuthenticating)
-
-            Button("Use account password") {
-                router.reset()
-                router.onboardingPath = [.signIn]
-                appState.signOut()
-            }
-            .buttonStyle(BrandTextButtonStyle(color: .secondary))
         }
         .padding(24)
         .appBackground()
@@ -375,6 +339,60 @@ struct FaceIDLockView: View {
                 break
             }
         }
+    }
+
+    private var lockContent: some View {
+            VStack(spacing: 20) {
+                Spacer()
+
+                AppLogo(size: 80)
+
+                VStack(spacing: 8) {
+                    Text("FoodPassport is locked")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.ink)
+                    Text("Your visits and spending stay private. Unlock to continue.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button(action: unlock) {
+                    Image(systemName: appState.biometryKind.systemImage)
+                        .font(.system(size: 52))
+                        .foregroundStyle(Theme.orange)
+                        // Gently pulses to show it can be tapped (not with Reduce Motion).
+                        .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+                        .frame(width: 104, height: 104)
+                        .surfaceBackground(Circle(), shadowStrength: 1.5)
+                }
+                .buttonStyle(.plain)
+                .disabled(isAuthenticating)
+                .accessibilityLabel("Unlock with \(biometryName)")
+
+                if let lockMessage = appState.lockMessage {
+                    FormErrorText(message: lockMessage)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Tap to unlock with \(biometryName)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button("Unlock with \(biometryName)", action: unlock)
+                    .buttonStyle(.brandPrimary)
+                    .disabled(isAuthenticating)
+
+                Button("Use account password") {
+                    router.reset()
+                    router.onboardingPath = [.signIn]
+                    appState.signOut()
+                }
+                .buttonStyle(BrandTextButtonStyle(color: .secondary))
+            }
     }
 
     /// Shows the Face ID prompt.

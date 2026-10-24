@@ -45,13 +45,18 @@ struct HistoryView: View {
 
                 SearchField(placeholder: "Search visits", text: $searchText)
 
-                HStack(spacing: 8) {
-                    ForEach(HistoryFilter.allCases) { option in
-                        FilterChip(title: option.rawValue, isSelected: option == filter, selectedColor: Theme.orange, selectedForeground: .white) {
-                            filter = option
+                // Scrolls sideways if the chips don't fit (very large text).
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(HistoryFilter.allCases) { option in
+                            FilterChip(title: option.rawValue, isSelected: option == filter, selectedColor: Theme.deepOrange, selectedForeground: .white) {
+                                filter = option
+                            }
                         }
                     }
                 }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
 
                 content
             }
@@ -139,6 +144,7 @@ private struct EmptyHistoryView: View {
 struct VisitDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isConfirmingDelete = false
 
     let visit: Visit
@@ -148,7 +154,7 @@ struct VisitDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 hero
 
-                HStack(spacing: Theme.Spacing.xs) {
+                AdaptiveStack(spacing: Theme.Spacing.xs) {
                     PillLabel(text: visit.cuisine.rawValue, systemImage: visit.cuisine.symbolName, style: .green)
                     if visit.isAutoDetected {
                         PillLabel(text: "Auto-detected", systemImage: "sparkles", style: .orange)
@@ -156,7 +162,7 @@ struct VisitDetailView: View {
                 }
 
                 restaurantCard
-                amountCard
+                itemsCard
 
                 VStack(alignment: .leading, spacing: 10) {
                     SectionCaption("Rating")
@@ -191,7 +197,7 @@ struct VisitDetailView: View {
         }
         .scrollIndicators(.hidden)
         .appBackground()
-        .navigationTitleHidden(visit.dishName)
+        .navigationTitleHidden(visit.title)
         .alert("Delete Visit?", isPresented: $isConfirmingDelete) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -204,7 +210,27 @@ struct VisitDetailView: View {
     }
 
     /// The meal photo with the dish name on top.
+    /// With the largest text sizes the name goes under the photo, where it has room.
+    @ViewBuilder
     private var hero: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine, cornerRadius: Theme.Radius.sheet)
+                    .aspectRatio(1.45, contentMode: .fit)
+                Label(visit.date.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)), systemImage: "calendar")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(visit.title)
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+            }
+        } else {
+            heroWithTitleOnPhoto
+        }
+    }
+
+    private var heroWithTitleOnPhoto: some View {
         FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine)
             .aspectRatio(1.45, contentMode: .fit)
             .overlay {
@@ -213,7 +239,7 @@ struct VisitDetailView: View {
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 6) {
                     PhotoTag(text: visit.date.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)), systemImage: "calendar")
-                    Text(visit.dishName)
+                    Text(visit.title)
                         .font(.largeTitle.bold())
                         .foregroundStyle(.white)
                         .lineLimit(2)
@@ -224,12 +250,12 @@ struct VisitDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
             .shadow(color: Theme.shadow.opacity(0.14), radius: 18, y: 8)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(visit.dishName)
+            .accessibilityLabel(visit.title)
             .accessibilityAddTraits(.isHeader)
     }
 
     private var restaurantCard: some View {
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             Map(
                 initialPosition: .region(
                     MKCoordinateRegion(center: visit.restaurant.coordinate, latitudinalMeters: 500, longitudinalMeters: 500)
@@ -262,28 +288,49 @@ struct VisitDetailView: View {
         .cardStyle()
     }
 
-    private var amountCard: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                SectionCaption("Amount spent")
-                Text(visit.amount.lkr)
-                    .font(.title.bold())
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
+    /// Everything eaten, each with its price, then the total.
+    private var itemsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionCaption("What you had")
+
+            ForEach(visit.allItems) { item in
+                AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
+                    Text(item.name)
+                    Spacer(minLength: 12)
+                    if let price = item.price {
+                        Text(price.lkr)
+                            .monospacedDigit()
+                    }
+                }
+                .foregroundStyle(Theme.ink)
+                .accessibilityElement(children: .combine)
             }
 
-            Spacer()
+            Divider()
 
-            if visit.isFromReceipt {
-                HStack(spacing: 8) {
-                    ReceiptThumbnail()
-                    Text("From receipt")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionCaption("Total spent")
+                    Text(visit.amount.lkr)
+                        .font(.title.bold())
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.ink)
+                }
+                .accessibilityElement(children: .combine)
+
+                Spacer()
+
+                if visit.isFromReceipt {
+                    HStack(spacing: 8) {
+                        ReceiptThumbnail()
+                        Text("From receipt")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .cardStyle()
+        .cardStyle(padding: 18)
     }
 }
 

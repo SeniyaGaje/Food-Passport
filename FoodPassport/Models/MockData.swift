@@ -149,7 +149,7 @@ enum MockData {
     static let visits: [Visit] = [
         Visit(
             id: "visit-kottu",
-            dishName: "Kottu Roti",
+            dishName: "Kottu Roti, Iced Milo",
             cuisine: .sriLankan,
             restaurant: campusBites,
             amount: 950,
@@ -159,7 +159,11 @@ enum MockData {
             isLocationVerified: true,
             isAutoDetected: true,
             isFromReceipt: true,
-            imageName: "dish_kottu"
+            imageName: "dish_kottu",
+            items: [
+                VisitItem(id: "kottu", name: "Kottu Roti", price: 750),
+                VisitItem(id: "milo", name: "Iced Milo", price: 200),
+            ]
         ),
         Visit(
             id: "visit-masala-dosa",

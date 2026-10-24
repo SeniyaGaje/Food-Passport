@@ -9,6 +9,7 @@ struct ExploreView: View {
     }
 
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
     @State private var selectedCuisine: Cuisine?
     @State private var displayMode: DisplayMode = .map
@@ -89,15 +90,20 @@ struct ExploreView: View {
         return Button {
             displayMode = mode
         } label: {
+            // A fixed icon size so it fits its pill; Large Content Viewer shows it bigger when pressed.
             Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(isSelected ? Theme.onInk : Theme.ink)
                 .frame(width: 40, height: 34)
                 .background(isSelected ? Theme.ink : .clear, in: Capsule())
-                .contentShape(Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(label) view")
+        .accessibilityShowsLargeContentViewer {
+            Label("\(label) view", systemImage: systemImage)
+        }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -133,7 +139,8 @@ struct ExploreView: View {
             if let restaurant = selectedRestaurant {
                 RestaurantCard(restaurant: restaurant, highlightsCuisine: true)
                     .id(restaurant.id)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // Slides up, or fades with Reduce Motion on.
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                     .padding(.horizontal, Theme.screenMargin)
                     .padding(.bottom, 16)
             }
@@ -194,9 +201,14 @@ struct ExploreMapView: View {
                         onSelect(restaurant)
                     } label: {
                         RestaurantPin(isSelected: restaurant.id == highlightedRestaurantID)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(restaurant.name)
+                    .accessibilityValue("\(restaurant.cuisine.rawValue), \(restaurant.distanceText) away")
+                    .accessibilityHint("Shows this place's card below the map")
+                    .accessibilityAddTraits(restaurant.id == highlightedRestaurantID ? .isSelected : [])
                 }
                 .annotationTitles(.hidden)
             }
@@ -212,6 +224,7 @@ struct ExploreMapView: View {
 /// A restaurant's card, used in the list and under the map.
 struct RestaurantCard: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let restaurant: Restaurant
     var highlightsCuisine = false
@@ -219,17 +232,19 @@ struct RestaurantCard: View {
     var body: some View {
         HStack(spacing: 8) {
             NavigationLink(value: AppRoute.placeDetail(restaurant)) {
-                HStack(spacing: 14) {
+                AdaptiveStack(spacing: 14) {
                     FoodImageView(imageName: restaurant.imageName, cuisine: restaurant.cuisine, cornerRadius: 16)
                         .frame(width: 84, height: 84)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
+                        AdaptiveStack(spacing: 6) {
                             Text(restaurant.cuisine.rawValue)
                                 .fontWeight(.semibold)
-                                .foregroundStyle(highlightsCuisine ? Theme.green : Theme.orange)
-                            Text("•")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(highlightsCuisine ? Theme.greenText : Theme.orangeText)
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                Text("•")
+                                    .foregroundStyle(.tertiary)
+                            }
                             Text(restaurant.distanceText)
                                 .foregroundStyle(.secondary)
                         }
@@ -238,12 +253,14 @@ struct RestaurantCard: View {
                         Text(restaurant.name)
                             .font(.title3.bold())
                             .foregroundStyle(Theme.ink)
-                            .lineLimit(2)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Label(restaurant.priceRangeText, systemImage: "banknote")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Theme.ink)
                             .labelStyle(CompactLabelStyle())
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer(minLength: 0)

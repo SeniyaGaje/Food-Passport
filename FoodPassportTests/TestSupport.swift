@@ -20,16 +20,18 @@ final class TestApp {
     /// Pass `relaunching:` to read another TestApp's saved settings, like reopening the app.
     init(
         signedIn: Bool = false,
-        database: MockDatabaseService = MockDatabaseService(),
+        database: MockDatabaseService? = nil,
         biometry: BiometryKind = .faceID,
         notificationPermission: NotificationPermission = .notDetermined,
         allowsNotificationsWhenAsked: Bool = true,
         locationPermission: LocationPermission = .whenInUse,
-        coordinate: CLLocationCoordinate2D? = MockData.userLocation,
+        // On campus, the same spot as MockData.userLocation.
+        coordinate: CLLocationCoordinate2D? = CLLocationCoordinate2D(latitude: 6.9028, longitude: 79.8598),
         answerWhenAskedForLocation: LocationPermission = .whenInUse,
         relaunching previousLaunch: TestApp? = nil
     ) {
         auth = MockAuthService(signedInUserID: signedIn ? "mock-user" : nil)
+        let database = database ?? MockDatabaseService()
         self.database = database
         biometrics = MockBiometricService(availableBiometry: biometry)
         notifications = MockNotificationService(permission: notificationPermission, allowsWhenAsked: allowsNotificationsWhenAsked)
@@ -62,12 +64,13 @@ final class TestApp {
 func makeVisit(
     id: String = UUID().uuidString,
     cuisine: Cuisine = .chinese,
-    restaurant: Restaurant = MockData.dragonWok,
+    restaurant: Restaurant? = nil,
     amount: Int = 750,
     isLocationVerified: Bool = true,
     date: Date = .now
 ) -> Visit {
-    Visit(
+    let restaurant = restaurant ?? MockData.dragonWok
+    return Visit(
         id: id,
         dishName: "Test dish",
         cuisine: cuisine,

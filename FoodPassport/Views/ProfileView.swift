@@ -18,9 +18,9 @@ struct ProfileView: View {
             VStack(spacing: Theme.Spacing.l) {
                 header
 
-                HStack(spacing: Theme.Spacing.s) {
+                AdaptiveStack(spacing: Theme.Spacing.s) {
                     StatTile(value: "\(appState.visits.count)", label: "Visits", systemImage: "fork.knife")
-                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill", valueColor: Theme.green)
+                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill", valueColor: Theme.greenText)
                     StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
@@ -323,7 +323,7 @@ struct MonthlyBudgetSheet: View {
                 CurrencyField(amount: $amount, background: Theme.insetFill)
             }
 
-            HStack(spacing: 12) {
+            AdaptiveStack(spacing: 12) {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.brandSecondary)
                 Button("Save") {
@@ -359,7 +359,7 @@ struct ReminderTimeSheet: View {
                 .datePickerStyle(.wheel)
                 .labelsHidden()
 
-            HStack(spacing: 12) {
+            AdaptiveStack(spacing: 12) {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.brandSecondary)
                 Button("Save") {

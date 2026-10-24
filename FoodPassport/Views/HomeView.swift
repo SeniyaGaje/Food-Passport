@@ -31,7 +31,7 @@ struct HomeView: View {
                     periodMenu
                 }
 
-                HStack(spacing: Theme.Spacing.s) {
+                AdaptiveStack(spacing: Theme.Spacing.s) {
                     StatTile(value: "\(appState.visits.count)", label: "Visits", systemImage: "fork.knife")
                     StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
                     StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
@@ -82,8 +82,11 @@ struct HomeView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .surfaceBackground(Capsule(), shadowStrength: 0.6)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .accessibilityLabel("Period: \(period.rawValue)")
+        .accessibilityHint("Changes the time period the totals cover")
     }
 }
 
@@ -200,12 +203,13 @@ struct WeeklySpendingCard: View {
                             Text(String(day.prefix(1)))
                                 .font(.subheadline)
                                 .fontWeight(day == highlightedDay ? .bold : .regular)
-                                .foregroundStyle(day == highlightedDay ? Theme.orange : Color.secondary)
+                                .foregroundStyle(day == highlightedDay ? Theme.orangeText : Color.secondary)
                         }
                     }
                 }
             }
             .frame(height: 150)
+            .accessibilityLabel("Weekly spending chart")
         }
         .cardStyle(padding: 20)
     }
@@ -249,6 +253,7 @@ struct CuisineBreakdownCard: View {
             .accessibilityValue("\(share.percentage) percent")
         }
         .frame(width: 120, height: 120)
+        .accessibilityLabel("Cuisines explored chart")
         .overlay {
             VStack(spacing: 0) {
                 Text("\(shares.count)")

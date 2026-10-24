@@ -1,0 +1,129 @@
+import Testing
+import Foundation
+@testable import FoodPassport
+
+/// Visits with more than one dish or drink, and the item list on Log your visit.
+@Suite("Visit items")
+@MainActor
+struct VisitItemTests {
+
+    // Saved visits
+
+    @Test("A visit lists every item, and its title names the first one")
+    func visitWithSeveralItems() {
+        let visit = MockData.visits[0]
+
+        #expect(visit.allItems.map(\.name) == ["Kottu Roti", "Iced Milo"])
+        #expect(visit.allItems.map(\.price) == [750, 200])
+        #expect(visit.title == "Kottu Roti + 1 more")
+    }
+
+    @Test("An older visit without items shows its dish and amount as one item")
+    func olderVisitWithoutItems() {
+        let visit = makeVisit(amount: 650)
+
+        #expect(visit.items == nil)
+        #expect(visit.allItems.count == 1)
+        #expect(visit.allItems[0].name == "Test dish")
+        #expect(visit.allItems[0].price == 650)
+        #expect(visit.title == "Test dish")
+    }
+
+    @Test("Visits saved in Firestore before items existed still load")
+    func decodeOldVisit() throws {
+        // Save a visit, then remove "items" from it, like a document saved by an older version of the app.
+        let data = try JSONEncoder().encode(makeVisit(id: "old-visit"))
+        var json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        json["items"] = nil
+        let oldData = try JSONSerialization.data(withJSONObject: json)
+
+        let visit = try JSONDecoder().decode(Visit.self, from: oldData)
+
+        #expect(visit.id == "old-visit")
+        #expect(visit.items == nil)
+        #expect(visit.allItems.count == 1)
+    }
+
+    @Test("A visit with items is saved and loaded with all of them")
+    func itemsRoundTrip() throws {
+        let visit = MockData.visits[0]
+
+        let decoded = try JSONDecoder().decode(Visit.self, from: JSONEncoder().encode(visit))
+
+        #expect(decoded.items == visit.items)
+    }
+
+    // Typing items on Log your visit
+
+    @Test("Prices typed with LKR or commas are read as numbers")
+    func draftPrices() {
+        #expect(VisitItemDraft(priceText: "750").price == 750)
+        #expect(VisitItemDraft(priceText: "LKR 1,250").price == 1250)
+        #expect(VisitItemDraft(priceText: "").price == nil)
+    }
+
+    @Test("A row counts as empty only when both name and price are blank")
+    func emptyRows() {
+        #expect(VisitItemDraft().isEmpty)
+        #expect(VisitItemDraft(name: "  ").isEmpty)
+        #expect(!VisitItemDraft(name: "Tea").isEmpty)
+        #expect(!VisitItemDraft(priceText: "60").isEmpty)
+    }
+
+    @Test("The total adds up every price, and items without a price count as 0")
+    func draftTotal() {
+        let items = [
+            VisitItemDraft(name: "Kottu Roti", priceText: "750"),
+            VisitItemDraft(name: "Iced Milo", priceText: "200"),
+            VisitItemDraft(name: "Water"),
+        ]
+
+        #expect(VisitItemDraft.total(of: items) == 950)
+        #expect(VisitItemDraft.total(of: []) == 0)
+    }
+
+    @Test("Scanned dishes replace the blank starting row")
+    func scannedDishesFillBlankRow() {
+        let result = VisitItemDraft.adding([VisitItemDraft(name: "Kottu Roti", priceText: "650")], to: [VisitItemDraft()])
+
+        #expect(result.map(\.name) == ["Kottu Roti"])
+    }
+
+    @Test("Scanning a dish that's already listed doesn't add it twice")
+    func scannedDishesAreNotDuplicated() {
+        let list = [VisitItemDraft(name: "Kottu Roti", priceText: "650")]
+        let scanned = [VisitItemDraft(name: "kottu roti"), VisitItemDraft(name: "Iced Milo")]
+
+        let result = VisitItemDraft.adding(scanned, to: list)
+
+        #expect(result.map(\.name) == ["Kottu Roti", "Iced Milo"])
+        // The price the student already had is kept.
+        #expect(result[0].price == 650)
+    }
+
+    @Test("Adding nothing to an empty list still leaves one row to type in")
+    func alwaysOneRow() {
+        let result = VisitItemDraft.adding([], to: [])
+
+        #expect(result.count == 1)
+        #expect(result[0].isEmpty)
+    }
+
+    // Saving through AppState
+
+    @Test("A visit with several items is saved with all of them")
+    func saveVisitWithItems() async throws {
+        let app = TestApp()
+        try await app.signIn()
+        let items = [VisitItem(name: "Fried Rice", price: 650), VisitItem(name: "Chop Suey", price: 400)]
+        var visit = makeVisit(id: "two-dishes", amount: 1050)
+        visit.items = items
+
+        app.appState.addVisit(visit)
+        await app.appState.waitForPendingWrites()
+
+        let saved = try #require(app.database.visits.first { $0.id == "two-dishes" })
+        #expect(saved.allItems.map(\.name) == ["Fried Rice", "Chop Suey"])
+        #expect(saved.amount == 1050)
+    }
+}

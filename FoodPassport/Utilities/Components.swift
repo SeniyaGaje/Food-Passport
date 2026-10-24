@@ -1,6 +1,26 @@
 import SwiftUI
 import UIKit
 
+/// A row that becomes a column at the largest text sizes, so nothing gets squashed or cut off.
+struct AdaptiveStack<Content: View>: View {
+    var horizontalAlignment: HorizontalAlignment = .leading
+    var verticalAlignment: VerticalAlignment = .center
+    var spacing: CGFloat?
+    @ViewBuilder let content: Content
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: horizontalAlignment, spacing: spacing))
+            : AnyLayout(HStackLayout(alignment: verticalAlignment, spacing: spacing))
+
+        layout {
+            content
+        }
+    }
+}
+
 /// The big title at the top of each tab, with optional buttons on the right.
 struct ScreenHeader<Trailing: View>: View {
     let title: String
@@ -13,13 +33,16 @@ struct ScreenHeader<Trailing: View>: View {
         self.trailing = trailing()
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        // With the largest text sizes the buttons go under the title instead of squeezing it.
+        AdaptiveStack(verticalAlignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.largeTitle.bold())
                     .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .minimumScaleFactor(0.75)
                     .accessibilityAddTraits(.isHeader)
 
@@ -30,7 +53,9 @@ struct ScreenHeader<Trailing: View>: View {
                 }
             }
 
-            Spacer(minLength: 0)
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 0)
+            }
 
             trailing
         }
@@ -67,7 +92,8 @@ struct SectionHeader: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.orange)
+                    .foregroundStyle(Theme.orangeText)
+                    .frame(minHeight: 44)
             }
         }
         .padding(.top, 6)
@@ -193,6 +219,8 @@ struct FilterChip: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(isSelected ? selectedForeground : Theme.ink)
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
                 .background {
@@ -202,7 +230,9 @@ struct FilterChip: View {
                         Color.clear.surfaceBackground(Capsule(), shadowStrength: 0.6)
                     }
                 }
-                .contentShape(Capsule())
+                // The capsule looks small, but the tap area is at least 44 points tall.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .animation(.easeOut(duration: 0.2), value: isSelected)
@@ -230,6 +260,8 @@ struct SearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.tertiary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Clear search")
             }
@@ -285,6 +317,8 @@ struct ProgressBar: View {
     var tint: Color = Theme.ink
     var track: Color = Theme.track
     var height: CGFloat = 10
+    /// What VoiceOver says before the percentage, e.g. "Budget used, 73%".
+    var label = "Progress"
 
     /// The value kept between 0 and 1, so the bar never overflows.
     private var clampedValue: Double {
@@ -303,6 +337,7 @@ struct ProgressBar: View {
         .frame(height: height)
         .animation(.spring(duration: 0.5), value: clampedValue)
         .accessibilityElement()
+        .accessibilityLabel(label)
         .accessibilityValue(Text(verbatim: "\(Int(clampedValue * 100))%"))
     }
 }
@@ -352,11 +387,14 @@ struct StarRatingView: View {
     }
 
     var body: some View {
-        HStack(spacing: size * 0.35) {
+        // Tappable stars get a 44-point tap area each; read-only stars stay compact.
+        HStack(spacing: isEditable ? 0 : size * 0.35) {
             ForEach(1...5, id: \.self) { index in
                 Image(systemName: index <= rating ? "star.fill" : "star")
                     .font(.system(size: size))
                     .foregroundStyle(index <= rating ? filledColor : Color(.systemGray4))
+                    .frame(minWidth: isEditable ? 44 : nil, minHeight: isEditable ? 44 : nil)
+                    .contentShape(Rectangle())
                     .onTapGesture {
                         if isEditable { rating = index }
                     }
@@ -366,6 +404,7 @@ struct StarRatingView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Rating")
         .accessibilityValue("\(rating) of 5 stars")
+        .accessibilityHint(isEditable ? "Swipe up or down to change it" : "")
         .accessibilityAdjustableAction { direction in
             guard isEditable else { return }
             switch direction {
@@ -400,8 +439,8 @@ struct PillLabel: View {
         var foreground: Color {
             switch self {
             case .gray: Color(light: 0x55555A, dark: 0xC7C2BE)
-            case .green: Theme.green
-            case .orange: Theme.orange
+            case .green: Theme.greenText
+            case .orange: Theme.orangeText
             case .yellow: Color(hex: 0xE39500)
             }
         }
@@ -618,7 +657,7 @@ struct CountStepper: View {
 
             stepButton(systemImage: "plus", isEnabled: value < range.upperBound) { value += 1 }
         }
-        .padding(5)
+        .padding(2)
         .background(Theme.fieldGray, in: Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityValue("\(value)")
@@ -638,6 +677,8 @@ struct CountStepper: View {
                 .foregroundStyle(Theme.ink)
                 .frame(width: 38, height: 38)
                 .background(Theme.surface, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -653,20 +694,31 @@ struct SheetHeader: View {
     let onConfirm: () -> Void
     var isConfirmEnabled = true
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        ZStack {
+        // The title sits between the buttons, or above them with the largest text sizes.
+        let layout = dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(ZStackLayout())
+
+        layout {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(Theme.ink)
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
 
             HStack {
                 Button("Cancel", action: onCancel)
                     .foregroundStyle(.secondary)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 Spacer()
                 Button(confirmTitle, action: onConfirm)
                     .font(.headline)
-                    .foregroundStyle(isConfirmEnabled ? Theme.orange : .secondary)
+                    .foregroundStyle(isConfirmEnabled ? Theme.orangeText : .secondary)
                     .disabled(!isConfirmEnabled)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
         }
     }
@@ -677,12 +729,25 @@ struct PopupCard<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
+        // Fits on screen if it can; otherwise (very large text) it scrolls instead of cutting text off.
+        ViewThatFits(in: .vertical) {
+            card
+
+            ScrollView {
+                card
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .frame(maxWidth: 360)
+        .cardBackground(cornerRadius: Theme.Radius.sheet, shadowStrength: 3)
+        .padding(.vertical, 24)
+    }
+
+    private var card: some View {
         VStack(spacing: 16) {
             content
         }
         .padding(24)
-        .frame(maxWidth: 360)
-        .cardBackground(cornerRadius: Theme.Radius.sheet, shadowStrength: 3)
     }
 }
 
@@ -690,7 +755,8 @@ struct PopupCard<Content: View>: View {
 struct PopupIcon: View {
     let systemImage: String
 
-    /// Set when the pop-up appears, so the icon bounces once.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Set when the pop-up appears, so the icon bounces once (not with Reduce Motion).
     @State private var hasAppeared = false
 
     var body: some View {
@@ -701,7 +767,11 @@ struct PopupIcon: View {
             .frame(width: 76, height: 76)
             .background(Theme.orangeTint, in: Circle())
             .overlay { Circle().strokeBorder(Theme.orange.opacity(0.2), lineWidth: 1) }
-            .onAppear { hasAppeared = true }
+            .onAppear {
+                if !reduceMotion {
+                    hasAppeared = true
+                }
+            }
             .accessibilityHidden(true)
     }
 }
@@ -949,20 +1019,20 @@ struct VisitRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
 
             // The amount keeps its full width; the rest can shrink to fit small iPhones.
             VStack(alignment: .leading, spacing: 4) {
-                Text(visit.dishName)
+                Text(visit.title)
                     .font(.headline)
                     .foregroundStyle(Theme.ink)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
 
                 HStack(spacing: 4) {
                     Text(visit.restaurant.name)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     if visit.isLocationVerified {
                         Image(systemName: "checkmark.seal.fill")
                             .foregroundStyle(Theme.green)
@@ -1045,6 +1115,16 @@ struct NumberedMapMarker: View {
         .frame(width: 36, height: 36)
         .overlay(Circle().stroke(.white, lineWidth: 3))
         .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Stop \(number), \(statusText)")
+    }
+
+    private var statusText: String {
+        switch status {
+        case .visited: "visited"
+        case .next: "next stop"
+        case .upcoming: "not visited yet"
+        }
     }
 
     private var fillColor: Color {
@@ -1076,13 +1156,16 @@ struct BookmarkButton: View {
     let isBookmarked: Bool
     let action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button(action: action) {
             Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                 .font(.title3)
                 .foregroundStyle(isBookmarked ? Theme.orange : Color.secondary)
                 .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.bounce, value: isBookmarked)
+                // Bounces when tapped, unless Reduce Motion is on.
+                .symbolEffect(.bounce, value: reduceMotion ? false : isBookmarked)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }

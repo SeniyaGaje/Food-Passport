@@ -93,8 +93,13 @@ struct StampGridCard: View {
     var totalSlots = 6
     let onSelect: (Stamp) -> Void
 
-    /// As many columns as fit (three on an iPhone).
-    private let columns = [GridItem(.adaptive(minimum: 92), spacing: 12)]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// As many columns as fit (three on an iPhone). One column with the largest text sizes.
+    private var columns: [GridItem] {
+        let minimumWidth: CGFloat = dynamicTypeSize.isAccessibilitySize ? 240 : 92
+        return [GridItem(.adaptive(minimum: minimumWidth), spacing: 12)]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -123,6 +128,7 @@ struct StampGridCard: View {
                     }
                     .buttonStyle(.pressableCard)
                     .accessibilityLabel("\(stamp.cuisine.rawValue) stamp")
+                    .accessibilityValue("Earned at \(stamp.restaurantName)")
                     .accessibilityHint("Shows stamp details")
                 }
 
@@ -133,6 +139,8 @@ struct StampGridCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Empty stamp, waiting for your next cuisine")
                     .accessibilityElement(children: .combine)
                 }
             }
@@ -221,6 +229,7 @@ struct ActiveQuestCard: View {
         .background { QuestCardBackground() }
         .shadow(color: Theme.orange.opacity(0.35), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens the quest")
     }
 }
 
@@ -234,7 +243,7 @@ struct ChallengeRow: View {
     var footnote: String?
 
     var body: some View {
-        HStack(spacing: 16) {
+        AdaptiveStack(spacing: 16) {
             IconTile(systemImage: systemImage, tint: tint, size: 52)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -253,7 +262,7 @@ struct ChallengeRow: View {
                 if let footnote {
                     Label(footnote, systemImage: "timer")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Theme.green)
+                        .foregroundStyle(Theme.greenText)
                 }
             }
 
@@ -265,6 +274,7 @@ struct ChallengeRow: View {
         }
         .cardStyle()
         .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens the challenge")
     }
 }
 
@@ -273,7 +283,7 @@ struct PlanStopRow: View {
     let stop: PlannedStop
 
     var body: some View {
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             Circle()
                 .strokeBorder(stop.fitsBudget ? Theme.orange : Theme.faintInk, lineWidth: 2)
                 .frame(width: 28, height: 28)
@@ -303,6 +313,7 @@ struct PlanStopRow: View {
         .cardBackground(shadowStrength: stop.fitsBudget ? 1 : 0.3)
         .opacity(stop.fitsBudget ? 1 : 0.6)
         .accessibilityElement(children: .combine)
+        .accessibilityHint(stop.fitsBudget ? "Opens this place" : "Over budget. Shows your options")
     }
 }
 

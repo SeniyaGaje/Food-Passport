@@ -7,16 +7,19 @@ import VisionKit
 struct LogVisitView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let restaurant: Restaurant
 
-    @State private var dish = ""
+    @State private var items = [VisitItemDraft()]
     @State private var cuisine = ""
     @State private var amount = ""
     @State private var rating = 0
     @State private var notes = ""
     @State private var hasMealPhoto = false
     @State private var isAmountFromReceipt = false
+    /// True once the student types the total themselves, so we stop filling it in for them.
+    @State private var hasTypedTotal = false
     @State private var isShowingMealCamera = false
     @State private var isShowingReceiptScanner = false
 
@@ -25,14 +28,23 @@ struct LogVisitView: View {
         Cuisine.allCases.first { $0.rawValue.caseInsensitiveCompare(cuisine) == .orderedSame } ?? restaurant.cuisine
     }
 
-    /// The amount as a number, ignoring "LKR" and commas.
+    /// The total as a number, ignoring "LKR" and commas.
     private var amountValue: Int? {
         Int(amount.filter(\.isNumber))
     }
 
-    /// Save needs at least a dish and an amount.
+    /// The items that have a name (empty rows are ignored).
+    private var namedItems: [VisitItemDraft] {
+        items.filter { !$0.name.trimmed.isEmpty }
+    }
+
+    private var itemsTotal: Int {
+        VisitItemDraft.total(of: items)
+    }
+
+    /// Save needs at least one item and a total.
     private var canSave: Bool {
-        !dish.trimmed.isEmpty && (amountValue ?? 0) > 0
+        !namedItems.isEmpty && (amountValue ?? 0) > 0
     }
 
     var body: some View {
@@ -42,29 +54,13 @@ struct LogVisitView: View {
 
                 mealScanArea
 
-                field("Dish") {
-                    InputField(placeholder: "What did you eat?", text: $dish)
-                }
+                itemsSection
 
                 field("Cuisine") {
                     InputField(placeholder: "Cuisine type", text: $cuisine)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        SectionCaption("Spent (LKR)")
-                        Spacer()
-                        Button {
-                            isShowingReceiptScanner = true
-                        } label: {
-                            Label(isAmountFromReceipt ? "Rescan receipt" : "Scan receipt", systemImage: "doc.text.viewfinder")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Theme.orange)
-                        }
-                    }
-                    InputField(placeholder: "Amount spent", text: $amount, prefix: amount.isEmpty ? nil : "LKR")
-                        .keyboardType(.numberPad)
-                }
+                totalSection
 
                 field("Rating") {
                     StarRatingView(rating: $rating)
@@ -89,32 +85,61 @@ struct LogVisitView: View {
         .appBackground()
         .navigationTitle("Log your visit")
         .navigationBarTitleDisplayMode(.large)
+        // Keep the total in step with the item prices, unless it was typed or came from a receipt.
+        .onChange(of: itemsTotal) { _, newTotal in
+            guard !hasTypedTotal && !isAmountFromReceipt else { return }
+            amount = newTotal > 0 ? "\(newTotal)" : ""
+        }
         .fullScreenCover(isPresented: $isShowingMealCamera) {
-            MealCameraView(menu: restaurant.popularDishes.map(\.name)) { prediction in
-                dish = prediction.dishName
-                cuisine = prediction.cuisine.rawValue
-                hasMealPhoto = true
+            MealCameraView(menu: restaurant.popularDishes.map(\.name)) { dishes in
+                addScannedDishes(dishes)
             }
         }
         .fullScreenCover(isPresented: $isShowingReceiptScanner) {
             ReceiptScanView { receipt in
-                if let total = receipt.total {
-                    amount = "\(total)"
-                    isAmountFromReceipt = true
-                }
-                // Use the first item as the dish if the student hasn't entered one.
-                if dish.trimmed.isEmpty, let firstItem = receipt.items.first {
-                    dish = firstItem.name
-                }
+                useReceipt(receipt)
             }
+        }
+    }
+
+    /// Adds the dishes picked after a meal scan, with the menu price when the restaurant sells them.
+    private func addScannedDishes(_ dishes: [MealPrediction]) {
+        var newItems: [VisitItemDraft] = []
+        for dish in dishes {
+            let menuDish = restaurant.popularDishes.first { $0.name.caseInsensitiveCompare(dish.dishName) == .orderedSame }
+            let priceText = menuDish.map { "\($0.price)" } ?? ""
+            newItems.append(VisitItemDraft(name: dish.dishName, priceText: priceText))
+        }
+
+        items = VisitItemDraft.adding(newItems, to: items)
+        if cuisine.trimmed.isEmpty, let first = dishes.first {
+            cuisine = first.cuisine.rawValue
+        }
+        hasMealPhoto = true
+    }
+
+    /// Fills in the items and total from a scanned receipt.
+    private func useReceipt(_ receipt: ReceiptScan) {
+        // The receipt lists everything that was bought, so its items replace the list.
+        if !receipt.items.isEmpty {
+            items = receipt.items.map { VisitItemDraft(name: $0.name, priceText: "\($0.price)") }
+        }
+        if let total = receipt.total {
+            amount = "\(total)"
+            isAmountFromReceipt = true
         }
     }
 
     /// Saves the visit. Shows the stamp pop-up if it earned one.
     private func saveVisit() {
+        var savedItems: [VisitItem] = []
+        for item in namedItems {
+            savedItems.append(VisitItem(name: item.name.trimmed, price: item.price))
+        }
+
         let visit = Visit(
             id: UUID().uuidString,
-            dishName: dish.trimmed,
+            dishName: savedItems.map(\.name).joined(separator: ", "),
             cuisine: selectedCuisine,
             restaurant: restaurant,
             amount: amountValue ?? 0,
@@ -125,7 +150,8 @@ struct LogVisitView: View {
             isLocationVerified: appState.isAtRestaurant(restaurant),
             isAutoDetected: hasMealPhoto,
             isFromReceipt: isAmountFromReceipt,
-            imageName: restaurant.imageName
+            imageName: restaurant.imageName,
+            items: savedItems
         )
 
         if let stamp = appState.addVisit(visit) {
@@ -136,8 +162,10 @@ struct LogVisitView: View {
         }
     }
 
+    // Sections
+
     private var restaurantCard: some View {
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             FoodImageView(imageName: restaurant.imageName, cuisine: restaurant.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
 
@@ -155,12 +183,13 @@ struct LogVisitView: View {
             Spacer(minLength: 0)
         }
         .cardStyle()
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var mealScanArea: some View {
         if hasMealPhoto {
-            // After a scan: show it worked, with a Retake button.
+            // After a scan: show it worked, with a button to scan another dish.
             Button {
                 isShowingMealCamera = true
             } label: {
@@ -171,20 +200,21 @@ struct LogVisitView: View {
                         Text("Meal recognised")
                             .font(.headline)
                             .foregroundStyle(Theme.ink)
-                        Text("Dish and cuisine filled in below")
+                        Text("Dishes added below")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer(minLength: 8)
 
-                    Label("Retake", systemImage: "camera")
+                    Label("Scan another", systemImage: "camera")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.orange)
+                        .foregroundStyle(Theme.orangeText)
                 }
                 .cardStyle(padding: 14)
             }
             .buttonStyle(.pressableCard)
+            .accessibilityHint("Opens the camera to add another dish")
         } else {
             Button {
                 isShowingMealCamera = true
@@ -211,7 +241,104 @@ struct LogVisitView: View {
                 .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             }
             .buttonStyle(.pressableCard)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Opens the camera")
         }
+    }
+
+    /// The list of dishes and drinks, each with its own price.
+    private var itemsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionCaption("What did you eat?")
+
+            ForEach($items) { $item in
+                itemRow($item)
+            }
+
+            Button {
+                items.append(VisitItemDraft())
+            } label: {
+                Label("Add another item", systemImage: "plus.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.orangeText)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func itemRow(_ item: Binding<VisitItemDraft>) -> some View {
+        // Name and price side by side; one above the other with very large text.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+
+        return layout {
+            InputField(placeholder: "Dish or drink", text: item.name)
+
+            HStack(spacing: 4) {
+                InputField(placeholder: "LKR", text: item.priceText)
+                    .keyboardType(.numberPad)
+                    .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 110)
+                    .accessibilityLabel("Price of \(item.wrappedValue.name.isEmpty ? "this item" : item.wrappedValue.name)")
+
+                if items.count > 1 {
+                    Button {
+                        items.removeAll { $0.id == item.wrappedValue.id }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove \(item.wrappedValue.name.isEmpty ? "item" : item.wrappedValue.name)")
+                }
+            }
+        }
+    }
+
+    /// The total spent, with the Scan receipt button.
+    private var totalSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionCaption("Total spent (LKR)")
+                Spacer()
+                Button {
+                    isShowingReceiptScanner = true
+                } label: {
+                    Label(isAmountFromReceipt ? "Rescan receipt" : "Scan receipt", systemImage: "doc.text.viewfinder")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.orangeText)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityHint("Reads the items and total from a photo of your receipt")
+            }
+
+            InputField(placeholder: "Amount spent", text: typedTotal, prefix: amount.isEmpty ? nil : "LKR")
+                .keyboardType(.numberPad)
+
+            // e.g. the receipt total includes a service charge, or some prices are missing.
+            if itemsTotal > 0 && itemsTotal != amountValue {
+                Text("The items add up to \(itemsTotal.lkr).")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// The total field. Typing in it stops the total being filled in automatically.
+    private var typedTotal: Binding<String> {
+        Binding(
+            get: { amount },
+            set: { newValue in
+                amount = newValue
+                hasTypedTotal = true
+            }
+        )
     }
 
     private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -246,7 +373,7 @@ struct MealCameraView: View {
     private let menu: [String]
     private let recognizer: MealRecognizer
     private let initialPhoto: UIImage?
-    private let onConfirm: (MealPrediction) -> Void
+    private let onConfirm: ([MealPrediction]) -> Void
 
     @State private var camera = CameraService()
     @State private var cameraStatus = CameraStatus.starting
@@ -254,7 +381,7 @@ struct MealCameraView: View {
     @State private var isFlashOn = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isShowingResults = false
-    @State private var confirmedPrediction: MealPrediction?
+    @State private var confirmedDishes: [MealPrediction] = []
     @State private var wantsManualEntry = false
 
     /// `menu` is the restaurant's dishes (they get a boost).
@@ -263,7 +390,7 @@ struct MealCameraView: View {
         menu: [String] = [],
         recognizer: MealRecognizer = CoreMLMealRecognizer.shared,
         initialPhoto: UIImage? = nil,
-        onConfirm: @escaping (MealPrediction) -> Void
+        onConfirm: @escaping ([MealPrediction]) -> Void
     ) {
         self.menu = menu
         self.recognizer = recognizer
@@ -306,8 +433,8 @@ struct MealCameraView: View {
                 MealRecognitionSheet(
                     photo: photo,
                     predictions: predictions,
-                    onConfirm: { prediction in
-                        confirmedPrediction = prediction
+                    onConfirm: { dishes in
+                        confirmedDishes = dishes
                         isShowingResults = false
                     },
                     onEnterManually: {
@@ -481,6 +608,7 @@ struct MealCameraView: View {
                 Text("Choose from Photos")
                     .font(.headline)
                     .foregroundStyle(.white)
+                    .frame(minHeight: 44)
             }
             .disabled(isBusy)
         }
@@ -582,15 +710,15 @@ struct MealCameraView: View {
     /// Clears the photo so the student can try again.
     private func retake() {
         selectedPhoto = nil
-        confirmedPrediction = nil
+        confirmedDishes = []
         wantsManualEntry = false
         step = .camera
     }
 
     /// Runs when the results sheet closes, however it was closed.
     private func handleResultsDismissed() {
-        if let confirmedPrediction {
-            onConfirm(confirmedPrediction)
+        if !confirmedDishes.isEmpty {
+            onConfirm(confirmedDishes)
             dismiss()
         } else if wantsManualEntry {
             dismiss()
@@ -625,24 +753,45 @@ private struct CameraPreview: UIViewRepresentable {
     }
 }
 
-/// "We found matches!": the top three dishes for the photo.
+/// "We found matches!": the top three dishes for the photo. The student can pick more than one.
 struct MealRecognitionSheet: View {
     let photo: UIImage?
     let predictions: [MealPrediction]
-    let onConfirm: (MealPrediction) -> Void
+    let onConfirm: ([MealPrediction]) -> Void
     let onEnterManually: () -> Void
 
-    @State private var selectedIndex = 0
+    /// Positions of the ticked dishes. The most likely one starts ticked.
+    @State private var selectedIndexes: Set<Int> = [0]
 
-    private var selected: MealPrediction {
-        predictions[selectedIndex]
+    /// The ticked dishes, in the order they're listed.
+    private var selectedDishes: [MealPrediction] {
+        predictions.indices.filter { selectedIndexes.contains($0) }.map { predictions[$0] }
     }
 
     private var isConfident: Bool {
         (predictions.first?.confidence ?? 0) >= MealClassifier.confidentThreshold
     }
 
+    private var confirmTitle: String {
+        switch selectedDishes.count {
+        case 0: "Pick at least one dish"
+        case 1: "Add \(selectedDishes[0].label)"
+        default: "Add \(selectedDishes.count) dishes"
+        }
+    }
+
     var body: some View {
+        ScrollView {
+            sheetContent
+                .padding(20)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents([.fraction(0.8), .large])
+        .brandSheetStyle()
+        .sensoryFeedback(.selection, trigger: selectedIndexes)
+    }
+
+    private var sheetContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 14) {
                 Group {
@@ -651,7 +800,7 @@ struct MealRecognitionSheet: View {
                             .resizable()
                             .scaledToFill()
                     } else {
-                        FoodImageView(imageName: nil, cuisine: selected.cuisine)
+                        FoodImageView(imageName: nil, cuisine: predictions.first?.cuisine)
                     }
                 }
                 .frame(width: 64, height: 64)
@@ -666,42 +815,54 @@ struct MealRecognitionSheet: View {
                     Text(isConfident ? "We found matches!" : "Is it one of these?")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
                 }
             }
 
-            if !isConfident {
-                Label("Not sure about this one. Tap the right dish, or enter it yourself.", systemImage: "questionmark.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            Label(
+                isConfident ? "Tick every dish you had." : "Not sure about this one. Tick the right dishes, or enter them yourself.",
+                systemImage: isConfident ? "checklist" : "questionmark.circle"
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
 
             ForEach(Array(predictions.enumerated()), id: \.element.id) { index, prediction in
                 Button {
-                    selectedIndex = index
+                    toggle(index)
                 } label: {
-                    PredictionRow(prediction: prediction, isSelected: index == selectedIndex)
+                    PredictionRow(prediction: prediction, isSelected: selectedIndexes.contains(index))
                 }
                 .buttonStyle(.plain)
             }
 
-            HStack {
-                Text("Suggested cuisine")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                PillLabel(text: selected.cuisine.rawValue, style: .green, font: .subheadline.weight(.semibold))
+            if let first = selectedDishes.first {
+                AdaptiveStack(spacing: 6) {
+                    Text("Suggested cuisine")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    PillLabel(text: first.cuisine.rawValue, style: .green, font: .subheadline.weight(.semibold))
+                }
+                .accessibilityElement(children: .combine)
             }
 
-            Button("Confirm \(selected.label)") {
-                onConfirm(selected)
+            Button(confirmTitle) {
+                onConfirm(selectedDishes)
             }
             .buttonStyle(.brandPrimary)
+            .disabled(selectedDishes.isEmpty)
 
             Button("Not right? Enter manually", action: onEnterManually)
                 .buttonStyle(BrandTextButtonStyle(color: .secondary))
         }
-        .padding(20)
-        .presentationDetents([.fraction(0.75), .large])
-        .brandSheetStyle()
+    }
+
+    /// Ticks or unticks a dish.
+    private func toggle(_ index: Int) {
+        if selectedIndexes.contains(index) {
+            selectedIndexes.remove(index)
+        } else {
+            selectedIndexes.insert(index)
+        }
     }
 }
 
@@ -714,26 +875,33 @@ private struct PredictionRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(prediction.label)
-                    .font(.headline)
-                    .foregroundStyle(Theme.ink)
-                if prediction.isOnMenu {
-                    PillLabel(text: "On the menu", font: .caption2.weight(.semibold))
-                        .fixedSize()
-                }
-                Spacer()
-                Text(verbatim: "\(percentage)%")
-                    .font(.headline)
-                    .foregroundStyle(isSelected ? Theme.ink : Color.secondary)
-            }
+        HStack(alignment: .top, spacing: 12) {
+            // A tick box, so it's clear more than one dish can be picked.
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isSelected ? Theme.orange : Theme.faintInk)
 
-            ProgressBar(
-                value: prediction.confidence,
-                tint: isSelected ? Theme.orange : Theme.faintInk,
-                height: 6
-            )
+            VStack(alignment: .leading, spacing: 10) {
+                AdaptiveStack(spacing: 8) {
+                    Text(prediction.label)
+                        .font(.headline)
+                        .foregroundStyle(Theme.ink)
+                    if prediction.isOnMenu {
+                        PillLabel(text: "On the menu", font: .caption2.weight(.semibold))
+                            .fixedSize()
+                    }
+                    Spacer()
+                    Text(verbatim: "\(percentage)%")
+                        .font(.headline)
+                        .foregroundStyle(isSelected ? Theme.ink : Color.secondary)
+                }
+
+                ProgressBar(
+                    value: prediction.confidence,
+                    tint: isSelected ? Theme.orange : Theme.faintInk,
+                    height: 6
+                )
+            }
         }
         .padding(16)
         .cardBackground(cornerRadius: 16, shadowStrength: 0.4)
@@ -741,9 +909,10 @@ private struct PredictionRow: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(isSelected ? Theme.orange : .clear, lineWidth: 2)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(prediction.label), \(percentage) percent\(prediction.isOnMenu ? ", on the menu" : "")")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(prediction.label), \(percentage) percent likely\(prediction.isOnMenu ? ", on the menu" : "")")
+        .accessibilityHint(isSelected ? "Double-tap to untick" : "Double-tap to tick")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
@@ -934,29 +1103,44 @@ struct ReceiptScanView: View {
 
     @ViewBuilder
     private func resultDetails(for receipt: ReceiptScan) -> some View {
-        SectionCaption("Total detected")
-
         if let total = receipt.total {
-            Text(total.lkr)
-                .font(.largeTitle.bold())
-                .monospacedDigit()
-                .foregroundStyle(Theme.ink)
+            if !receipt.items.isEmpty {
+                SectionCaption(receipt.items.count == 1 ? "1 item found" : "\(receipt.items.count) items found")
+                receiptItemList(receipt.items)
+                Divider()
+                    .padding(.vertical, 6)
+            }
+
+            AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
+                Text("Total")
+                    .font(.headline)
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+                Text(total.lkr)
+                    .font(.title.bold())
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.ink)
+            }
+            .accessibilityElement(children: .combine)
 
             if !receipt.isTotalFromTotalLine {
                 Label("No TOTAL line was found, so this is the largest amount. Check it before using it.",
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
-                    .foregroundStyle(Theme.orange)
+                    .foregroundStyle(Theme.orangeText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !receipt.items.isEmpty {
-                Text(receipt.items.map { "\($0.name) \($0.price.lkr)" }.joined(separator: " · "))
+            // The total can be more than the items, e.g. because of a service charge.
+            let itemsSum = receipt.items.reduce(0) { $0 + $1.price }
+            if !receipt.items.isEmpty && itemsSum != total {
+                Text("The items add up to \(itemsSum.lkr). The rest may be tax or a service charge.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button("Use this amount") {
+            Button(receipt.items.isEmpty ? "Use this amount" : "Use these items") {
                 onUseReceipt(receipt)
                 dismiss()
             }
@@ -974,6 +1158,33 @@ struct ReceiptScanView: View {
             Button("Retake", action: retake)
                 .buttonStyle(.brandPrimary)
                 .padding(.top, 12)
+        }
+    }
+
+    /// Each item on the receipt with its price. Long receipts scroll, so the buttons stay on screen.
+    @ViewBuilder
+    private func receiptItemList(_ items: [ReceiptScan.LineItem]) -> some View {
+        let list = VStack(alignment: .leading, spacing: 8) {
+            ForEach(items) { item in
+                AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 2) {
+                    Text(item.name)
+                    Spacer(minLength: 12)
+                    Text(item.price.lkr)
+                        .monospacedDigit()
+                }
+                .font(.subheadline)
+                .foregroundStyle(Theme.ink)
+                .accessibilityElement(children: .combine)
+            }
+        }
+
+        if items.count > 4 {
+            ScrollView {
+                list
+            }
+            .frame(height: 150)
+        } else {
+            list
         }
     }
 
@@ -1115,12 +1326,17 @@ struct StampEarnedPopup: View {
                         VStack(spacing: 6) {
                             Image(systemName: cuisine.symbolName)
                                 .font(.title.weight(.bold))
-                                .symbolEffect(.bounce, value: isStamped)
+                                .symbolEffect(.bounce, value: reduceMotion ? false : isStamped)
                             Text(cuisine.rawValue.uppercased())
                                 .font(.caption.weight(.heavy))
                                 .multilineTextAlignment(.center)
                         }
                         .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.6)
+                        .padding(10)
+                        // It's artwork with a fixed size, so its text stops growing at large sizes.
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                     }
                     .shadow(color: Theme.orange.opacity(0.4), radius: 12, y: 6)
             }
@@ -1128,8 +1344,13 @@ struct StampEarnedPopup: View {
             .scaleEffect(isStamped || reduceMotion ? 1 : 1.35)
             .opacity(isStamped || reduceMotion ? 1 : 0)
             .onAppear {
-                withAnimation(.spring(duration: 0.5, bounce: 0.45).delay(0.1)) {
+                // With Reduce Motion on, the stamp just appears instead of spinning and bouncing in.
+                if reduceMotion {
                     isStamped = true
+                } else {
+                    withAnimation(.spring(duration: 0.5, bounce: 0.45).delay(0.1)) {
+                        isStamped = true
+                    }
                 }
             }
             .sensoryFeedback(.success, trigger: isStamped)
@@ -1143,7 +1364,7 @@ struct StampEarnedPopup: View {
                     .foregroundStyle(.secondary)
             }
 
-            ProgressBar(value: quest.cuisineProgress, tint: Theme.orange)
+            ProgressBar(value: quest.cuisineProgress, tint: Theme.orange, label: "Quest progress")
                 .frame(maxWidth: 200)
 
             VStack(spacing: 10) {

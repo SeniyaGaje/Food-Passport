@@ -122,6 +122,7 @@ struct AppSheetContent: View {
 /// Shows the current pop-up in the middle of a dimmed screen.
 struct PopupHost: View {
     @Environment(AppRouter.self) private var router
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -129,13 +130,17 @@ struct PopupHost: View {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .transition(.opacity)
+                    .accessibilityHidden(true)
 
                 popupContent(popup)
                     .padding(.horizontal, 28)
-                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+                    // Zooms in, or just fades in with Reduce Motion on.
+                    .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                    // VoiceOver stays inside the pop-up until it's closed.
+                    .accessibilityAddTraits(.isModal)
             }
         }
-        .animation(.spring(duration: 0.35), value: router.popup)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35), value: router.popup)
     }
 
     @ViewBuilder
@@ -188,6 +193,12 @@ struct PopupHost: View {
 /// Shows banners and short messages at the top of the screen.
 struct TopMessageHost: View {
     @Environment(AppRouter.self) private var router
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Slides down from the top, or just fades in with Reduce Motion on.
+    private var messageTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -195,17 +206,28 @@ struct TopMessageHost: View {
                 NotificationBannerView(title: banner.title, message: banner.message, imageName: banner.imageName) {
                     router.openBanner()
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(messageTransition)
             }
 
             if let toast = router.toast {
                 ToastView(text: toast.text)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(messageTransition)
             }
         }
         .padding(.horizontal, 12)
-        .animation(.spring(duration: 0.4), value: router.banner)
-        .animation(.spring(duration: 0.4), value: router.toast)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.4), value: router.banner)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.4), value: router.toast)
+        // Read new messages out loud for VoiceOver users, since they disappear on their own.
+        .onChange(of: router.toast) { _, toast in
+            if let toast {
+                AccessibilityNotification.Announcement(toast.text).post()
+            }
+        }
+        .onChange(of: router.banner) { _, banner in
+            if let banner {
+                AccessibilityNotification.Announcement(banner.title).post()
+            }
+        }
     }
 }
 

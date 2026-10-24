@@ -13,6 +13,10 @@ enum Theme {
     static let orangeLight = Color(hex: 0xFF8A3D)
     static let orangeDark = Color(hex: 0xE5530E)
     static let orangeTint = Color(light: 0xFFEDE2, dark: 0x3D2414)
+    /// Deeper orange behind white text (4.3:1 contrast with white).
+    static let deepOrange = Color(hex: 0xD9480A)
+    /// Orange for small text. Darker in light mode so it's easy to read on white (5.2:1).
+    static let orangeText = Color(light: 0xC2410C, dark: 0xFF8A3D)
 
     // Neutrals
 
@@ -46,20 +50,24 @@ enum Theme {
 
     static let green = Color(light: 0x1E9E57, dark: 0x34C474)
     static let greenTint = Color(light: 0xE3F5EA, dark: 0x163423)
+    /// Green for small text, dark enough to read on white (5.4:1).
+    static let greenText = Color(light: 0x157A42, dark: 0x34C474)
     static let gold = Color(hex: 0xF5A524)
     static let yellowTint = Color(light: 0xFFF4D6, dark: 0x3A2F12)
     static let destructive = Color(light: 0xF0453A, dark: 0xFF5A4F)
 
     // Gradients
 
+    // Gradients with white text on them are kept dark enough for the text to be readable.
+
     static let primaryGradient = LinearGradient(
-        colors: [orangeLight, orangeDark],
+        colors: [orange, deepOrange],
         startPoint: .leading,
         endPoint: .trailing
     )
 
     static let questGradient = LinearGradient(
-        colors: [Color(hex: 0xFF9A4D), Color(hex: 0xE8550F)],
+        colors: [Color(hex: 0xD0450C), Color(hex: 0xA83709)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -230,17 +238,26 @@ extension View {
 /// Makes a bottom sheet as tall as what's inside it, so nothing is cut off on small iPhones.
 private struct FittedSheetHeight: ViewModifier {
     @State private var contentHeight: CGFloat = 420
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     func body(content: Content) -> some View {
-        content
-            .fixedSize(horizontal: false, vertical: true)
-            // Measure the content, then use that height for the sheet.
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                contentHeight = newHeight
+        if dynamicTypeSize.isAccessibilitySize {
+            // With the largest text sizes the content won't fit, so use a full-height sheet that scrolls.
+            ScrollView {
+                content
             }
-            .presentationDetents([.height(contentHeight)])
+            .presentationDetents([.large])
+        } else {
+            content
+                .fixedSize(horizontal: false, vertical: true)
+                // Measure the content, then use that height for the sheet.
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { newHeight in
+                    contentHeight = newHeight
+                }
+                .presentationDetents([.height(contentHeight)])
+        }
     }
 }
 
@@ -308,6 +325,8 @@ struct BrandPrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.headline)
             .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(Theme.primaryGradient, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
             .shadow(color: Theme.orange.opacity(isEnabled ? 0.3 : 0), radius: 12, y: 6)
@@ -322,6 +341,8 @@ struct BrandSecondaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.headline)
             .foregroundStyle(Theme.ink)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(Theme.buttonGray, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
             .pressedEffect(configuration.isPressed)
@@ -333,7 +354,9 @@ struct BrandTintedButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundStyle(Theme.orangeDark)
+            .foregroundStyle(Theme.orangeText)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(Theme.orangeTint, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
             .pressedEffect(configuration.isPressed)
@@ -384,8 +407,18 @@ extension ButtonStyle where Self == BrandTextButtonStyle {
 
 private extension View {
     func pressedEffect(_ isPressed: Bool) -> some View {
-        self
-            .scaleEffect(isPressed ? 0.98 : 1)
+        modifier(PressedEffect(isPressed: isPressed))
+    }
+}
+
+/// Buttons shrink a little while pressed. With Reduce Motion on, they only fade.
+private struct PressedEffect: ViewModifier {
+    let isPressed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1)
             .opacity(isPressed ? 0.85 : 1)
             .animation(.easeOut(duration: 0.15), value: isPressed)
     }

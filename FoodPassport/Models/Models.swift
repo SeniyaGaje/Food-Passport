@@ -86,6 +86,74 @@ struct Visit: Identifiable, Hashable, Codable {
     let isAutoDetected: Bool
     let isFromReceipt: Bool
     let imageName: String
+    /// Everything eaten on this visit. Visits saved before this existed don't have it.
+    var items: [VisitItem]? = nil
+
+    /// The visit's items. Older visits get one item made from their dish name and amount.
+    var allItems: [VisitItem] {
+        if let items, !items.isEmpty {
+            return items
+        }
+        return [VisitItem(name: dishName, price: amount)]
+    }
+
+    /// A short title for lists, e.g. "Kottu Roti + 1 more".
+    var title: String {
+        let items = allItems
+        if items.count > 1 {
+            return "\(items[0].name) + \(items.count - 1) more"
+        }
+        return items[0].name
+    }
+}
+
+/// One food or drink on a visit, e.g. Kottu Roti for LKR 750.
+struct VisitItem: Identifiable, Hashable, Codable {
+    var id = UUID().uuidString
+    var name: String
+    /// nil if the student didn't enter a price for it.
+    var price: Int?
+}
+
+/// An item while it's being typed on Log your visit. The price is kept as text until saving.
+struct VisitItemDraft: Identifiable, Equatable {
+    var id = UUID()
+    var name = ""
+    var priceText = ""
+
+    /// The price as a number, ignoring "LKR" and commas.
+    var price: Int? {
+        Int(priceText.filter { $0.isNumber })
+    }
+
+    var isEmpty: Bool {
+        name.trimmed.isEmpty && priceText.trimmed.isEmpty
+    }
+
+    /// Adds scanned dishes to the list. Dishes already listed aren't added twice,
+    /// and empty rows are dropped, so the list never has a blank row before the new dishes.
+    static func adding(_ newItems: [VisitItemDraft], to list: [VisitItemDraft]) -> [VisitItemDraft] {
+        var result = list.filter { !$0.isEmpty }
+
+        for item in newItems {
+            let alreadyListed = result.contains { $0.name.trimmed.caseInsensitiveCompare(item.name.trimmed) == .orderedSame }
+            if !alreadyListed {
+                result.append(item)
+            }
+        }
+
+        // Always leave at least one row to type in.
+        return result.isEmpty ? [VisitItemDraft()] : result
+    }
+
+    /// The prices added up. Items without a price count as 0.
+    static func total(of items: [VisitItemDraft]) -> Int {
+        var sum = 0
+        for item in items {
+            sum += item.price ?? 0
+        }
+        return sum
+    }
 }
 
 /// The headings in the History list.

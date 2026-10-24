@@ -42,6 +42,26 @@ struct ReceiptParserTests {
         #expect(scan.totalBoundingBox == receipt[6].boundingBox)
     }
 
+    @Test("Every item on a longer receipt is read with its own price")
+    func manyItems() {
+        let scan = ReceiptParser.parse(rows(
+            "SPICE ROUTE",
+            "Masala Dosa 400.00",
+            "2 x Garlic Naan 500.00",
+            "Butter Chicken 850.00",
+            "Mango Lassi 300.00",
+            "Sub Total 2,050.00",
+            "Service Charge 205.00",
+            "Grand Total 2,255.00"
+        ))
+
+        #expect(scan.items.map(\.name) == ["Masala Dosa", "Garlic Naan", "Butter Chicken", "Mango Lassi"])
+        #expect(scan.items.map(\.price) == [400, 500, 850, 300])
+        // The total includes the service charge, so it's more than the items add up to.
+        #expect(scan.total == 2255)
+        #expect(scan.items.reduce(0) { $0 + $1.price } == 2050)
+    }
+
     @Test("Finds the total when it is printed on the line under TOTAL")
     func totalOnNextLine() {
         let receipt = rows("Kottu Roti 1,250.00", "TOTAL", "LKR 1,250.00")

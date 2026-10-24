@@ -38,17 +38,37 @@ struct WelcomeView: View {
     private let headerTop = Color(light: 0xFFC9A6, dark: 0x2B1B12)
     private let headerBottom = Color(light: 0xFCE3D4, dark: 0x1A1513)
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        // The photo fills the screen; the title and buttons sit on top of it.
-        FoodImageView(imageName: "welcome_hero", cuisine: .sriLankan)
-            .ignoresSafeArea()
-            .overlay(alignment: .top) {
-                header
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // With the largest text sizes, everything scrolls in one column instead of covering the photo.
+                ScrollView {
+                    VStack(spacing: 20) {
+                        header
+                        FoodImageView(imageName: "welcome_hero", cuisine: .sriLankan, cornerRadius: Theme.Radius.sheet)
+                            .frame(height: 220)
+                            .padding(.horizontal, Theme.screenMargin)
+                        buttonStack(secondaryColor: Theme.ink)
+                            .padding(.horizontal, Theme.Spacing.xl)
+                            .padding(.bottom, 8)
+                    }
+                }
+                .appBackground()
+            } else {
+                // The photo fills the screen; the title and buttons sit on top of it.
+                FoodImageView(imageName: "welcome_hero", cuisine: .sriLankan)
+                    .ignoresSafeArea()
+                    .overlay(alignment: .top) {
+                        header
+                    }
+                    .overlay(alignment: .bottom) {
+                        buttons
+                    }
             }
-            .overlay(alignment: .bottom) {
-                buttons
-            }
-            .toolbar(.hidden, for: .navigationBar)
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var header: some View {
@@ -59,6 +79,10 @@ struct WelcomeView: View {
                 Text("FoodPassport")
                     .font(.system(size: titleSize, weight: .bold))
                     .foregroundStyle(Theme.ink)
+                    // It's the app's name, so it shrinks to fit rather than breaking in the middle.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("Every new cuisine is a new stamp")
                     .font(.title3)
@@ -82,6 +106,17 @@ struct WelcomeView: View {
     }
 
     private var buttons: some View {
+        buttonStack(secondaryColor: .white)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, 80)
+        .padding(.bottom, 8)
+        .background {
+            LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    private func buttonStack(secondaryColor: Color) -> some View {
         VStack(spacing: 8) {
             NavigationLink(value: OnboardingRoute.signUp) {
                 Text("Get started")
@@ -91,14 +126,7 @@ struct WelcomeView: View {
             NavigationLink(value: OnboardingRoute.signIn) {
                 Text("I already have an account")
             }
-            .buttonStyle(BrandTextButtonStyle(color: .white))
-        }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.top, 80)
-        .padding(.bottom, 8)
-        .background {
-            LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .bottom)
+            .buttonStyle(BrandTextButtonStyle(color: secondaryColor))
         }
     }
 }
@@ -107,6 +135,7 @@ struct WelcomeView: View {
 struct PermissionsView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// The answer for each permission asked so far (true means allowed).
     @State private var answers: [OnboardingPermission: Bool] = [:]
 
@@ -151,6 +180,7 @@ struct PermissionsView: View {
             .padding(.horizontal, Theme.Spacing.xl)
             .padding(.top, Theme.Spacing.s)
             .padding(.bottom, Theme.Spacing.xs)
+            .background(dynamicTypeSize.isAccessibilitySize ? AnyShapeStyle(.bar) : AnyShapeStyle(.clear))
         }
         .appBackground()
         .navigationBarTitleDisplayMode(.inline)
@@ -266,6 +296,7 @@ private struct PermissionCard: View {
 struct BudgetSetupView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var budget = 3000
 
     var body: some View {
@@ -310,6 +341,7 @@ struct BudgetSetupView: View {
             .padding(.horizontal, Theme.Spacing.xl)
             .padding(.top, Theme.Spacing.s)
             .padding(.bottom, Theme.Spacing.xs)
+            .background(dynamicTypeSize.isAccessibilitySize ? AnyShapeStyle(.bar) : AnyShapeStyle(.clear))
         }
         .appBackground()
         .navigationBarTitleDisplayMode(.inline)

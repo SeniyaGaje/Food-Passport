@@ -161,6 +161,7 @@ struct PlanVisitSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let restaurant: Restaurant
 
@@ -196,7 +197,7 @@ struct PlanVisitSheet: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 SectionCaption("Select date")
-                HStack(spacing: 8) {
+                LazyVGrid(columns: chipColumns(count: days.count, minimumWidth: 110), spacing: 8) {
                     ForEach(days.indices, id: \.self) { index in
                         dayChip(for: days[index], isSelected: index == selectedDayIndex) {
                             selectedDayIndex = index
@@ -207,7 +208,7 @@ struct PlanVisitSheet: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 SectionCaption("Select time")
-                HStack(spacing: 8) {
+                LazyVGrid(columns: chipColumns(count: timeSlots.count, minimumWidth: 140), spacing: 8) {
                     ForEach(timeSlots, id: \.self) { minutes in
                         timeChip(minutes, isSelected: minutes == selectedMinutes) {
                             selectedMinutes = minutes
@@ -265,6 +266,14 @@ struct PlanVisitSheet: View {
                 router.showToast("Visit to \(restaurant.name) planned for \(day)")
             }
         }
+    }
+
+    /// All chips in one row normally; with the largest text sizes, as many as fit per row.
+    private func chipColumns(count: Int, minimumWidth: CGFloat) -> [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.adaptive(minimum: minimumWidth), spacing: 8)]
+        }
+        return Array(repeating: GridItem(.flexible(), spacing: 8), count: count)
     }
 
     /// The day at that time, e.g. 780 minutes is 1:00 PM.
@@ -358,6 +367,8 @@ struct DirectionsView: View {
 
             Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
                 RestaurantPin(isSelected: true)
+                    .accessibilityElement()
+                    .accessibilityLabel(restaurant.name)
             }
             .annotationTitles(.hidden)
         }

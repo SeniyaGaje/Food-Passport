@@ -82,6 +82,10 @@ struct QuestDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                // The ring has a fixed size, so the text shrinks to stay inside it.
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
+                .padding(30)
             }
             // About half the screen width, so it looks the same on every iPhone.
             .containerRelativeFrame(.horizontal) { width, _ in
@@ -90,7 +94,7 @@ struct QuestDetailView: View {
             .aspectRatio(1, contentMode: .fit)
             .accessibilityElement(children: .combine)
 
-            HStack(spacing: Theme.Spacing.xs) {
+            AdaptiveStack(horizontalAlignment: .center, spacing: Theme.Spacing.xs) {
                 PillLabel(text: quest.duration.rawValue, systemImage: "calendar", style: .orange)
                 PillLabel(text: "\(max(quest.targetCuisines - quest.cuisinesTried, 0)) to go", systemImage: "flag.checkered")
             }
@@ -102,12 +106,12 @@ struct QuestDetailView: View {
     private var budgetCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionCaption("Quest budget")
-            ProgressBar(value: quest.budgetProgress, height: 14)
-            HStack {
+            ProgressBar(value: quest.budgetProgress, height: 14, label: "Budget used")
+            AdaptiveStack(spacing: 4) {
                 Text("\(quest.spent.lkr) spent")
                     .fontWeight(.semibold)
                     .foregroundStyle(Theme.ink)
-                Spacer()
+                Spacer(minLength: 0)
                 Text("\(quest.remainingBudget.lkr) remaining")
                     .foregroundStyle(.secondary)
             }
@@ -117,7 +121,7 @@ struct QuestDetailView: View {
     }
 
     private var explanationCard: some View {
-        HStack(alignment: .top, spacing: 14) {
+        AdaptiveStack(verticalAlignment: .top, spacing: 14) {
             IconTile(systemImage: "lightbulb.fill", tint: Theme.gold, size: 40)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -215,7 +219,7 @@ struct QuestEditorSheet: View {
     }
 
     private var cuisineCountRow: some View {
-        HStack {
+        AdaptiveStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Number of cuisines")
                     .font(.headline)
@@ -224,7 +228,7 @@ struct QuestEditorSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            Spacer(minLength: 0)
             CountStepper(value: $cuisineCount, range: 1...8)
                 .accessibilityLabel("Number of cuisines")
         }
@@ -268,7 +272,7 @@ struct QuestEditorSheet: View {
     private var durationPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionCaption("Duration")
-            HStack(spacing: 12) {
+            AdaptiveStack(spacing: 12) {
                 ForEach(QuestDuration.allCases) { option in
                     let isSelected = option == duration
                     Button {
@@ -314,9 +318,15 @@ struct FoodTrailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(trail.summary)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(trail.name)
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(trail.summary)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
 
                 // The map's height follows the screen width, so it keeps its shape.
                 trailMap
@@ -329,18 +339,18 @@ struct FoodTrailView: View {
                     .shadow(color: Theme.shadow.opacity(0.1), radius: 14, y: 6)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack {
+                    AdaptiveStack(spacing: 4) {
                         Text("\(trail.visitedCount) of \(trail.stops.count) stops")
                             .font(.headline)
                             .foregroundStyle(Theme.ink)
-                        Spacer()
+                        Spacer(minLength: 0)
                         Text(verbatim: "\(Int(trail.progress * 100))%")
                             .font(.headline)
                             .monospacedDigit()
-                            .foregroundStyle(Theme.green)
+                            .foregroundStyle(Theme.greenText)
                     }
 
-                    ProgressBar(value: trail.progress, tint: Theme.green, height: 10)
+                    ProgressBar(value: trail.progress, tint: Theme.green, height: 10, label: "Trail progress")
                 }
                 .cardStyle(padding: 18)
 
@@ -364,8 +374,7 @@ struct FoodTrailView: View {
         }
         .scrollIndicators(.hidden)
         .appBackground()
-        .navigationTitle(trail.name)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitleHidden(trail.name)
     }
 
     private var trailMap: some View {
@@ -376,6 +385,7 @@ struct FoodTrailView: View {
             ForEach(Array(trail.stops.enumerated()), id: \.element.id) { index, stop in
                 Annotation(stop.restaurant.name, coordinate: stop.restaurant.coordinate) {
                     NumberedMapMarker(number: index + 1, status: trail.status(of: stop))
+                        .accessibilityValue(stop.restaurant.name)
                 }
                 .annotationTitles(.hidden)
             }
@@ -390,7 +400,7 @@ private struct TrailStopRow: View {
     let status: TrailStopStatus
 
     var body: some View {
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             badge
 
             VStack(alignment: .leading, spacing: 3) {
@@ -402,7 +412,7 @@ private struct TrailStopRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             switch status {
             case .visited:
@@ -460,20 +470,20 @@ struct WeeklyChallengeView: View {
                     .accessibilityAddTraits(.isHeader)
 
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack {
+                    AdaptiveStack(spacing: 8) {
                         PillLabel(
                             text: "\(challenge.daysLeft) days left",
                             systemImage: "timer",
                             style: .yellow,
                             font: .subheadline.weight(.semibold)
                         )
-                        Spacer()
+                        Spacer(minLength: 0)
                         Text("\(challenge.completed) of \(challenge.target) completed")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
 
-                    ProgressBar(value: challenge.progress, tint: Theme.orange)
+                    ProgressBar(value: challenge.progress, tint: Theme.orange, label: "Challenge progress")
 
                     Text(challenge.details)
                         .font(.subheadline)
@@ -505,7 +515,7 @@ private struct SuggestedPlaceRow: View {
 
     var body: some View {
         // The price goes under the name, so long names fit on small iPhones.
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             FoodImageView(imageName: stop.restaurant.imageName, cuisine: stop.restaurant.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
 
@@ -521,7 +531,7 @@ private struct SuggestedPlaceRow: View {
                 Text("Est. \(stop.estimatedCost.lkr)")
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(Theme.orange)
+                    .foregroundStyle(Theme.orangeText)
             }
 
             Spacer(minLength: 8)
