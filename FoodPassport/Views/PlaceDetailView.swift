@@ -35,8 +35,7 @@ struct PlaceDetailView: View {
         }
     }
 
-    /// The photo keeps the same shape on every iPhone (its height follows the screen width),
-    /// with the name on a dark fade so it stays readable on any photo.
+    /// The photo with the name on a dark fade, so the name is easy to read.
     private var hero: some View {
         FoodImageView(imageName: restaurant.imageName, cuisine: restaurant.cuisine)
             .aspectRatio(1.45, contentMode: .fit)
@@ -62,7 +61,7 @@ struct PlaceDetailView: View {
     }
 
     private var facts: some View {
-        // Side by side normally; stacked with larger text sizes, where the two wouldn't fit on one line.
+        // Side by side normally; one above the other with large text, where they wouldn't fit.
         let layout = dynamicTypeSize >= .xLarge
             ? AnyLayout(VStackLayout(spacing: Theme.Spacing.s))
             : AnyLayout(HStackLayout(spacing: Theme.Spacing.s))
@@ -127,7 +126,7 @@ struct PlaceDetailView: View {
     }
 }
 
-/// One key fact about a place, e.g. "5 min walk · 0.4 km away".
+/// A small fact tile, e.g. "5 min walk".
 private struct FactTile: View {
     let systemImage: String
     let value: String
@@ -157,7 +156,7 @@ private struct FactTile: View {
     }
 }
 
-/// Bottom sheet for choosing a date and time to visit a restaurant.
+/// The sheet for picking a day and time to visit.
 struct PlanVisitSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
@@ -170,10 +169,11 @@ struct PlanVisitSheet: View {
     @State private var remindMe = true
     @State private var countsTowardsQuest = true
 
+    /// Today and the next four days.
     private let days: [Date] = (0..<5).compactMap {
         Calendar.current.date(byAdding: .day, value: $0, to: .now)
     }
-    /// Time slots as minutes after midnight: 12:30 PM, 1:00 PM, 1:30 PM and 6:30 PM.
+    /// The times to pick from, in minutes after midnight (12:30, 13:00, 13:30, 18:30).
     private let timeSlots = [12 * 60 + 30, 13 * 60, 13 * 60 + 30, 18 * 60 + 30]
 
     private var selectedVisitDate: Date {
@@ -248,6 +248,7 @@ struct PlanVisitSheet: View {
         .brandSheetStyle()
     }
 
+    /// Plans the visit, sets the reminder, and shows a confirmation.
     private func planVisit() {
         let visitDate = selectedVisitDate
         let wantsReminder = remindMe
@@ -266,6 +267,7 @@ struct PlanVisitSheet: View {
         }
     }
 
+    /// The day at that time, e.g. 780 minutes is 1:00 PM.
     private func date(on day: Date, minutes: Int) -> Date {
         Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: day) ?? day
     }
@@ -309,7 +311,7 @@ struct PlanVisitSheet: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// Orange fill for the chosen chip, a plain card for the others.
+    /// Orange for the chosen chip, plain for the rest.
     @ViewBuilder
     private func selectionBackground(isSelected: Bool, cornerRadius: CGFloat) -> some View {
         if isSelected {
@@ -322,7 +324,7 @@ struct PlanVisitSheet: View {
     }
 }
 
-/// Walking route from the student to a restaurant. Start turns on the arrival alert for when they get there.
+/// The walking route to a restaurant. Start turns on the "You've arrived" alert.
 struct DirectionsView: View {
     @Environment(AppState.self) private var appState
     @State private var route: MKRoute?
@@ -332,7 +334,7 @@ struct DirectionsView: View {
 
     let restaurant: Restaurant
 
-    /// The restaurant with its distance kept up to date as the student walks.
+    /// The restaurant with its distance updated as the student walks.
     private var liveRestaurant: Restaurant {
         appState.restaurants.first { $0.id == restaurant.id } ?? restaurant
     }
@@ -347,7 +349,7 @@ struct DirectionsView: View {
                 MapPolyline(route.polyline)
                     .stroke(Theme.orange, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
             } else if let start = appState.userLocation?.coordinate {
-                // No walking route (e.g. offline): a dotted straight line still shows the direction.
+                // No route (e.g. offline): draw a dotted straight line instead.
                 MapPolyline(coordinates: [start, restaurant.coordinate])
                     .stroke(Theme.orange, style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [1, 12]))
             }
@@ -369,7 +371,7 @@ struct DirectionsView: View {
                 .padding(.bottom, 12)
         }
         .navigationTitleHidden("Directions")
-        // Recalculated once the student's location first becomes known.
+        // Work out the route again once we know where the student is.
         .task(id: appState.userLocation == nil) {
             await loadRoute()
         }
@@ -444,7 +446,7 @@ struct DirectionsView: View {
 
     // Actions
 
-    /// Asks MapKit for a walking route from the student's location to the restaurant.
+    /// Asks Apple Maps for a walking route to the restaurant.
     private func loadRoute() async {
         guard let start = appState.userLocation?.coordinate else {
             isLoadingRoute = appState.locationPermission.allowsLocation
@@ -465,6 +467,7 @@ struct DirectionsView: View {
         isLoadingRoute = false
     }
 
+    /// Turns on the "You've arrived" alert for this restaurant.
     private func startNavigation() {
         isNavigating = true
         Task {

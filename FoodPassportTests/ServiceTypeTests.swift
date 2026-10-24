@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import FoodPassport
 
-/// The small value types the services share: reminders, notification taps, permissions and error messages.
+/// Reminders, notification taps, permissions and error messages.
 @Suite("Reminders, permissions and messages")
 @MainActor
 struct ServiceTypeTests {

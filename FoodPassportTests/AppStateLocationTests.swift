@@ -3,7 +3,7 @@ import Foundation
 import CoreLocation
 @testable import FoodPassport
 
-/// Live location, arrival alerts (geofencing) and location-verified visits, with a mock "student" moved around campus.
+/// Location, arrival alerts and verified visits, using a fake "student" we move around campus.
 @Suite("Location and arrivals")
 @MainActor
 struct AppStateLocationTests {

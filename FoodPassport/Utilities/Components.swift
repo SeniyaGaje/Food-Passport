@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Large bold title (with optional subtitle) and trailing controls, used at the top of each tab.
+/// The big title at the top of each tab, with optional buttons on the right.
 struct ScreenHeader<Trailing: View>: View {
     let title: String
     let subtitle: String?
@@ -43,7 +43,7 @@ extension ScreenHeader where Trailing == EmptyView {
     }
 }
 
-/// Bold title above a group of cards, with an optional action on the right, e.g. "Recent activity · View history".
+/// A section title, with an optional button on the right (e.g. "View history").
 struct SectionHeader: View {
     let title: String
     var actionTitle: String?
@@ -74,15 +74,15 @@ struct SectionHeader: View {
     }
 }
 
-/// Rounded-square icon used by rows, cards and settings, so icons look the same on every screen.
-/// `isFilled` draws a white symbol on a solid tint (settings rows); otherwise the symbol sits on a soft tint.
+/// An icon in a rounded square, used across the app so icons all match.
+/// `isFilled` gives a white icon on solid colour (like iPhone Settings).
 struct IconTile: View {
     let systemImage: String
     var tint: Color = Theme.orange
     var size: CGFloat = 48
     var isFilled = false
 
-    /// Grows the tile a little with the student's text size, but not so much that rows break.
+    /// Grows a little with larger text sizes.
     @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
     var body: some View {
@@ -92,15 +92,19 @@ struct IconTile: View {
             .font(.system(size: side * 0.42, weight: .semibold))
             .foregroundStyle(isFilled ? .white : tint)
             .frame(width: side, height: side)
-            .background(
-                isFilled ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.14)),
-                in: RoundedRectangle(cornerRadius: side * 0.28, style: .continuous)
-            )
+            .background {
+                let shape = RoundedRectangle(cornerRadius: side * 0.28, style: .continuous)
+                if isFilled {
+                    shape.fill(tint.gradient)
+                } else {
+                    shape.fill(tint.opacity(0.14))
+                }
+            }
             .accessibilityHidden(true)
     }
 }
 
-/// Friendly placeholder for a list with nothing in it yet, e.g. "No visits yet".
+/// Shown when a list is empty, e.g. "No visits yet".
 struct EmptyStateView: View {
     let systemImage: String
     let title: String
@@ -175,12 +179,12 @@ struct InitialsAvatar: View {
     }
 }
 
-/// Capsule filter button, e.g. the cuisine filters on Explore and period filters on History.
+/// A rounded filter button, e.g. the cuisine filters on Explore.
 struct FilterChip: View {
     let title: String
     let isSelected: Bool
     var selectedColor: Color = Theme.ink
-    /// Text colour on the selected fill; use `.white` when `selectedColor` is orange.
+    /// Text colour when selected. Use `.white` if the selected colour is orange.
     var selectedForeground: Color = Theme.onInk
     let action: () -> Void
 
@@ -236,14 +240,14 @@ struct SearchField: View {
     }
 }
 
-/// Big number with a label underneath, e.g. "3 Visits".
+/// A big number with a label under it, e.g. "3 Visits".
 struct StatTile: View {
     let value: String
     let label: String
     var systemImage: String?
     var valueColor: Color = Theme.ink
 
-    /// The number's size follows the student's text size setting (Dynamic Type).
+    /// The number gets bigger if the student uses larger text.
     @ScaledMetric(relativeTo: .largeTitle) private var valueSize: CGFloat = 30
 
     var body: some View {
@@ -282,11 +286,13 @@ struct ProgressBar: View {
     var track: Color = Theme.track
     var height: CGFloat = 10
 
+    /// The value kept between 0 and 1, so the bar never overflows.
     private var clampedValue: Double {
         min(max(value, 0), 1)
     }
 
     var body: some View {
+        // Measure the bar's width, so the filled part can be a fraction of it.
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(track)
@@ -301,7 +307,7 @@ struct ProgressBar: View {
     }
 }
 
-/// Circular progress ring, e.g. "2/3 cuisines tried" on Quest Detail.
+/// A progress circle, e.g. "2/3 cuisines tried".
 struct RingProgress: View {
     let value: Double
     var lineWidth: CGFloat = 20
@@ -329,7 +335,7 @@ struct StarRatingView: View {
     private let filledColor: Color
     private let isEditable: Bool
 
-    /// Editable rating, used in the Log a Visit form.
+    /// Tappable stars, for Log a Visit.
     init(rating: Binding<Int>, size: CGFloat = 28, filledColor: Color = Theme.gold) {
         _rating = rating
         self.size = size
@@ -337,7 +343,7 @@ struct StarRatingView: View {
         isEditable = true
     }
 
-    /// Read-only rating, used in lists and detail screens.
+    /// Stars that just show a rating.
     init(rating: Int, size: CGFloat = 28, filledColor: Color = Theme.gold) {
         _rating = .constant(rating)
         self.size = size
@@ -371,7 +377,7 @@ struct StarRatingView: View {
     }
 }
 
-/// Icon and text with a small gap and a muted icon, e.g. the price line on restaurant cards.
+/// A label with a small grey icon, e.g. the price on restaurant cards.
 struct CompactLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
@@ -383,7 +389,7 @@ struct CompactLabelStyle: LabelStyle {
     }
 }
 
-/// Small capsule tag, e.g. "Location verified ✓", "Auto-detected" or a cuisine name.
+/// A small rounded tag, e.g. "Location verified ✓".
 struct PillLabel: View {
     enum Style {
         case gray
@@ -435,7 +441,7 @@ struct PillLabel: View {
     }
 }
 
-/// Small uppercase grey label above a field or inside a card, e.g. "DISH" or "WEEKLY SPENDING".
+/// A small grey heading in capitals, e.g. "DISH".
 struct SectionCaption: View {
     let text: String
 
@@ -451,7 +457,7 @@ struct SectionCaption: View {
     }
 }
 
-/// Field surface shared by the text inputs: card background plus an orange outline while typing.
+/// The look of the text fields: a card with an orange border while typing.
 private struct FieldBackground: ViewModifier {
     let isFocused: Bool
 
@@ -466,7 +472,7 @@ private struct FieldBackground: ViewModifier {
     }
 }
 
-/// Rounded white text field from the prototype forms.
+/// A rounded text field.
 struct InputField: View {
     let placeholder: String
     @Binding var text: String
@@ -499,7 +505,7 @@ struct InputField: View {
     }
 }
 
-/// Password field with a show/hide toggle.
+/// A password field with a show/hide button.
 struct SecureInputField: View {
     let placeholder: String
     @Binding var text: String
@@ -537,7 +543,7 @@ struct SecureInputField: View {
     }
 }
 
-/// Large amount field with a currency prefix, used for budgets.
+/// A field for an amount in LKR, used for budgets.
 struct CurrencyField: View {
     @Binding var amount: Int
     var currencyCode = "LKR"
@@ -561,13 +567,13 @@ struct CurrencyField: View {
     }
 }
 
-/// Row of preset amounts, e.g. LKR 3,000 / 5,000 / 8,000.
+/// Quick amount buttons: LKR 3,000 / 5,000 / 8,000.
 struct AmountPresetPicker: View {
     let presets: [Int]
     @Binding var selection: Int
 
     var body: some View {
-        // One row when the amounts fit; one per line with large text sizes.
+        // In a row if they fit; one under another with large text.
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) { presetButtons }
             VStack(spacing: 10) { presetButtons }
@@ -596,7 +602,7 @@ struct AmountPresetPicker: View {
     }
 }
 
-/// − value + control from the quest editor.
+/// A "− 3 +" control, used in the quest editor.
 struct CountStepper: View {
     @Binding var value: Int
     let range: ClosedRange<Int>
@@ -639,7 +645,7 @@ struct CountStepper: View {
     }
 }
 
-/// "Cancel · Title · Action" bar at the top of bottom sheets.
+/// The "Cancel · Title · Save" bar at the top of sheets.
 struct SheetHeader: View {
     let title: String
     let confirmTitle: String
@@ -666,7 +672,7 @@ struct SheetHeader: View {
     }
 }
 
-/// Rounded card used for centred pop-ups such as "New stamp earned!".
+/// The card used for pop-ups like "New stamp earned!".
 struct PopupCard<Content: View>: View {
     @ViewBuilder let content: Content
 
@@ -680,11 +686,11 @@ struct PopupCard<Content: View>: View {
     }
 }
 
-/// Round tinted icon at the top of a pop-up.
+/// The round icon at the top of a pop-up.
 struct PopupIcon: View {
     let systemImage: String
 
-    /// Flipped once the pop-up appears, so the icon gives a single bounce to draw the eye.
+    /// Set when the pop-up appears, so the icon bounces once.
     @State private var hasAppeared = false
 
     var body: some View {
@@ -700,7 +706,7 @@ struct PopupIcon: View {
     }
 }
 
-/// Dark confirmation message, e.g. "Visit logged! You earned a Sri Lankan stamp ✓".
+/// A short dark message at the top, e.g. "Visit logged ✓".
 struct ToastView: View {
     let text: String
 
@@ -716,7 +722,7 @@ struct ToastView: View {
     }
 }
 
-/// Looks like an iOS notification; used in-app to preview notifications such as the arrival alert.
+/// Looks like an iPhone notification, shown inside the app (e.g. "You've arrived").
 struct NotificationBannerView: View {
     let title: String
     let message: String
@@ -763,9 +769,8 @@ struct NotificationBannerView: View {
     }
 }
 
-/// Shows a photo from the asset catalog when one exists, otherwise a cuisine-coloured placeholder.
-/// To use real photos, add images to Assets.xcassets with the same names as in MockData
-/// (e.g. "restaurant_campus_bites", "dish_kottu", "welcome_hero").
+/// Shows a food photo from Assets, or a coloured placeholder if there's no photo.
+/// To add a photo, put it in Assets.xcassets with the same name as in MockData.
 struct FoodImageView: View {
     let imageName: String?
     var cuisine: Cuisine?
@@ -787,6 +792,7 @@ struct FoodImageView: View {
     }
 
     private var placeholder: some View {
+        // Big placeholders get a pattern of icons; small ones get a single icon.
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             ZStack {
@@ -808,7 +814,7 @@ struct FoodImageView: View {
     }
 }
 
-/// Tiled food icons used to fill large placeholders such as the welcome hero.
+/// A pattern of food icons for big placeholders.
 private struct FoodSymbolPattern: View {
     let size: CGSize
 
@@ -840,7 +846,7 @@ private struct FoodSymbolPattern: View {
     }
 }
 
-/// The orange quest gradient with a large, faint globe in the corner, shared by the Home and Passport quest cards.
+/// The orange background of the quest cards, with a faint globe in the corner.
 struct QuestCardBackground: View {
     var cornerRadius: CGFloat = 24
 
@@ -859,7 +865,7 @@ struct QuestCardBackground: View {
     }
 }
 
-/// Small frosted tag drawn on top of a photo, e.g. the cuisine on Place Detail.
+/// A small tag on top of a photo, e.g. the cuisine on a restaurant's page.
 struct PhotoTag: View {
     let text: String
     var systemImage: String?
@@ -880,7 +886,7 @@ struct PhotoTag: View {
     }
 }
 
-/// A passport stamp. Pass `nil` for an empty "?" slot that hasn't been earned yet.
+/// A passport stamp. Pass `nil` for an empty "?" stamp.
 struct StampBadgeView: View {
     let cuisine: Cuisine?
     var size: CGFloat = 84
@@ -889,7 +895,7 @@ struct StampBadgeView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             if let cuisine {
-                // Looks like a rubber passport stamp: a solid ring, a dashed inner ring and a slight tilt.
+                // Made to look like a rubber stamp: two rings and a slight tilt.
                 Circle()
                     .fill(Theme.orangeTint)
                     .overlay(Circle().strokeBorder(Theme.orange, lineWidth: max(2, size * 0.035)))
@@ -931,13 +937,13 @@ struct StampBadgeView: View {
     }
 }
 
-/// A logged visit as shown in History and Recent activity.
+/// One visit in History and Recent activity.
 struct VisitRow: View {
     let visit: Visit
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    /// With very large text there isn't room for the amount beside the dish, so it moves underneath.
+    /// With very large text, the amount moves under the dish name to make room.
     private var stacksAmount: Bool {
         dynamicTypeSize >= .xxxLarge
     }
@@ -947,8 +953,7 @@ struct VisitRow: View {
             FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
 
-            // Only the amount keeps its full width; everything else can shrink,
-            // so the row fits inside the margins on the narrowest iPhone.
+            // The amount keeps its full width; the rest can shrink to fit small iPhones.
             VStack(alignment: .leading, spacing: 4) {
                 Text(visit.dishName)
                     .font(.headline)
@@ -993,7 +998,7 @@ struct VisitRow: View {
     }
 }
 
-/// Fork-and-knife pin for a restaurant on the map; orange and larger when selected.
+/// A restaurant pin on the map. Bigger and orange when selected.
 struct RestaurantPin: View {
     var isSelected = false
 
@@ -1019,7 +1024,7 @@ struct RestaurantPin: View {
     }
 }
 
-/// Numbered stop marker on a food trail map.
+/// A numbered stop on the food trail map.
 struct NumberedMapMarker: View {
     let number: Int
     let status: TrailStopStatus
@@ -1051,7 +1056,7 @@ struct NumberedMapMarker: View {
     }
 }
 
-/// The "JD" avatar in screen headers; tapping it opens the Profile tab.
+/// The initials circle in the top corner. Tapping it opens Profile.
 struct ProfileAvatarButton: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router

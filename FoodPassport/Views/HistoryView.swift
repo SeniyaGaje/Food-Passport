@@ -1,13 +1,14 @@
 import SwiftUI
 import MapKit
 
-/// History tab: all logged visits grouped by date, with search and period filters.
+/// The History tab: every visit, grouped by date, with search and filters.
 struct HistoryView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @State private var searchText = ""
     @State private var filter: HistoryFilter = .all
 
+    /// Visits that match the filter chip and the search text.
     private var filteredVisits: [Visit] {
         appState.visits
             .filter { filter.includes($0.date) }
@@ -19,14 +20,20 @@ struct HistoryView: View {
             }
     }
 
+    /// The visits split into sections (Today, Yesterday, ...), newest first. Empty sections are left out.
     private var sections: [(group: VisitDateGroup, visits: [Visit])] {
-        let grouped = Dictionary(grouping: filteredVisits) { visit in
-            VisitDateGroup(date: visit.date)
+        var result: [(group: VisitDateGroup, visits: [Visit])] = []
+
+        for group in VisitDateGroup.allCases {
+            let visits = filteredVisits
+                .filter { VisitDateGroup(date: $0.date) == group }
+                .sorted { $0.date > $1.date }
+
+            if !visits.isEmpty {
+                result.append((group: group, visits: visits))
+            }
         }
-        return grouped.keys.sorted().map { group in
-            let visits = (grouped[group] ?? []).sorted { $0.date > $1.date }
-            return (group: group, visits: visits)
-        }
+        return result
     }
 
     var body: some View {
@@ -103,6 +110,7 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
 
     var id: Self { self }
 
+    /// True if a visit on this date belongs in this filter.
     func includes(_ date: Date) -> Bool {
         switch self {
         case .all: true
@@ -112,7 +120,7 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// "No visits yet" state shown when the student hasn't logged anything.
+/// Shown when the student hasn't logged any visits yet.
 private struct EmptyHistoryView: View {
     let onExplore: () -> Void
 
@@ -195,7 +203,7 @@ struct VisitDetailView: View {
         }
     }
 
-    /// Meal photo with the dish name on a dark fade; same shape on every iPhone.
+    /// The meal photo with the dish name on top.
     private var hero: some View {
         FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine)
             .aspectRatio(1.45, contentMode: .fit)
@@ -279,7 +287,7 @@ struct VisitDetailView: View {
     }
 }
 
-/// Tiny receipt illustration next to "From receipt".
+/// A tiny receipt drawing next to "From receipt".
 private struct ReceiptThumbnail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

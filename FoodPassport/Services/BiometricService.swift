@@ -1,12 +1,12 @@
 import Foundation
 import LocalAuthentication
 
-/// The biometric sensor the device has set up, used for labels such as "Unlock with Touch ID".
+/// Which sensor the phone has, for labels like "Unlock with Touch ID".
 enum BiometryKind: Equatable {
     case faceID
     case touchID
     case opticID
-    /// No sensor, or no face or fingerprint enrolled.
+    /// No sensor, or nothing set up yet.
     case none
 
     var name: String {
@@ -27,11 +27,11 @@ enum BiometryKind: Equatable {
 }
 
 /// Checks the student's face or fingerprint before showing their passport.
-/// `AppState` only talks to this protocol, so unit tests can use the mock instead of a real sensor.
+/// AppState only uses this protocol, so tests can use the mock instead of a real sensor.
 protocol BiometricService {
     var availableBiometry: BiometryKind { get }
 
-    /// Shows the system Face ID / Touch ID prompt. Returns normally on success and throws a `BiometricError` otherwise.
+    /// Shows the Face ID / Touch ID prompt. Throws a `BiometricError` if it fails.
     func authenticate(reason: String) async throws
 }
 
@@ -39,7 +39,7 @@ enum BiometricError: LocalizedError, Equatable {
     case notAvailable
     case notEnrolled
     case lockedOut
-    /// The student or the system closed the prompt. Not shown as an error.
+    /// The prompt was closed. We don't show an error for this.
     case cancelled
     case failed
 
@@ -54,7 +54,7 @@ enum BiometricError: LocalizedError, Equatable {
     }
 }
 
-/// `BiometricService` backed by Apple's LocalAuthentication framework.
+/// The real Face ID / Touch ID, using Apple's LocalAuthentication.
 final class LocalBiometricService: BiometricService {
     var availableBiometry: BiometryKind {
         let context = LAContext()
@@ -70,7 +70,7 @@ final class LocalBiometricService: BiometricService {
 
     func authenticate(reason: String) async throws {
         let context = LAContext()
-        // Hide the system "Enter Password" button: the lock screen offers "Use account password" instead.
+        // Hide iOS's "Enter Password" button; our lock screen has "Use account password" instead.
         context.localizedFallbackTitle = ""
 
         var availabilityError: NSError?
@@ -85,6 +85,7 @@ final class LocalBiometricService: BiometricService {
         }
     }
 
+    /// Turns Apple's error codes into our simpler `BiometricError`.
     private static func biometricError(from error: NSError?) -> BiometricError {
         guard let error, error.domain == LAErrorDomain else { return .failed }
 
@@ -98,10 +99,10 @@ final class LocalBiometricService: BiometricService {
     }
 }
 
-/// In-memory `BiometricService` for previews and unit tests.
+/// Fake Face ID for previews and tests.
 final class MockBiometricService: BiometricService {
     var availableBiometry: BiometryKind
-    /// Set this to make the next prompt fail, e.g. in a unit test.
+    /// Set this in a test to make the scan fail.
     var errorToThrow: BiometricError?
     private(set) var promptCount = 0
 

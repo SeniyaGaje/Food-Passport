@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Profile tab: account summary, lifetime stats and settings.
+/// The Profile tab: the student's details, totals and settings.
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @Environment(\.openURL) private var openURL
 
-    /// Saved on this device and read by `FoodPassportApp` to switch the whole app between light and dark.
+    /// Saved on the phone. FoodPassportApp reads it to switch the app to dark mode.
     @AppStorage(AppearanceSetting.darkModeKey) private var isDarkModeOn = false
 
     @State private var isShowingReminderSheet = false
@@ -156,7 +156,7 @@ struct ProfileView: View {
         }
     }
 
-    /// A group of settings rows in one card, with an optional caption above it.
+    /// A card of settings rows, with an optional heading.
     private func settingsSection<Content: View>(_ title: String?, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             if let title {
@@ -170,8 +170,8 @@ struct ProfileView: View {
         }
     }
 
-    /// A switch binding whose change needs async work first, such as a Face ID check or a permission prompt.
-    /// The switch shows the saved value, so it only stays on once AppState has accepted the change.
+    /// For switches that need to ask first (Face ID or notifications).
+    /// The switch only stays on if AppState says yes.
     private func asyncBinding(_ value: Bool, set: @escaping (Bool) async -> Void) -> Binding<Bool> {
         Binding(
             get: { value },
@@ -200,7 +200,7 @@ struct ProfileView: View {
     }
 }
 
-/// A settings row with a coloured icon, title and trailing accessory (value, chevron, etc.).
+/// A settings row: coloured icon, title, and something on the right (like a value).
 struct SettingsRow<Accessory: View>: View {
     let systemImage: String?
     var tint: Color = Theme.mutedInk
@@ -227,7 +227,7 @@ struct SettingsRow<Accessory: View>: View {
             if let systemImage {
                 IconTile(systemImage: systemImage, tint: tint, size: 30, isFilled: true)
             } else {
-                // Keeps the title lined up with the rows above that have an icon.
+                // Empty space, so the title lines up with rows that have an icon.
                 Color.clear
                     .frame(width: 30, height: 30)
             }
@@ -265,7 +265,7 @@ struct SettingsToggleRow: View {
     }
 }
 
-/// Grey value text followed by a chevron.
+/// Grey text with a ">" arrow.
 struct SettingsValue: View {
     let text: String?
 
@@ -294,7 +294,7 @@ struct SettingsDivider: View {
 }
 
 extension View {
-    /// Rounded container (white in light mode) that groups settings rows.
+    /// The card that holds a group of settings rows.
     func settingsCard() -> some View {
         self
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))

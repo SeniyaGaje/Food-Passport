@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import FoodPassport
 
-/// Planned-visit and weekly challenge reminders, with a mock notification centre that records what was scheduled.
+/// Planned-visit and weekly reminders, using fake notifications that remember what was scheduled.
 @Suite("Reminders")
 @MainActor
 struct AppStateReminderTests {

@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import FoodPassport
 
-/// The receipt parser is tested with plain text rows, the same input Vision gives it after reading a photo.
+/// Tests the receipt parser with plain text lines, like the ones Vision reads from a photo.
 @Suite("Receipt scanning")
 @MainActor
 struct ReceiptParserTests {
@@ -177,20 +177,40 @@ struct ReceiptParserTests {
         #expect(ReceiptParser.amounts(in: "2 Kottu Roti 750.00 1,500.00") == [2, 750, 1500])
     }
 
-    // Known problems, found by these tests
+    // Addresses
 
-    @Test("An address line with numbers is not mistaken for an item")
+    @Test("An address line with numbers is not mistaken for an item or the total")
     func addressLineIsNotAnItem() {
-        // The parser treats "Colombo 07" as an item costing LKR 7, and Log Visit then fills the
-        // dish field with the address. Recorded here so the bug is tracked until the parser is fixed.
-        withKnownIssue("Address lines that end in a number are read as receipt items") {
-            let scan = ReceiptParser.parse(rows(
-                "CAMPUS BITES",
-                "No. 12, Reid Avenue, Colombo 07",
-                "Kottu Roti 750.00",
-                "Total 750.00"
-            ))
-            #expect(scan.items.map(\.name) == ["Kottu Roti"])
-        }
+        let scan = ReceiptParser.parse(rows(
+            "CAMPUS BITES",
+            "No. 12, Reid Avenue, Colombo 07",
+            "Kottu Roti 750.00",
+            "Total 750.00"
+        ))
+
+        // Log Visit fills the dish from the first item, so it must be the meal, not the address.
+        #expect(scan.items.map(\.name) == ["Kottu Roti"])
+        #expect(scan.total == 750)
+    }
+
+    @Test("An address split over two lines is ignored too")
+    func addressOverTwoLines() {
+        let scan = ReceiptParser.parse(rows(
+            "HOPPERS HUT",
+            "45 Galle Road,",
+            "Colombo 03",
+            "Egg Hoppers 180.00",
+            "Plain Tea 60.00"
+        ))
+
+        #expect(scan.items.map(\.name) == ["Egg Hoppers", "Plain Tea"])
+        // No TOTAL line: the largest real price is offered, not the house number.
+        #expect(scan.total == 180)
+    }
+
+    @Test("Postal zones with a leading zero are not prices, but cents are")
+    func leadingZeros() {
+        #expect(ReceiptParser.amounts(in: "Colombo 07").isEmpty)
+        #expect(ReceiptParser.amounts(in: "Extra Sauce 0.50") == [1])
     }
 }

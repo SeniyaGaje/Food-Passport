@@ -24,12 +24,12 @@ struct Dish: Identifiable, Hashable, Codable {
     let price: Int
 }
 
-/// Stored in Firestore under `restaurants/{id}`.
+/// A place to eat. Saved in Firestore under restaurants/{id}.
 struct Restaurant: Identifiable, Hashable, Codable {
     let id: String
     let name: String
     let cuisine: Cuisine
-    /// Distance from campus as stored in Firestore, replaced by the real distance once the student's location is known.
+    /// Starts as the distance from campus, then becomes the real distance once we know where the student is.
     var distanceKm: Double
     var walkingMinutes: Int
     let priceRange: ClosedRange<Int>
@@ -48,10 +48,10 @@ struct Restaurant: Identifiable, Hashable, Codable {
         CLLocation(latitude: latitude, longitude: longitude)
     }
 
-    /// Average walking speed in metres per minute (about 4.8 km/h).
+    /// Normal walking speed: 80 metres a minute (about 4.8 km/h).
     static let walkingMetresPerMinute = 80.0
 
-    /// A copy whose distance and walking time are measured from `location` (the student's position).
+    /// A copy with the distance and walking time measured from the student.
     func withDistance(from location: CLLocation) -> Restaurant {
         let metres = location.distance(from: self.location)
         var copy = self
@@ -71,8 +71,8 @@ extension Restaurant {
     }
 }
 
-/// Stored in Firestore under `users/{uid}/visits/{id}`. The restaurant is copied into the visit
-/// so History still shows it even if the restaurant's details change later.
+/// A logged meal. Saved in Firestore under users/{userID}/visits/{id}.
+/// It keeps its own copy of the restaurant, so History still works if the restaurant changes.
 struct Visit: Identifiable, Hashable, Codable {
     let id: String
     let dishName: String
@@ -88,7 +88,7 @@ struct Visit: Identifiable, Hashable, Codable {
     let imageName: String
 }
 
-/// Section headings used by the History list.
+/// The headings in the History list.
 enum VisitDateGroup: Int, CaseIterable, Comparable {
     case today
     case yesterday
@@ -125,8 +125,8 @@ enum VisitDateGroup: Int, CaseIterable, Comparable {
     }
 }
 
-/// A cuisine stamp in the student's passport, earned by a location-verified visit.
-/// Stored in Firestore under `users/{uid}/stamps/{cuisine}`.
+/// A passport stamp, earned by a verified visit to a new cuisine.
+/// Saved in Firestore under users/{userID}/stamps/{cuisine}.
 struct Stamp: Identifiable, Hashable, Codable {
     var id: Cuisine { cuisine }
     let cuisine: Cuisine
@@ -150,7 +150,7 @@ enum QuestDuration: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-/// A suggested place in the quest plan, with its estimated cost.
+/// A suggested place in the quest plan, with what it should cost.
 struct PlannedStop: Identifiable, Hashable {
     var id: Restaurant.ID { restaurant.id }
     let restaurant: Restaurant
@@ -185,7 +185,7 @@ struct Quest: Hashable {
     }
 }
 
-/// What the Adaptive Food Quest changed after the latest visit.
+/// How the quest plan changed after a meal cost more than expected.
 struct BudgetUpdate: Hashable {
     let actualCost: Int
     let estimatedCost: Int
@@ -244,7 +244,7 @@ struct WeeklyChallenge: Hashable {
     }
 }
 
-/// Stored in Firestore as the `users/{uid}` document.
+/// The student's account details. Saved in Firestore as users/{userID}.
 struct UserProfile: Hashable, Codable {
     var name: String
     var email: String
@@ -252,12 +252,15 @@ struct UserProfile: Hashable, Codable {
     var monthlyBudget: Int
     var bookmarkedRestaurantIDs: Set<Restaurant.ID>
 
+    /// First letters of the first two names, e.g. "John Doe" gives "JD".
     var initials: String {
-        name.split(separator: " ")
-            .prefix(2)
-            .compactMap(\.first)
-            .map(String.init)
-            .joined()
+        var letters = ""
+        for word in name.split(separator: " ").prefix(2) {
+            if let first = word.first {
+                letters.append(first)
+            }
+        }
+        return letters
     }
 }
 
@@ -283,23 +286,23 @@ struct CuisineShare: Identifiable, Hashable {
     let percentage: Int
 }
 
-/// One of the top results returned by the on-device meal recogniser.
+/// One of the dishes the meal recogniser thinks the photo shows.
 struct MealPrediction: Identifiable, Hashable {
     var id: String { label }
     let label: String
-    /// Saved on the visit. The restaurant's own menu name when it matches (e.g. "Chicken Kottu").
+    /// The name saved on the visit; uses the restaurant's menu name if it has one (e.g. "Chicken Kottu").
     let dishName: String
-    /// 0–1, how likely the photo shows this dish.
+    /// How sure we are, from 0 to 1.
     let confidence: Double
     let cuisine: Cuisine
-    /// True when the dish is on the menu of the restaurant being logged.
+    /// True if this restaurant sells the dish.
     var isOnMenu = false
 }
 
-/// What Vision read from a photo of a receipt.
+/// What we read from a photo of a receipt.
 struct ReceiptScan: Hashable {
     struct LineItem: Identifiable, Hashable {
-        /// Position on the receipt, so two identical items ("Tea", "Tea") stay separate.
+        /// Its position on the receipt, so two "Tea" lines stay separate.
         let id: Int
         let name: String
         let price: Int
@@ -308,10 +311,10 @@ struct ReceiptScan: Hashable {
     var restaurantName: String?
     var date: String?
     var items: [LineItem]
-    /// The amount to use, or nil when no amount could be read.
+    /// The amount paid, or nil if none was found.
     var total: Int?
-    /// False when no "TOTAL" line was found and `total` is only the largest amount, so the student should check it.
+    /// False if there was no TOTAL line and we guessed the biggest amount, so the student should check it.
     var isTotalFromTotalLine: Bool
-    /// Where the total is on the photo, in Vision's normalised coordinates (0–1, origin bottom-left), for highlighting.
+    /// Where the total is on the photo, so it can be highlighted.
     var totalBoundingBox: CGRect?
 }

@@ -3,13 +3,12 @@ import CoreLocation
 import Observation
 import SwiftUI
 
-/// App-wide session state shared through the environment: who is signed in, their data, and their device settings.
-/// Every outside system (Firebase, Face ID, notifications, settings storage) is passed in (dependency injection),
-/// so the same code runs on the real services in the app and on in-memory mocks in previews and unit tests.
+/// The app's shared data: who is signed in, their visits and stamps, and their settings.
+/// The services (Firebase, Face ID, notifications, location) are passed in, so tests can pass in mocks instead.
 @Observable
 final class AppState {
     enum Stage {
-        /// Checking for a signed-in user at launch.
+        /// Checking if someone is already signed in.
         case launching
         case onboarding
         case main
@@ -17,7 +16,7 @@ final class AppState {
 
     var stage: Stage = .launching
     var isLocked = false
-    /// Why the last Face ID attempt on the lock screen failed, if it did.
+    /// Why the last Face ID try on the lock screen failed.
     var lockMessage: String?
 
     var profile = MockData.profile
@@ -25,28 +24,28 @@ final class AppState {
     var visits = MockData.visits
     var stamps = MockData.stamps
 
-    /// Shown in an alert by `RootView` when loading or saving fails.
+    /// Shown as an alert when loading or saving fails.
     var errorMessage: String?
-    /// Shows `RootView`'s "Notifications are off" alert, which links to Settings.
+    /// Shows the "Notifications are off" alert, which links to Settings.
     var isShowingNotificationSettingsPrompt = false
-    /// Set when the student taps a notification; `MainTabView` opens the matching screen.
+    /// Set when a notification is tapped, so MainTabView can open the right screen.
     var notificationDestination: NotificationDestination?
 
     // Location state
 
     private(set) var locationPermission: LocationPermission = .notDetermined
-    /// The student's latest real location, or nil before it is known or without permission.
+    /// Where the student is, or nil if we don't know.
     private(set) var userLocation: CLLocation?
-    /// Set when the student walks into a restaurant while the app is open; `MainTabView` shows the arrival banner.
+    /// Set when the student arrives at a restaurant with the app open, so the banner shows.
     var arrivedRestaurant: Restaurant?
-    /// Kept up to date by `RootView`. While the app is open, arrivals show an in-app banner instead of a notification.
+    /// True while the app is on screen. Arrivals then show a banner instead of a notification.
     var isAppActive = false
-    /// When each restaurant's arrival alert last fired, so walking past the door twice doesn't alert twice.
+    /// When each restaurant last alerted, so walking past twice doesn't alert twice.
     private var lastArrivalAlerts: [Restaurant.ID: Date] = [:]
     static let arrivalAlertCooldown: TimeInterval = 3 * 60 * 60
 
     // Device settings
-    // Stored in UserDefaults rather than Firestore because they belong to this phone, not to the account.
+    // Saved in UserDefaults (not Firestore), because they belong to this phone, not the account.
 
     private(set) var isFaceIDEnabled = false {
         didSet { settings.set(isFaceIDEnabled, forKey: SettingsKey.faceIDEnabled) }
@@ -81,7 +80,7 @@ final class AppState {
     private let location: LocationService
     private let settings: UserDefaults
 
-    /// Background saves and notifications that haven't finished yet, so unit tests can wait for them.
+    /// Background saves that haven't finished yet, so tests can wait for them.
     private var pendingWrites: [UUID: Task<Void, Never>] = [:]
 
     init(
@@ -127,7 +126,7 @@ final class AppState {
 
     // Session
 
-    /// Called once at launch: skips onboarding when a user is still signed in from last time.
+    /// Runs once at launch. Skips onboarding if the student is still signed in.
     func restoreSession() async {
         guard let userID = auth.currentUserID else {
             stage = .onboarding
@@ -137,7 +136,7 @@ final class AppState {
         do {
             try await loadUserData(userID: userID)
             enterApp()
-            // Reopening the app is like logging in again, so Face ID is asked for before the passport shows.
+            // Opening the app is like signing in again, so ask for Face ID first.
             isLocked = isFaceIDEnabled
             await refreshReminders()
             startLocationServices()
@@ -155,7 +154,7 @@ final class AppState {
         startLocationServices()
     }
 
-    /// Creates the account and its profile document. Onboarding (permissions, budget) continues afterwards.
+    /// Creates the account and its profile. Onboarding (permissions, budget) comes next.
     func signUp(name: String, email: String, password: String) async throws {
         let userID = try await auth.signUp(email: email, password: password)
         let newProfile = UserProfile(
@@ -189,7 +188,7 @@ final class AppState {
             errorMessage = "Couldn't sign out. \(error.localizedDescription)"
             return
         }
-        // Reminders belong to the signed-in student, so the next person on this phone doesn't get them.
+        // Clear this student's reminders, so the next person on the phone doesn't get them.
         notifications.cancelAllReminders()
         notificationDestination = nil
         location.stopMonitoringArrivals()
@@ -200,26 +199,26 @@ final class AppState {
         isLocked = false
     }
 
-    // Location and arrivals (Core Location + geofencing)
+    // Location and arrivals
 
-    /// Onboarding's "Allow location" button. Returns whether location was allowed.
+    /// The "Allow location" button in onboarding. Returns true if allowed.
     func requestLocationPermission() async -> Bool {
         let permission = await location.requestWhenInUsePermission()
         locationPermissionChanged(to: permission)
         return permission.allowsLocation
     }
 
-    /// Directions' Start button: get ready to alert the student when they reach `restaurant`.
+    /// The Start button in Directions: alert the student when they reach the restaurant.
     func startArrivalAlerts(for restaurant: Restaurant) async {
-        // "Always" lets iOS notice the arrival even with the phone locked in a pocket.
+        // "Always" lets iOS notice the arrival even with the phone in a pocket.
         if locationPermission == .whenInUse {
             location.requestAlwaysPermission()
         }
-        // The alert is a notification when the app is closed, so make sure notifications are allowed.
+        // If the app is closed the alert is a notification, so ask for notifications too.
         if await notifications.permission() == .notDetermined {
             _ = await notifications.requestPermission()
         }
-        // Heading there on purpose, so alert again even if this restaurant alerted earlier today.
+        // They're heading there on purpose, so alert again even if it alerted earlier.
         lastArrivalAlerts[restaurant.id] = nil
 
         if let userLocation {
@@ -227,13 +226,13 @@ final class AppState {
         }
     }
 
-    /// True when the student is close enough to `restaurant` for a visit there to count as location verified.
+    /// True if the student is close enough for the visit to count as verified.
     func isAtRestaurant(_ restaurant: Restaurant) -> Bool {
         guard let userLocation else { return false }
         return userLocation.distance(from: restaurant.location) <= Geofence.verificationRadius
     }
 
-    /// Starts live location and the restaurant geofences, if the student allowed location access.
+    /// Starts tracking location and watching restaurants, if location is allowed.
     private func startLocationServices() {
         guard locationPermission.allowsLocation, auth.currentUserID != nil else { return }
 
@@ -250,7 +249,7 @@ final class AppState {
         if permission.allowsLocation {
             startLocationServices()
         } else {
-            // Location was turned off (possibly in Settings): forget it, so distances fall back to campus estimates.
+            // Location was turned off: forget it, so distances go back to the campus estimates.
             location.stopUpdatingLocation()
             location.stopMonitoringArrivals()
             userLocation = nil
@@ -263,25 +262,34 @@ final class AppState {
         checkForArrival(at: newLocation)
     }
 
-    /// The geofence check while the app is open: iOS's own region monitoring covers the app being closed,
-    /// and also needs "Always" permission, so live location is checked here as well.
+    /// Checks if the student has reached a restaurant while the app is open.
+    /// (iOS handles this itself when the app is closed, but only with "Always" permission.)
     private func checkForArrival(at currentLocation: CLLocation) {
-        let nearby = restaurants
-            .map { (restaurant: $0, metres: currentLocation.distance(from: $0.location)) }
-            .filter { $0.metres <= Geofence.arrivalRadius }
-            .min { $0.metres < $1.metres }
+        var closest: Restaurant?
+        var closestDistance = 0.0
 
-        if let nearby {
-            handleArrival(at: nearby.restaurant.id)
+        for restaurant in restaurants {
+            let metres = currentLocation.distance(from: restaurant.location)
+            guard metres <= Geofence.arrivalRadius else { continue }
+
+            if closest == nil || metres < closestDistance {
+                closest = restaurant
+                closestDistance = metres
+            }
+        }
+
+        if let closest {
+            handleArrival(at: closest.id)
         }
     }
 
-    /// The student walked into a restaurant's geofence: show the arrival banner, or a notification if the app is closed.
+    /// The student arrived: show the banner, or a notification if the app is closed.
     private func handleArrival(at restaurantID: Restaurant.ID) {
         guard auth.currentUserID != nil,
               let restaurant = restaurants.first(where: { $0.id == restaurantID })
         else { return }
 
+        // Don't alert again for the same place within 3 hours.
         if let lastAlert = lastArrivalAlerts[restaurantID], Date.now.timeIntervalSince(lastAlert) < Self.arrivalAlertCooldown {
             return
         }
@@ -296,7 +304,7 @@ final class AppState {
         }
     }
 
-    /// Replaces stored campus distances with real ones measured from the student, when their location is known.
+    /// Swaps the saved campus distances for real ones from the student's location.
     private func withRealDistances(_ restaurants: [Restaurant]) -> [Restaurant] {
         guard let userLocation else { return restaurants }
         return restaurants.map { $0.withDistance(from: userLocation) }
@@ -308,7 +316,7 @@ final class AppState {
         biometrics.availableBiometry
     }
 
-    /// Turning Face ID on asks for the student's face first, so they know it works before the app relies on it.
+    /// Turning Face ID on scans the face first, so we know it works.
     func setFaceIDEnabled(_ isOn: Bool) async {
         guard isOn else {
             isFaceIDEnabled = false
@@ -319,12 +327,12 @@ final class AppState {
             try await biometrics.authenticate(reason: "Turn on \(biometryKind.name) to keep your passport private.")
             isFaceIDEnabled = true
         } catch {
-            // A cancelled prompt has no description, so no alert is shown for it.
+            // Cancelling has no message, so no alert is shown.
             errorMessage = (error as? BiometricError)?.errorDescription
         }
     }
 
-    /// Locks the passport when the app goes to the background, if Face ID is on.
+    /// Locks the app when it goes to the background, if Face ID is on.
     func lockIfNeeded() {
         guard stage == .main, isFaceIDEnabled else { return }
         isLocked = true
@@ -343,14 +351,13 @@ final class AppState {
         }
     }
 
-    // Reminders (local notifications)
+    // Reminders
 
     var weeklyReminderTime: Date {
         Calendar.current.date(bySettingHour: weeklyReminderHour, minute: weeklyReminderMinute, second: 0, of: .now) ?? .now
     }
 
-    /// Onboarding's "Allow notifications" button. If the student allows them, both kinds of reminder are turned on.
-    /// Returns whether notifications were allowed.
+    /// The "Allow notifications" button in onboarding. If allowed, both reminders are turned on.
     func allowRemindersDuringOnboarding() async -> Bool {
         guard await notifications.requestPermission() else { return false }
         plannedVisitRemindersEnabled = true
@@ -390,9 +397,8 @@ final class AppState {
         }
     }
 
-    /// Plans a visit and, when `remind` is on, schedules a reminder 30 minutes before it.
-    /// Returns when the reminder will fire, or nil when no reminder was set
-    /// (not asked for, notifications not allowed, or the visit is less than 30 minutes away).
+    /// Sets a reminder 30 minutes before a planned visit, if `remind` is on.
+    /// Returns the reminder time, or nil if none was set (e.g. the visit is too soon).
     func planVisit(to restaurant: Restaurant, at visitDate: Date, remind: Bool) async -> Date? {
         let reminder = LocalReminder.plannedVisit(to: restaurant, at: visitDate)
         guard remind, case .once(let fireDate) = reminder.schedule, fireDate > .now else { return nil }
@@ -408,8 +414,8 @@ final class AppState {
         }
     }
 
-    /// Asks for permission the first time. If the student blocked notifications earlier,
-    /// shows the alert that links to Settings, because the app can't ask again.
+    /// Asks for permission the first time. If they said no before, we can't ask again,
+    /// so show the alert that links to Settings.
     private func ensureNotificationPermission() async -> Bool {
         switch await notifications.permission() {
         case .allowed:
@@ -430,7 +436,7 @@ final class AppState {
         }
     }
 
-    /// Keeps the reminder switches honest at launch, e.g. if notifications were turned off in Settings.
+    /// At launch, turn the switches off if notifications were turned off in Settings.
     private func refreshReminders() async {
         guard await notifications.permission() == .allowed else {
             plannedVisitRemindersEnabled = false
@@ -451,7 +457,7 @@ final class AppState {
         if let savedProfile = try await database.fetchProfile(userID: userID) {
             profile = savedProfile
         } else {
-            // The account exists but its profile was never saved (e.g. sign-up was interrupted).
+            // The account has no profile yet (e.g. sign-up was interrupted), so make a blank one.
             profile = UserProfile(name: "", email: "", memberSince: .now, monthlyBudget: 3000, bookmarkedRestaurantIDs: [])
             save { database, userID in try await database.saveProfile(self.profile, userID: userID) }
         }
@@ -459,8 +465,8 @@ final class AppState {
 
     // Visits and stamps
 
-    /// Adds a logged visit and saves it.
-    /// Returns the new stamp when this is the first location-verified visit for the visit's cuisine.
+    /// Adds a visit and saves it.
+    /// Returns a new stamp if it's the first verified visit for that cuisine.
     @discardableResult
     func addVisit(_ visit: Visit) -> Stamp? {
         visits.insert(visit, at: 0)
@@ -482,7 +488,7 @@ final class AppState {
         return stamp
     }
 
-    /// Deletes a visit, and the stamp it earned if there was one.
+    /// Deletes a visit, and the stamp it earned (if any).
     func deleteVisit(_ visit: Visit) {
         visits.removeAll { $0.id == visit.id }
         save { database, userID in try await database.deleteVisit(id: visit.id, userID: userID) }
@@ -526,8 +532,8 @@ final class AppState {
 
     // Saving
 
-    /// Runs a database write in the background. The screen has already been updated, so the student never waits.
-    /// Firestore keeps the change in its offline cache straight away and syncs it when the device is online.
+    /// Saves to the database in the background, so the student never waits.
+    /// Firestore keeps the change offline and syncs it when the phone is online.
     private func save(_ write: @escaping (DatabaseService, String) async throws -> Void) {
         guard let userID = auth.currentUserID else { return }
 
@@ -540,7 +546,7 @@ final class AppState {
         }
     }
 
-    /// Starts work the screen doesn't wait for, keeping track of it so unit tests can wait for it to finish.
+    /// Runs work in the background, and remembers it so tests can wait for it.
     private func runInBackground(_ work: @escaping () async throws -> Void) {
         let id = UUID()
         pendingWrites[id] = Task {
@@ -549,7 +555,7 @@ final class AppState {
         }
     }
 
-    /// Waits until every background save and notification has finished. Used by unit tests.
+    /// Waits for all background work to finish. Used by tests.
     func waitForPendingWrites() async {
         for task in pendingWrites.values {
             await task.value
@@ -557,7 +563,7 @@ final class AppState {
     }
 }
 
-/// Owns navigation state for the whole app: selected tab, each tab's stack, and global pop-ups/sheets.
+/// Navigation for the whole app: the selected tab, each tab's screens, and pop-ups.
 @Observable
 final class AppRouter {
     var selectedTab: AppTab = .home
@@ -582,13 +588,13 @@ final class AppRouter {
         tabPaths[selectedTab, default: []].append(route)
     }
 
-    /// Switches to `tab` and shows `route` directly on top of that tab's root screen.
+    /// Switches to `tab` and opens `route` on it.
     func open(_ route: AppRoute, in tab: AppTab) {
         tabPaths[tab] = [route]
         selectedTab = tab
     }
 
-    /// Pops Log Visit (and Directions, if the visit started there) so the user lands back on Place Detail.
+    /// Closes Log Visit (and Directions) to go back to the restaurant's page.
     func closeVisitLoggingScreens() {
         var path = tabPaths[selectedTab] ?? []
         while let last = path.last, last.isVisitLoggingStep {
@@ -630,7 +636,7 @@ final class AppRouter {
         if let route { push(route) }
     }
 
-    /// Prototype flow after a visit is saved: Stamp Earned → "Visit logged" toast → Budget Update.
+    /// After a new stamp: close the pop-up, show "Visit logged", then the budget update.
     func finishStampCelebration(for cuisine: Cuisine) {
         dismissPopup()
         closeVisitLoggingScreens()
@@ -691,7 +697,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// Screens that can be pushed onto any tab's navigation stack.
+/// Screens that can be opened on any tab.
 enum AppRoute: Hashable {
     case placeDetail(Restaurant)
     case directions(Restaurant)
@@ -703,7 +709,7 @@ enum AppRoute: Hashable {
     case about
 }
 
-/// Screens in the welcome → sign up → permissions → budget flow.
+/// Screens in onboarding: welcome, sign up, permissions, budget.
 enum OnboardingRoute: Hashable {
     case signIn
     case signUp
@@ -711,14 +717,14 @@ enum OnboardingRoute: Hashable {
     case budgetSetup
 }
 
-/// Centred pop-ups shown over the whole app (prototype: Stamp Earned, Budget Update, Budget Limit).
+/// Pop-ups shown in the middle of the screen.
 enum AppPopup: Equatable {
     case stampEarned(Cuisine)
     case budgetUpdate
     case budgetLimit
 }
 
-/// Sheets that can be opened from more than one screen.
+/// Bottom sheets that open from more than one screen.
 enum AppSheet: String, Identifiable {
     case newQuest
     case editQuest
@@ -727,13 +733,13 @@ enum AppSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
-/// Short confirmation message shown at the top of the screen.
+/// A short message at the top of the screen, e.g. "Visit logged".
 struct ToastMessage: Equatable, Identifiable {
     let id = UUID()
     let text: String
 }
 
-/// In-app stand-in for a local notification, e.g. the geofence arrival alert.
+/// A notification-style banner shown inside the app, e.g. "You've arrived".
 struct InAppBanner: Equatable, Identifiable {
     let id = UUID()
     let title: String

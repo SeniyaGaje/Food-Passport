@@ -2,8 +2,8 @@ import Foundation
 import CoreLocation
 @testable import FoodPassport
 
-/// An `AppState` wired to the in-memory mock services, so each test controls sign-in, saved data,
-/// Face ID, notifications and the student's location without Firebase or real hardware.
+/// An AppState that uses fake services, so tests control sign-in, data, Face ID,
+/// notifications and location without Firebase or a real phone.
 @MainActor
 final class TestApp {
     let appState: AppState
@@ -12,12 +12,12 @@ final class TestApp {
     let biometrics: MockBiometricService
     let notifications: MockNotificationService
     let location: MockLocationService
-    /// Name of this test's own settings storage, so tests never touch each other's (or the app's) settings.
+    /// Each test gets its own settings, so tests don't affect each other.
     let settingsName: String
-    /// Kept alive while this "relaunched" app is in use, so the earlier launch doesn't delete the shared settings.
+    /// Keeps the earlier launch alive, so it doesn't delete the settings we're reading.
     private let previousLaunch: TestApp?
 
-    /// - Parameter previousLaunch: an earlier `TestApp` whose saved settings this one reads, like reopening the app.
+    /// Pass `relaunching:` to read another TestApp's saved settings, like reopening the app.
     init(
         signedIn: Bool = false,
         database: MockDatabaseService = MockDatabaseService(),
@@ -48,7 +48,7 @@ final class TestApp {
     }
 
     deinit {
-        // Delete this test's settings once the test has finished with them.
+        // Delete this test's settings when it's finished.
         UserDefaults.standard.removePersistentDomain(forName: settingsName)
     }
 
@@ -57,7 +57,7 @@ final class TestApp {
     }
 }
 
-/// A visit with sensible defaults; tests only spell out what matters to them.
+/// Makes a visit with default values, so tests only set what they care about.
 @MainActor
 func makeVisit(
     id: String = UUID().uuidString,
@@ -83,7 +83,7 @@ func makeVisit(
     )
 }
 
-/// A coordinate `metres` north of `coordinate` (one degree of latitude is about 110.6 km here).
+/// A point the given number of metres north (1 degree of latitude is about 110.6 km).
 func coordinate(_ metres: Double, northOf coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
     CLLocationCoordinate2D(latitude: coordinate.latitude + metres / 110_600, longitude: coordinate.longitude)
 }
@@ -92,8 +92,8 @@ func distance(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> C
     CLLocation(latitude: a.latitude, longitude: a.longitude).distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
 }
 
-/// A database that is offline: every write fails, and reads fail too when `failsReads` is on.
-/// Used to check that the student sees an error message instead of losing data silently.
+/// A fake offline database: saving always fails, and loading fails too if `failsReads` is on.
+/// Used to check the student sees an error message.
 @MainActor
 final class OfflineDatabaseService: DatabaseService {
     struct OfflineError: LocalizedError {

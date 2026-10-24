@@ -1,7 +1,7 @@
 import SwiftUI
 import MapKit
 
-/// Explore tab: search, cuisine filters, and a map or list of nearby restaurants.
+/// The Explore tab: search, cuisine filters, and a map or list of restaurants.
 struct ExploreView: View {
     private enum DisplayMode {
         case map
@@ -18,12 +18,14 @@ struct ExploreView: View {
         appState.restaurants
     }
 
+    /// Only show filter chips for cuisines that have a restaurant.
     private var cuisineFilters: [Cuisine] {
         Cuisine.allCases.filter { cuisine in
             restaurants.contains { $0.cuisine == cuisine }
         }
     }
 
+    /// Restaurants that match the chosen cuisine and the search text, nearest first.
     private var filteredRestaurants: [Restaurant] {
         restaurants
             .filter { selectedCuisine == nil || $0.cuisine == selectedCuisine }
@@ -35,6 +37,7 @@ struct ExploreView: View {
             .sorted { $0.distanceKm < $1.distanceKm }
     }
 
+    /// The restaurant whose card shows under the map (the nearest one until a pin is tapped).
     private var selectedRestaurant: Restaurant? {
         filteredRestaurants.first { $0.id == selectedRestaurantID } ?? filteredRestaurants.first
     }
@@ -70,7 +73,7 @@ struct ExploreView: View {
         .sensoryFeedback(.selection, trigger: displayMode)
     }
 
-    /// Map / List switch that shows both options, with the current one filled.
+    /// The Map / List switch.
     private var displayModePicker: some View {
         HStack(spacing: 2) {
             displayModeButton(.map, systemImage: "map", label: "Map")
@@ -164,7 +167,7 @@ struct ExploreView: View {
     }
 }
 
-/// Map centred on campus with a pin for each restaurant.
+/// A map with a pin for each restaurant.
 struct ExploreMapView: View {
     let restaurants: [Restaurant]
     let highlightedRestaurantID: Restaurant.ID?
@@ -176,13 +179,13 @@ struct ExploreMapView: View {
         self.restaurants = restaurants
         self.highlightedRestaurantID = highlightedRestaurantID
         self.onSelect = onSelect
-        // Start framed around every restaurant (University of Colombo area to NIBM). "Show my location" recentres on the student.
+        // Start zoomed out to show every restaurant.
         _position = State(initialValue: .region(.fitting(restaurants.map(\.coordinate), paddingFactor: 1.4)))
     }
 
     var body: some View {
         Map(position: $position) {
-            // The student's real location (shown once location access is allowed).
+            // The blue dot for the student (once location is allowed).
             UserAnnotation()
 
             ForEach(restaurants) { restaurant in
@@ -206,7 +209,7 @@ struct ExploreMapView: View {
     }
 }
 
-/// Restaurant summary card used in the Explore list and under the map.
+/// A restaurant's card, used in the list and under the map.
 struct RestaurantCard: View {
     @Environment(AppState.self) private var appState
 

@@ -8,13 +8,13 @@ struct FoodPassportApp: App {
     @AppStorage(AppearanceSetting.darkModeKey) private var isDarkModeOn = false
 
     init() {
-        // Face ID, notifications and location are device features, so they always use the real services.
+        // Face ID, notifications and location are part of the phone, so they always use the real services.
         let biometrics = LocalBiometricService()
         let notifications = UserNotificationService()
         let location = CoreLocationService()
 
-        // Use Firebase once GoogleService-Info.plist has been added to the project (see README).
-        // Without it the app runs on mock data, so it still builds and runs before Firebase is set up.
+        // Use Firebase if GoogleService-Info.plist is in the project (see README).
+        // Without it the app runs on sample data instead.
         if Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist") != nil {
             FirebaseApp.configure()
             _appState = State(initialValue: AppState(
@@ -34,13 +34,13 @@ struct FoodPassportApp: App {
             RootView()
                 .environment(appState)
                 .environment(router)
-                // Light by default, as in the prototype; the "Dark mode" toggle in Profile switches the whole app.
+                // Light mode unless "Dark mode" is turned on in Profile.
                 .preferredColorScheme(isDarkModeOn ? .dark : .light)
         }
     }
 }
 
-/// Decides which top-level flow is on screen: launch, onboarding/auth, the main tabs, or the Face ID lock.
+/// Picks what to show: loading, onboarding, the main tabs, or the Face ID lock screen.
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.scenePhase) private var scenePhase
@@ -70,6 +70,7 @@ struct RootView: View {
         .task {
             await appState.restoreSession()
         }
+        // Track whether the app is on screen, and lock it when it goes to the background.
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             appState.isAppActive = newPhase == .active
             if newPhase == .background {
@@ -93,6 +94,8 @@ struct RootView: View {
         }
     }
 
+    // Alerts need a true/false binding, so these turn AppState's values into one.
+
     private var isShowingNotificationSettingsPrompt: Binding<Bool> {
         Binding(
             get: { appState.isShowingNotificationSettingsPrompt },
@@ -110,7 +113,7 @@ struct RootView: View {
     }
 }
 
-/// Shown briefly at launch while the signed-in user's passport loads.
+/// Shown for a moment at launch while the passport loads.
 struct LaunchView: View {
     var body: some View {
         VStack(spacing: 20) {

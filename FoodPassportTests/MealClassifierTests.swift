@@ -2,9 +2,8 @@ import Testing
 import Foundation
 @testable import FoodPassport
 
-/// The meal classifier is tested without the Core ML model: a photo "embedding" is passed in directly.
-/// With one-number embeddings, each label's similarity to the photo is simply its own number,
-/// so the tests can choose exactly how alike the photo and each label are.
+/// Tests the meal classifier without the real model.
+/// Each label gets a single number, which is how similar it is to the photo, so tests control the result.
 @Suite("Meal recognition")
 @MainActor
 struct MealClassifierTests {
@@ -101,7 +100,7 @@ struct MealClassifierTests {
 
     @Test("When the app is unsure a photo isn't a meal, it still suggests dishes")
     func unsureNonMealFallsBackToDishes() throws {
-        // The receipt is the single best match, but only about 45% likely, under the 50% needed to say "not a meal".
+        // The receipt is the best match, but only about 45% sure (we need 50% to say "not a meal").
         let labels = [
             label("Receipt", similarity: 0.5, cuisine: nil, kind: .notFood),
             label("Kottu Roti", similarity: 0.495),

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Navigation stack for Welcome → Sign up / Sign in → Permissions → Budget setup.
+/// Onboarding: Welcome, Sign up or Sign in, Permissions, then Budget.
 struct OnboardingFlowView: View {
     @Environment(AppRouter.self) private var router
 
@@ -31,15 +31,15 @@ private struct OnboardingDestination: View {
 }
 
 struct WelcomeView: View {
-    /// The app name grows with the student's text size setting.
+    /// The app name grows with larger text sizes.
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 40
 
-    /// Colours of the header band; the photo fades into the lower one.
+    /// Colours behind the title at the top.
     private let headerTop = Color(light: 0xFFC9A6, dark: 0x2B1B12)
     private let headerBottom = Color(light: 0xFCE3D4, dark: 0x1A1513)
 
     var body: some View {
-        // The photo fills the whole screen on every iPhone; the header and buttons sit on top of it.
+        // The photo fills the screen; the title and buttons sit on top of it.
         FoodImageView(imageName: "welcome_hero", cuisine: .sriLankan)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
@@ -74,7 +74,7 @@ struct WelcomeView: View {
                     .ignoresSafeArea(edges: .top)
             }
 
-            // The text sits on a solid band; below it the band fades into the photo instead of a hard edge.
+            // Fade into the photo instead of a hard edge.
             LinearGradient(colors: [headerBottom, headerBottom.opacity(0)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 72)
                 .allowsHitTesting(false)
@@ -103,11 +103,11 @@ struct WelcomeView: View {
     }
 }
 
-/// "Before we begin" — explains each permission before it is requested.
+/// "Before we begin": explains each permission before asking for it.
 struct PermissionsView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
-    /// The student's answer for each permission asked so far: true if allowed.
+    /// The answer for each permission asked so far (true means allowed).
     @State private var answers: [OnboardingPermission: Bool] = [:]
 
     private var nextPermission: OnboardingPermission? {
@@ -115,7 +115,7 @@ struct PermissionsView: View {
     }
 
     var body: some View {
-        // Scrolls on smaller iPhones or with large text; the buttons stay pinned at the bottom.
+        // Scrolls on small iPhones; the buttons stay at the bottom.
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Before we begin")
@@ -156,6 +156,7 @@ struct PermissionsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// Shows the iPhone permission prompt and remembers the answer.
     private func ask(for permission: OnboardingPermission) {
         switch permission {
         case .notifications:
@@ -169,7 +170,7 @@ struct PermissionsView: View {
                 withAnimation { answers[.location] = isAllowed }
             }
         case .camera:
-            // UI only for now: the system prompt is added with the camera feature.
+            // The real camera prompt appears the first time the camera opens.
             withAnimation { answers[permission] = true }
         }
     }
@@ -261,7 +262,7 @@ private struct PermissionCard: View {
     }
 }
 
-/// Last onboarding step: set a monthly food budget.
+/// The last onboarding step: set a monthly food budget.
 struct BudgetSetupView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router

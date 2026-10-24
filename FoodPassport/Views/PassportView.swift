@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Passport tab: earned stamps, the active quest and challenges.
+/// The Passport tab: stamps, the active quest and challenges.
 struct PassportView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
@@ -81,18 +81,19 @@ struct PassportView: View {
         .accessibilityLabel("New quest")
     }
 
+    /// The visit that earned this stamp.
     private func visit(for stamp: Stamp) -> Visit? {
         appState.visits.first { $0.id == stamp.visitID }
     }
 }
 
-/// "Stamps earned" grid: earned stamps followed by empty "Next cuisine" slots.
+/// The grid of stamps, with empty "Next cuisine" spaces after them.
 struct StampGridCard: View {
     let stamps: [Stamp]
     var totalSlots = 6
     let onSelect: (Stamp) -> Void
 
-    /// As many columns as fit (three on every iPhone in portrait), each at least 92 points wide.
+    /// As many columns as fit (three on an iPhone).
     private let columns = [GridItem(.adaptive(minimum: 92), spacing: 12)]
 
     var body: some View {
@@ -186,7 +187,7 @@ struct StampDetailSheet: View {
     }
 }
 
-/// Orange "Active quest" card on the Passport tab.
+/// The orange "Active quest" card.
 struct ActiveQuestCard: View {
     let quest: Quest
 
@@ -223,7 +224,7 @@ struct ActiveQuestCard: View {
     }
 }
 
-/// Challenge row with a tinted icon, e.g. "Campus Food Trail" or "Weekly challenge".
+/// A challenge row, e.g. "Campus Food Trail".
 struct ChallengeRow: View {
     let systemImage: String
     let tint: Color
@@ -267,7 +268,7 @@ struct ChallengeRow: View {
     }
 }
 
-/// A place in the quest plan with its estimated cost; faded when it no longer fits the budget.
+/// A place in the quest plan. Faded if it no longer fits the budget.
 struct PlanStopRow: View {
     let stop: PlannedStop
 

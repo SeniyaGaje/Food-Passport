@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 
-/// Home tab dashboard: summary tiles, active quest, spending chart, cuisines and recent activity.
+/// The Home tab: totals, the active quest, spending, cuisines and recent visits.
 struct HomeView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
@@ -9,7 +9,7 @@ struct HomeView: View {
 
     private let quest = MockData.activeQuest
 
-    /// "Good evening, John" — changes with the time of day.
+    /// "Good evening, John", depending on the time of day.
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: .now)
         let partOfDay = switch hour {
@@ -87,7 +87,7 @@ struct HomeView: View {
     }
 }
 
-/// Orange card on the dashboard showing quest progress, budget used and the next suggested place.
+/// The orange quest card: progress, money spent and the next suggested place.
 struct QuestSummaryCard: View {
     let quest: Quest
 
@@ -186,6 +186,7 @@ struct WeeklySpendingCard: View {
                     y: .value("Spent", entry.amount),
                     width: .ratio(0.55)
                 )
+                // AnyShapeStyle lets one line choose between a gradient and a plain colour.
                 .foregroundStyle(entry.isHighlighted ? AnyShapeStyle(Theme.primaryGradient) : AnyShapeStyle(Theme.track))
                 .cornerRadius(8)
                 .accessibilityLabel(entry.day)
@@ -217,7 +218,7 @@ struct CuisineBreakdownCard: View {
         VStack(alignment: .leading, spacing: 16) {
             SectionCaption("Cuisines explored")
 
-            // Side by side when there's room; stacked with large text sizes.
+            // Side by side if there's room, otherwise one above the other.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 24) {
                     donut
@@ -282,6 +283,7 @@ struct CuisineBreakdownCard: View {
         .accessibilityHidden(true)
     }
 
+    /// Each cuisine gets the next colour in the chart palette.
     private func color(for share: CuisineShare) -> Color {
         let index = shares.firstIndex(of: share) ?? 0
         return Theme.chartPalette[index % Theme.chartPalette.count]

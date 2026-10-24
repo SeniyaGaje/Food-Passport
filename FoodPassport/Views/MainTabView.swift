@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The five-tab shell (Home, Explore, Passport, History, Profile), each with its own navigation stack.
+/// The five tabs (Home, Explore, Passport, History, Profile). Each tab has its own screens.
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
@@ -26,13 +26,13 @@ struct MainTabView: View {
         .sheet(item: $router.sheet) { sheet in
             AppSheetContent(sheet: sheet)
         }
-        // `initial: true` also handles a tap that launched the app, which arrives before this view appears.
+        // A notification was tapped. `initial: true` also catches a tap that opened the app.
         .onChange(of: appState.notificationDestination, initial: true) { _, destination in
             guard let destination else { return }
             appState.notificationDestination = nil
             open(destination)
         }
-        // Geofence arrival while the app is open: the same message as the notification, as an in-app banner.
+        // The student arrived at a restaurant while the app is open: show the banner.
         .onChange(of: appState.arrivedRestaurant) { _, restaurant in
             guard let restaurant else { return }
             appState.arrivedRestaurant = nil
@@ -47,7 +47,7 @@ struct MainTabView: View {
         }
     }
 
-    /// Shows the screen a tapped notification points to.
+    /// Opens the screen a notification is about.
     private func open(_ destination: NotificationDestination) {
         switch destination {
         case .restaurant(let id):
@@ -56,7 +56,7 @@ struct MainTabView: View {
             }
         case .logVisit(let id):
             if let restaurant = appState.restaurants.first(where: { $0.id == id }) {
-                // Same screens as arriving from Directions: Place detail with Log your visit on top.
+                // Open the restaurant's page with Log your visit on top.
                 router.tabPaths[.explore] = [.placeDetail(restaurant), .logVisit(restaurant)]
                 router.selectedTab = .explore
             }
@@ -77,7 +77,7 @@ struct MainTabView: View {
     }
 }
 
-/// Maps a pushed `AppRoute` to its screen.
+/// Turns an `AppRoute` into its screen.
 struct AppRouteDestination: View {
     let route: AppRoute
 
@@ -103,7 +103,7 @@ struct AppRouteDestination: View {
     }
 }
 
-/// Maps a global `AppSheet` to its sheet content.
+/// Turns an `AppSheet` into its sheet.
 struct AppSheetContent: View {
     let sheet: AppSheet
 
@@ -119,7 +119,7 @@ struct AppSheetContent: View {
     }
 }
 
-/// Shows the current `AppPopup` centred over a dimmed background with a fade-and-scale animation.
+/// Shows the current pop-up in the middle of a dimmed screen.
 struct PopupHost: View {
     @Environment(AppRouter.self) private var router
 
@@ -185,7 +185,7 @@ struct PopupHost: View {
     }
 }
 
-/// Shows in-app notification banners and toasts at the top of the screen.
+/// Shows banners and short messages at the top of the screen.
 struct TopMessageHost: View {
     @Environment(AppRouter.self) private var router
 

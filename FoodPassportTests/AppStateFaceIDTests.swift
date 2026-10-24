@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import FoodPassport
 
-/// "Unlock with Face ID" in Profile and the lock screen, with a mock sensor that can succeed or fail.
+/// "Unlock with Face ID" and the lock screen, using a fake sensor that can pass or fail.
 @Suite("Face ID lock")
 @MainActor
 struct AppStateFaceIDTests {

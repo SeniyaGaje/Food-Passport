@@ -2,16 +2,15 @@ import Foundation
 import FirebaseAuth
 
 /// Signs the student up, in and out.
-/// `AppState` only talks to this protocol, so the app can run on Firebase Auth or on the
-/// in-memory mock (previews, unit tests, or before a Firebase project has been set up).
+/// AppState only uses this protocol, so it can run on Firebase or on the mock (previews and tests).
 protocol AuthService {
     /// The signed-in user's ID, or nil when nobody is signed in.
     var currentUserID: String? { get }
 
-    /// Signs in with email and password and returns the user's ID.
+    /// Returns the user's ID.
     func signIn(email: String, password: String) async throws -> String
 
-    /// Creates a new account and returns the new user's ID.
+    /// Creates the account and returns the new user's ID.
     func signUp(email: String, password: String) async throws -> String
 
     func sendPasswordReset(email: String) async throws
@@ -19,7 +18,7 @@ protocol AuthService {
     func signOut() throws
 }
 
-/// Sign-in problems, worded for the student rather than the developer.
+/// Sign-in problems, in words the student understands.
 enum AuthServiceError: LocalizedError, Equatable {
     case invalidCredentials
     case emailAlreadyInUse
@@ -40,8 +39,8 @@ enum AuthServiceError: LocalizedError, Equatable {
     }
 }
 
-/// `AuthService` backed by Firebase Authentication (email and password).
-/// Create it only after `FirebaseApp.configure()` has run.
+/// Email and password sign-in with Firebase Authentication.
+/// Only create this after `FirebaseApp.configure()` has run.
 final class FirebaseAuthService: AuthService {
     private let auth = Auth.auth()
 
@@ -79,7 +78,7 @@ final class FirebaseAuthService: AuthService {
         try auth.signOut()
     }
 
-    /// Converts a Firebase Auth error code into an `AuthServiceError`.
+    /// Turns Firebase's error codes into our friendly messages.
     private static func friendlyError(from error: Error) -> AuthServiceError {
         let nsError = error as NSError
         guard nsError.domain == AuthErrorDomain, let code = AuthErrorCode(rawValue: nsError.code) else {
@@ -97,12 +96,12 @@ final class FirebaseAuthService: AuthService {
     }
 }
 
-/// In-memory `AuthService` for previews, unit tests and running without Firebase.
-/// Accepts any email with a non-empty password.
+/// Fake sign-in for previews, tests and running without Firebase.
+/// Any email works as long as the password isn't empty.
 final class MockAuthService: AuthService {
     private(set) var currentUserID: String?
 
-    /// Set this to make the next sign-in or sign-up fail, e.g. in a unit test.
+    /// Set this in a test to make sign-in or sign-up fail.
     var errorToThrow: AuthServiceError?
 
     init(signedInUserID: String? = nil) {

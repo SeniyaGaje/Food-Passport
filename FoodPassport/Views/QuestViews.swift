@@ -1,13 +1,13 @@
 import SwiftUI
 import MapKit
 
-/// Active quest progress, budget and the adaptive plan of suggested places.
+/// The active quest: progress, budget and the suggested places.
 struct QuestDetailView: View {
     @Environment(AppRouter.self) private var router
 
     let quest: Quest
 
-    /// The big "2/3" follows the student's text size setting.
+    /// The big "2/3" grows with larger text sizes.
     @ScaledMetric(relativeTo: .largeTitle) private var ringNumberSize: CGFloat = 44
 
     var body: some View {
@@ -83,7 +83,7 @@ struct QuestDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            // About half the screen width, so the ring looks the same on a 17e and a Pro Max.
+            // About half the screen width, so it looks the same on every iPhone.
             .containerRelativeFrame(.horizontal) { width, _ in
                 min(width * 0.5, 230)
             }
@@ -137,7 +137,7 @@ struct QuestDetailView: View {
     }
 }
 
-/// Bottom sheet for creating or editing a quest.
+/// The sheet for making or editing a quest.
 struct QuestEditorSheet: View {
     enum Mode {
         case create
@@ -293,13 +293,14 @@ struct QuestEditorSheet: View {
         }
     }
 
+    /// Closes the sheet and confirms. (Quests aren't saved to Firestore yet.)
     private func save() {
         dismiss()
         router.showToast(mode == .create ? "Quest created – your plan is ready" : "Quest updated – plan recalculated")
     }
 }
 
-/// A food trail: map of numbered stops, progress and the list of stops.
+/// A food trail: a map of the stops, progress, and the list of stops.
 struct FoodTrailView: View {
     let trail: FoodTrail
 
@@ -317,7 +318,7 @@ struct FoodTrailView: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
 
-                // Same shape on every iPhone: the map's height follows the screen width.
+                // The map's height follows the screen width, so it keeps its shape.
                 trailMap
                     .aspectRatio(1.5, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
@@ -503,7 +504,7 @@ private struct SuggestedPlaceRow: View {
     let stop: PlannedStop
 
     var body: some View {
-        // The price sits under the name (not beside it), so long names stay on one line on narrow iPhones.
+        // The price goes under the name, so long names fit on small iPhones.
         HStack(spacing: 14) {
             FoodImageView(imageName: stop.restaurant.imageName, cuisine: stop.restaurant.cuisine, cornerRadius: 14)
                 .frame(width: 64, height: 64)
@@ -534,7 +535,7 @@ private struct SuggestedPlaceRow: View {
     }
 }
 
-/// "Budget update" — explains how the Adaptive Food Quest replanned after a visit cost more than estimated.
+/// "Budget update": a meal cost more than expected, so the plan changed.
 struct BudgetUpdatePopup: View {
     let update: BudgetUpdate
     let onSeeUpdatedPlan: () -> Void
@@ -594,7 +595,7 @@ struct BudgetUpdatePopup: View {
     }
 }
 
-/// "Budget limit reached" — shown when no remaining suggestion fits the quest budget.
+/// "Budget limit reached": none of the suggestions fit the money left.
 struct BudgetLimitPopup: View {
     let quest: Quest
     let onIncreaseBudget: () -> Void

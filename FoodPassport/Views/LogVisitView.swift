@@ -3,7 +3,7 @@ import AVFoundation
 import PhotosUI
 import VisionKit
 
-/// "Log your visit" form — dish, cuisine, amount, rating and notes, with meal and receipt scanning.
+/// The "Log your visit" form, with meal and receipt scanning.
 struct LogVisitView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
@@ -20,15 +20,17 @@ struct LogVisitView: View {
     @State private var isShowingMealCamera = false
     @State private var isShowingReceiptScanner = false
 
+    /// The cuisine typed in, or the restaurant's cuisine if it doesn't match one we know.
     private var selectedCuisine: Cuisine {
         Cuisine.allCases.first { $0.rawValue.caseInsensitiveCompare(cuisine) == .orderedSame } ?? restaurant.cuisine
     }
 
-    /// The amount typed or scanned, ignoring anything that isn't a digit (e.g. "LKR" or commas).
+    /// The amount as a number, ignoring "LKR" and commas.
     private var amountValue: Int? {
         Int(amount.filter(\.isNumber))
     }
 
+    /// Save needs at least a dish and an amount.
     private var canSave: Bool {
         !dish.trimmed.isEmpty && (amountValue ?? 0) > 0
     }
@@ -100,7 +102,7 @@ struct LogVisitView: View {
                     amount = "\(total)"
                     isAmountFromReceipt = true
                 }
-                // Fill in the dish from the receipt if the student hasn't typed or scanned one yet.
+                // Use the first item as the dish if the student hasn't entered one.
                 if dish.trimmed.isEmpty, let firstItem = receipt.items.first {
                     dish = firstItem.name
                 }
@@ -108,6 +110,7 @@ struct LogVisitView: View {
         }
     }
 
+    /// Saves the visit. Shows the stamp pop-up if it earned one.
     private func saveVisit() {
         let visit = Visit(
             id: UUID().uuidString,
@@ -118,7 +121,7 @@ struct LogVisitView: View {
             rating: rating,
             notes: notes.trimmed,
             date: .now,
-            // Only a visit logged at the restaurant itself is verified, and only verified visits earn stamps.
+            // Only visits logged at the restaurant are verified, and only those earn stamps.
             isLocationVerified: appState.isAtRestaurant(restaurant),
             isAutoDetected: hasMealPhoto,
             isFromReceipt: isAmountFromReceipt,
@@ -157,7 +160,7 @@ struct LogVisitView: View {
     @ViewBuilder
     private var mealScanArea: some View {
         if hasMealPhoto {
-            // After a scan: confirmation that the dish was filled in, with a way to try again.
+            // After a scan: show it worked, with a Retake button.
             Button {
                 isShowingMealCamera = true
             } label: {
@@ -219,20 +222,20 @@ struct LogVisitView: View {
     }
 }
 
-/// Full-screen camera for photographing a meal. The dish is recognised on the device with Core ML (MobileCLIP).
+/// The full-screen camera for photographing a meal. The dish is recognised on the phone.
 struct MealCameraView: View {
     private enum Step {
         case camera
         case recognising(UIImage)
         case results(UIImage, [MealPrediction])
-        /// Not a dish the app knows, or something went wrong.
+        /// Not a dish we know, or something went wrong.
         case problem(UIImage?, title: String, message: String)
     }
 
     private enum CameraStatus {
         case starting
         case running
-        /// No camera, e.g. on the simulator.
+        /// No camera (the simulator).
         case unavailable
         case denied
     }
@@ -254,9 +257,8 @@ struct MealCameraView: View {
     @State private var confirmedPrediction: MealPrediction?
     @State private var wantsManualEntry = false
 
-    /// - Parameters:
-    ///   - menu: dish names on the restaurant's menu; the recogniser favours them.
-    ///   - initialPhoto: a photo to recognise straight away, e.g. in previews.
+    /// `menu` is the restaurant's dishes (they get a boost).
+    /// `initialPhoto` is recognised straight away, for previews.
     init(
         menu: [String] = [],
         recognizer: MealRecognizer = CoreMLMealRecognizer.shared,
@@ -290,7 +292,7 @@ struct MealCameraView: View {
             }
         }
         .task {
-            // Load the model while the student lines up the photo, so recognition is quick.
+            // Load the model while the student lines up the photo, so it's quick.
             await recognizer.prepare()
         }
         .onDisappear {
@@ -508,6 +510,7 @@ struct MealCameraView: View {
 
     // Actions
 
+    /// Starts the camera, or explains why it can't.
     private func startCamera() async {
         guard CameraService.isAvailable else {
             cameraStatus = .unavailable
@@ -521,6 +524,7 @@ struct MealCameraView: View {
         cameraStatus = .running
     }
 
+    /// Takes a photo and recognises the meal in it.
     private func takePhoto() {
         Task {
             do {
@@ -531,6 +535,7 @@ struct MealCameraView: View {
         }
     }
 
+    /// Loads the photo chosen from Photos.
     private func loadPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
         Task {
@@ -542,6 +547,7 @@ struct MealCameraView: View {
         }
     }
 
+    /// Runs the meal recogniser and shows the results (or the problem).
     private func recognise(_ photo: UIImage) {
         step = .recognising(photo)
         Task {
@@ -564,6 +570,7 @@ struct MealCameraView: View {
         }
     }
 
+    /// What to tell the student when the photo isn't a meal.
     private func notAMealMessage(_ lookalike: String) -> String {
         switch lookalike {
         case "Receipt": "It looks like a receipt. Use Scan receipt for the bill, and photograph your plate here."
@@ -572,6 +579,7 @@ struct MealCameraView: View {
         }
     }
 
+    /// Clears the photo so the student can try again.
     private func retake() {
         selectedPhoto = nil
         confirmedPrediction = nil
@@ -579,6 +587,7 @@ struct MealCameraView: View {
         step = .camera
     }
 
+    /// Runs when the results sheet closes, however it was closed.
     private func handleResultsDismissed() {
         if let confirmedPrediction {
             onConfirm(confirmedPrediction)
@@ -586,13 +595,13 @@ struct MealCameraView: View {
         } else if wantsManualEntry {
             dismiss()
         } else {
-            // Swiped the results away: back to the camera for another try.
+            // They swiped the results away, so go back to the camera.
             retake()
         }
     }
 }
 
-/// Live picture from `CameraService`, filling the viewfinder.
+/// The live camera picture.
 private struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
@@ -616,7 +625,7 @@ private struct CameraPreview: UIViewRepresentable {
     }
 }
 
-/// "We found matches!" — the top three dishes from the on-device recogniser.
+/// "We found matches!": the top three dishes for the photo.
 struct MealRecognitionSheet: View {
     let photo: UIImage?
     let predictions: [MealPrediction]
@@ -738,7 +747,7 @@ private struct PredictionRow: View {
     }
 }
 
-/// Reads the total from a photo of a receipt with Vision, on the device, and highlights it on the photo.
+/// Scans a receipt and shows the total it found, highlighted on the photo.
 struct ReceiptScanView: View {
     private enum Step {
         case choosing
@@ -757,7 +766,7 @@ struct ReceiptScanView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isShowingDocumentCamera = false
 
-    /// - Parameter initialImage: a photo to read straight away, e.g. in previews.
+    /// `initialImage` is read straight away, for previews.
     init(
         scanner: ReceiptScanner = VisionReceiptScanner(),
         initialImage: UIImage? = nil,
@@ -902,7 +911,7 @@ struct ReceiptScanView: View {
 
     @ViewBuilder
     private var choosingButtons: some View {
-        // The document scanner needs a real camera, so the simulator only offers the photo library.
+        // The document scanner needs a real camera, so the simulator only gets Photos.
         if VNDocumentCameraViewController.isSupported {
             Button {
                 isShowingDocumentCamera = true
@@ -970,6 +979,7 @@ struct ReceiptScanView: View {
 
     // Actions
 
+    /// Loads the photo chosen from Photos.
     private func loadPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
         Task {
@@ -981,6 +991,7 @@ struct ReceiptScanView: View {
         }
     }
 
+    /// Reads the receipt and shows the total.
     private func read(_ image: UIImage) {
         step = .reading(image)
         Task {
@@ -993,16 +1004,17 @@ struct ReceiptScanView: View {
         }
     }
 
+    /// Clears the photo so the student can try again.
     private func retake() {
         selectedPhoto = nil
         withAnimation { step = .choosing }
     }
 }
 
-/// The receipt photo, with an orange box around the total that Vision found.
+/// The receipt photo, with an orange box around the total.
 private struct ReceiptPhotoView: View {
     let image: UIImage
-    /// Vision's normalised coordinates (0–1, origin bottom-left).
+    /// Where the total is (Vision uses 0–1, from the bottom-left).
     let highlight: CGRect?
 
     var body: some View {
@@ -1012,7 +1024,7 @@ private struct ReceiptPhotoView: View {
             .overlay {
                 if let highlight {
                     GeometryReader { proxy in
-                        // Vision measures from the bottom-left corner; SwiftUI from the top-left.
+                        // Vision measures from the bottom-left, SwiftUI from the top-left, so flip it.
                         let box = CGRect(
                             x: highlight.minX * proxy.size.width,
                             y: (1 - highlight.maxY) * proxy.size.height,
@@ -1036,7 +1048,7 @@ private struct ReceiptPhotoView: View {
     }
 }
 
-/// VisionKit's document scanner: finds the receipt's edges and straightens the photo before Vision reads it.
+/// Apple's document scanner. It finds the receipt's edges and straightens the photo.
 struct DocumentCameraView: UIViewControllerRepresentable {
     let onScan: (UIImage) -> Void
     let onCancel: () -> Void
@@ -1077,7 +1089,7 @@ struct DocumentCameraView: UIViewControllerRepresentable {
     }
 }
 
-/// "New stamp earned!" pop-up shown after a verified visit adds a new cuisine.
+/// The "New stamp earned!" pop-up.
 struct StampEarnedPopup: View {
     let cuisine: Cuisine
     let quest: Quest
@@ -1085,7 +1097,7 @@ struct StampEarnedPopup: View {
     let onDone: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Drives the "stamp pressed onto the page" animation when the pop-up appears.
+    /// Starts the stamping animation when the pop-up appears.
     @State private var isStamped = false
 
     var body: some View {

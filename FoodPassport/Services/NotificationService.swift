@@ -7,14 +7,14 @@ enum NotificationPermission: Equatable {
     case denied
 }
 
-/// The screen to open when the student taps a notification.
+/// Which screen to open when the student taps a notification.
 enum NotificationDestination: Equatable {
     case restaurant(id: Restaurant.ID)
-    /// "You've arrived" alert: opens Log your visit for that restaurant.
+    /// The "You've arrived" alert opens Log your visit.
     case logVisit(restaurantID: Restaurant.ID)
     case weeklyChallenge
 
-    /// Stored in the notification so the app knows where to go when it is tapped.
+    /// Saved inside the notification, so we know where to go when it's tapped.
     var userInfo: [String: String] {
         switch self {
         case .restaurant(let id): ["destination": "restaurant", "restaurantID": id]
@@ -39,14 +39,14 @@ enum NotificationDestination: Equatable {
     }
 }
 
-/// A notification scheduled on the device, such as a planned-visit reminder.
+/// A reminder to schedule on the phone, e.g. "Your visit is in 30 minutes".
 struct LocalReminder: Equatable {
     enum Schedule: Equatable {
-        /// Shows straight away, e.g. the arrival alert.
+        /// Show it now (the arrival alert).
         case immediately
-        /// Fires once at this date and time.
+        /// Show it once, at this time.
         case once(Date)
-        /// Repeats every week. `weekday` follows `Calendar`: 1 is Sunday, 2 is Monday.
+        /// Repeat every week. Weekday 1 is Sunday, 2 is Monday.
         case weekly(weekday: Int, hour: Int, minute: Int)
     }
 
@@ -60,10 +60,10 @@ struct LocalReminder: Equatable {
     static let weeklyChallengeID = "weekly-challenge"
     static let arrivalIDPrefix = "arrival-"
 
-    /// How long before a planned visit the reminder fires.
+    /// The reminder comes 30 minutes before a planned visit.
     static let visitReminderLeadTime: TimeInterval = 30 * 60
 
-    /// Reminder sent 30 minutes before a planned visit.
+    /// "Your visit to Campus Bites is in 30 minutes".
     static func plannedVisit(to restaurant: Restaurant, at visitDate: Date) -> LocalReminder {
         LocalReminder(
             id: "\(visitReminderIDPrefix)\(restaurant.id)-\(Int(visitDate.timeIntervalSince1970))",
@@ -74,8 +74,7 @@ struct LocalReminder: Equatable {
         )
     }
 
-    /// Sent when the student walks into a restaurant's geofence while FoodPassport is closed.
-    /// Same wording as the arrival notification in the prototype.
+    /// Sent when the student walks up to a restaurant while the app is closed.
     static func arrival(at restaurant: Restaurant) -> LocalReminder {
         LocalReminder(
             id: "\(arrivalIDPrefix)\(restaurant.id)",
@@ -86,7 +85,7 @@ struct LocalReminder: Equatable {
         )
     }
 
-    /// Every Monday at the time chosen in Profile, matching the "New weekly challenge!" notification in the prototype.
+    /// Every Monday at the time chosen in Profile.
     static func weeklyChallenge(hour: Int, minute: Int) -> LocalReminder {
         LocalReminder(
             id: weeklyChallengeID,
@@ -98,26 +97,26 @@ struct LocalReminder: Equatable {
     }
 }
 
-/// Asks for notification permission and schedules local reminders.
-/// `AppState` only talks to this protocol, so unit tests can use the mock instead of the real notification centre.
+/// Asks for notification permission and schedules reminders.
+/// AppState only uses this protocol, so tests can use the mock instead of real notifications.
 protocol NotificationService: AnyObject {
-    /// Called when the student taps one of the app's notifications.
+    /// Runs when the student taps one of our notifications.
     var onOpen: ((NotificationDestination) -> Void)? { get set }
 
     func permission() async -> NotificationPermission
 
-    /// Shows the system prompt the first time. Returns whether notifications are allowed.
+    /// Asks the first time. Returns true if notifications are allowed.
     func requestPermission() async -> Bool
 
-    /// Adds the reminder, replacing any pending reminder with the same ID.
+    /// Adds the reminder. One with the same ID is replaced.
     func schedule(_ reminder: LocalReminder) async throws
 
     func cancelReminders(withIDPrefix prefix: String) async
     func cancelAllReminders()
 }
 
-/// `NotificationService` backed by the UserNotifications framework.
-/// It is also the notification centre's delegate, so it shows banners while the app is open and handles taps.
+/// Real notifications, using Apple's UserNotifications.
+/// It's also the delegate, so it shows banners while the app is open and handles taps.
 final class UserNotificationService: NSObject, NotificationService, UNUserNotificationCenterDelegate {
     var onOpen: ((NotificationDestination) -> Void)?
 
@@ -125,7 +124,7 @@ final class UserNotificationService: NSObject, NotificationService, UNUserNotifi
 
     override init() {
         super.init()
-        // Must be set before the app finishes launching, so a tap that launches the app is not missed.
+        // Set early, so a tap that opens the app isn't missed.
         center.delegate = self
     }
 
@@ -180,7 +179,7 @@ final class UserNotificationService: NSObject, NotificationService, UNUserNotifi
 
     // UNUserNotificationCenterDelegate
 
-    /// Shows the banner even when FoodPassport is already open.
+    /// Show the banner even when the app is open.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -208,11 +207,11 @@ final class UserNotificationService: NSObject, NotificationService, UNUserNotifi
     }
 }
 
-/// In-memory `NotificationService` for previews and unit tests. Records what would have been scheduled.
+/// Fake notifications for previews and tests. Keeps a list of what was scheduled.
 final class MockNotificationService: NotificationService {
     var onOpen: ((NotificationDestination) -> Void)?
     var currentPermission: NotificationPermission
-    /// What the student answers when the permission prompt appears.
+    /// What the student taps when asked for permission.
     var allowsWhenAsked: Bool
     private(set) var scheduledReminders: [LocalReminder] = []
 

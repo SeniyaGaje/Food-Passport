@@ -1,21 +1,12 @@
 import Foundation
 import FirebaseFirestore
 
-/// Reads and writes the student's data.
-/// `AppState` only talks to this protocol, so the app can run on Cloud Firestore or on the
-/// in-memory mock (previews, unit tests, or before a Firebase project has been set up).
-///
-/// Firestore layout:
-/// ```
-/// restaurants/{restaurantID}          shared restaurant list
-/// users/{userID}                      UserProfile (name, budget, bookmarks)
-/// users/{userID}/visits/{visitID}     Visit
-/// users/{userID}/stamps/{cuisine}     Stamp (one per cuisine)
-/// ```
+/// Reads and writes the student's data. AppState only uses this protocol, so it can run on Firestore or the mock.
+/// Firestore layout: restaurants/{id}, users/{userID}, users/{userID}/visits/{id}, users/{userID}/stamps/{cuisine}.
 protocol DatabaseService {
     func fetchRestaurants() async throws -> [Restaurant]
 
-    /// Returns nil when the user has no profile document yet.
+    /// nil if this user has no profile saved yet.
     func fetchProfile(userID: String) async throws -> UserProfile?
     func saveProfile(_ profile: UserProfile, userID: String) async throws
 
@@ -28,13 +19,12 @@ protocol DatabaseService {
     func saveStamp(_ stamp: Stamp, userID: String) async throws
     func deleteStamp(cuisine: Cuisine, userID: String) async throws
 
-    /// Deletes every visit and stamp but keeps the profile ("Reset all data" in Profile).
+    /// "Reset all data" in Profile: deletes visits and stamps but keeps the profile.
     func deleteVisitsAndStamps(userID: String) async throws
 }
 
-/// `DatabaseService` backed by Cloud Firestore.
-/// Firestore caches data on the device, so reads work offline and writes sync once the device is back online.
-/// Create it only after `FirebaseApp.configure()` has run.
+/// The real database, Cloud Firestore. It keeps a copy on the phone, so it works offline too.
+/// Only create this after `FirebaseApp.configure()` has run.
 final class FirestoreDatabaseService: DatabaseService {
     private let db = Firestore.firestore()
     private let encoder = Firestore.Encoder()
@@ -64,9 +54,8 @@ final class FirestoreDatabaseService: DatabaseService {
         var restaurants = try snapshot.documents.map { try $0.data(as: Restaurant.self) }
 
         #if DEBUG
-        // Upload any sample restaurant Firestore doesn't have yet: all of them on a new Firebase project,
-        // or one added to MockData later (like the NIBM canteen). Restaurants already in Firestore are left
-        // untouched, so edits made in the Firebase console are kept.
+        // Upload any sample restaurants that Firestore doesn't have yet (e.g. on a new project).
+        // Ones already there are left alone, so edits made in the Firebase console are kept.
         let missing = MockData.restaurants.filter { sample in
             !restaurants.contains { $0.id == sample.id }
         }
@@ -79,9 +68,8 @@ final class FirestoreDatabaseService: DatabaseService {
         return restaurants
     }
 
-    /// Not awaited: Firestore keeps the upload in its offline cache straight away and sends it once online,
-    /// so signing in never waits on a slow connection. If the security rules block the write,
-    /// this debug build still shows the restaurants; they just don't reach other phones.
+    /// We don't wait for this: Firestore saves it offline first and sends it when online,
+    /// so signing in is never slowed down by the upload.
     private func upload(_ restaurants: [Restaurant]) {
         let batch = db.batch()
         for restaurant in restaurants {
@@ -139,7 +127,7 @@ final class FirestoreDatabaseService: DatabaseService {
         let visits = try await visitsCollection(userID).getDocuments()
         let stamps = try await stampsCollection(userID).getDocuments()
 
-        // A batch deletes everything in one request, so the reset either fully succeeds or fully fails.
+        // A batch deletes everything at once, so the reset never half-finishes.
         let batch = db.batch()
         for document in visits.documents + stamps.documents {
             batch.deleteDocument(document.reference)
@@ -148,8 +136,8 @@ final class FirestoreDatabaseService: DatabaseService {
     }
 }
 
-/// In-memory `DatabaseService` for previews, unit tests and running without Firebase.
-/// Holds a single user's data, so the `userID` arguments are ignored.
+/// Fake database kept in memory, for previews, tests and running without Firebase.
+/// It only holds one user, so `userID` is ignored.
 final class MockDatabaseService: DatabaseService {
     var restaurants: [Restaurant]
     var profile: UserProfile?

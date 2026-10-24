@@ -2,14 +2,12 @@ import SwiftUI
 import Foundation
 import MapKit
 
-/// Colours, gradients and sizes taken from the Figma prototype.
-///
-/// Every colour has a light value (from the prototype) and a dark value, so the app follows the
-/// "Dark mode" setting in Profile. Use these instead of `.white`, `.black` or `Color(hex:)` in views,
-/// otherwise a screen will mix light and dark colours.
+/// The app's colours and sizes, from the Figma prototype.
+/// Each colour has a light and a dark version. Use these in screens instead of `.white` or `.black`,
+/// so dark mode looks right.
 enum Theme {
 
-    // Brand (the same in both modes, so the orange identity stays recognisable)
+    // Brand orange (the same in light and dark mode)
 
     static let orange = Color(hex: 0xF26B1D)
     static let orangeLight = Color(hex: 0xFF8A3D)
@@ -18,30 +16,30 @@ enum Theme {
 
     // Neutrals
 
-    /// Main text colour, and the fill of selected chips and dark buttons.
+    /// Main text colour. Also used for selected chips.
     static let ink = Color(light: 0x1C1C1E, dark: 0xF2F2F7)
-    /// Text and icons drawn on top of an `ink` fill.
+    /// Text on top of an `ink` background.
     static let onInk = Color(light: 0xFFFFFF, dark: 0x1C1C1E)
-    /// Cards, rows, fields and pop-ups.
+    /// Background of cards, fields and pop-ups.
     static let surface = Color(light: 0xFFFFFF, dark: 0x262220)
     static let fieldGray = Color(light: 0xEEEEF1, dark: 0x332E2B)
     static let buttonGray = Color(light: 0xE4E4E6, dark: 0x3A3532)
     static let sheetBackground = Color(light: 0xF8F5F2, dark: 0x1A1716)
-    /// Light grey fills such as inactive chips, icon circles and the profile header.
+    /// Light grey fill, e.g. unselected chips and icon circles.
     static let subtleFill = Color(light: 0xEDEDEF, dark: 0x332E2B)
-    /// Slightly recessed rows and fields inside a card, e.g. "Reminder time" and the budget amount field.
+    /// Slightly darker fill for fields inside a card.
     static let insetFill = Color(light: 0xF6F6F7, dark: 0x2E2A27)
-    /// Empty part of progress bars and chart columns.
+    /// The empty part of progress bars and charts.
     static let track = Color(light: 0xECECEE, dark: 0x3A3532)
     /// Thin borders and dividers.
     static let hairline = Color(light: 0xE2E2E6, dark: 0x45403C)
-    /// Mid-grey for secondary icons, unselected pins and minor chart series.
+    /// Medium grey for less important icons.
     static let mutedInk = Color(light: 0x6B6B70, dark: 0xA19C98)
-    /// Light grey for empty stars, unchecked circles and placeholders.
+    /// Light grey for empty stars and unticked circles.
     static let faintInk = Color(light: 0xC7C7CC, dark: 0x5C5652)
-    /// Drop shadows: soft in light mode, almost invisible in dark mode where cards are lifted by colour instead.
+    /// Shadow colour (stronger in dark mode so it still shows).
     static let shadow = Color(light: 0x000000, dark: 0x000000, darkOpacity: 0.5)
-    /// Hairline around cards and fields, so surfaces keep a crisp edge — especially on the dark background.
+    /// Thin border around cards, so their edges show on the dark background.
     static let cardBorder = Color(light: 0x000000, dark: 0xFFFFFF, lightOpacity: 0.05, darkOpacity: 0.08)
 
     // Status
@@ -76,7 +74,7 @@ enum Theme {
         endPoint: .bottom
     )
 
-    /// Warm colours for charts, so every series stays on-brand in both light and dark mode.
+    /// Colours for the charts.
     static let chartPalette: [Color] = [
         orange,
         gold,
@@ -95,7 +93,7 @@ enum Theme {
     }
 
     // Layout
-    // Every screen uses the same side margin and spacing steps, so layouts line up on every iPhone size.
+    // Every screen uses the same spacing, so they all line up.
 
     enum Spacing {
         static let xxs: CGFloat = 4
@@ -106,13 +104,14 @@ enum Theme {
         static let xl: CGFloat = 24
     }
 
-    /// Side margin for screen content.
+    /// Space at the left and right of each screen.
     static let screenMargin: CGFloat = 20
 }
 
 extension Color {
-    /// Creates a colour from a hex value such as `0xF26B1D`.
+    /// A colour from a hex number, e.g. `Color(hex: 0xF26B1D)`.
     init(hex: UInt32, opacity: Double = 1) {
+        // 0xF26B1D is three pairs of digits: red (F2), green (6B) and blue (1D).
         self.init(
             .sRGB,
             red: Double((hex >> 16) & 0xFF) / 255,
@@ -122,8 +121,9 @@ extension Color {
         )
     }
 
-    /// Creates a colour that switches between two hex values when the app changes between light and dark mode.
+    /// A colour with one value for light mode and another for dark mode.
     init(light: UInt32, dark: UInt32, lightOpacity: Double = 1, darkOpacity: Double = 1) {
+        // iOS runs this again whenever the app switches between light and dark mode.
         self.init(UIColor { traits in
             traits.userInterfaceStyle == .dark
                 ? UIColor(hex: dark, alpha: darkOpacity)
@@ -143,14 +143,14 @@ private extension UIColor {
     }
 }
 
-/// The app's appearance setting, chosen with the "Dark mode" toggle in Profile and saved on the device.
+/// The "Dark mode" setting from Profile, saved on the phone.
 enum AppearanceSetting {
-    /// `UserDefaults` key used with `@AppStorage`.
+    /// The name it's saved under.
     static let darkModeKey = "isDarkModeOn"
 }
 
 extension Cuisine {
-    /// SF Symbol used for this cuisine's passport stamp and image placeholders.
+    /// The icon for this cuisine's stamp.
     var symbolName: String {
         switch self {
         case .sriLankan: "leaf.fill"
@@ -168,14 +168,14 @@ extension Cuisine {
         }
     }
 
-    /// A small fixed tilt for this cuisine's passport stamp, so the stamps look hand-pressed but never move around.
+    /// A small tilt for the stamp, so it looks hand-stamped. Each cuisine always gets the same tilt.
     var stampTilt: Double {
         let tilts: [Double] = [-8, 6, -4, 9, -6, 4, -10, 7, -3, 5, -7, 8]
         let index = Self.allCases.firstIndex(of: self) ?? 0
         return tilts[index % tilts.count]
     }
 
-    /// Warm gradient shown in place of a food photo until real images are added.
+    /// Colours shown when there's no photo.
     var placeholderColors: [Color] {
         switch self {
         case .sriLankan: [Color(hex: 0xF9A65A), Color(hex: 0xC4511C)]
@@ -207,18 +207,17 @@ struct CardStyle: ViewModifier {
 }
 
 extension View {
-    /// Rounded card (white in light mode) with a soft shadow — the main surface used throughout the prototype.
+    /// A rounded card with padding and a soft shadow, used all over the app.
     func cardStyle(padding: CGFloat = 16, cornerRadius: CGFloat = Theme.Radius.card) -> some View {
         modifier(CardStyle(padding: padding, cornerRadius: cornerRadius))
     }
 
-    /// The card surface on its own: fill, hairline border and a two-layer shadow
-    /// (a tight one for the edge and a soft one for depth). Used by cards, fields, chips and pop-ups.
+    /// Just the card look (background, thin border and shadow), without padding.
     func cardBackground(cornerRadius: CGFloat = Theme.Radius.card, shadowStrength: Double = 1) -> some View {
         surfaceBackground(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous), shadowStrength: shadowStrength)
     }
 
-    /// `cardBackground` for any shape, e.g. a `Capsule` for chips.
+    /// The card look for any shape, e.g. a capsule for chips.
     func surfaceBackground<S: InsettableShape>(_ shape: S, shadowStrength: Double = 1) -> some View {
         self
             .background(Theme.surface, in: shape)
@@ -228,13 +227,14 @@ extension View {
     }
 }
 
-/// Sizes a bottom sheet to its content, so it is never cut off on a smaller iPhone or with larger text.
+/// Makes a bottom sheet as tall as what's inside it, so nothing is cut off on small iPhones.
 private struct FittedSheetHeight: ViewModifier {
     @State private var contentHeight: CGFloat = 420
 
     func body(content: Content) -> some View {
         content
             .fixedSize(horizontal: false, vertical: true)
+            // Measure the content, then use that height for the sheet.
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { newHeight in
@@ -245,7 +245,7 @@ private struct FittedSheetHeight: ViewModifier {
 }
 
 extension View {
-    /// Rounded corners, a drag indicator and the warm sheet background shared by every bottom sheet.
+    /// The look shared by all bottom sheets.
     func brandSheetStyle() -> some View {
         self
             .presentationDragIndicator(.visible)
@@ -253,13 +253,13 @@ extension View {
             .presentationBackground(Theme.sheetBackground)
     }
 
-    /// Makes a short sheet exactly as tall as its content instead of using a fixed height.
+    /// Sizes the sheet to fit its content.
     func fittedSheetHeight() -> some View {
         modifier(FittedSheetHeight())
     }
 }
 
-/// The soft peach gradient behind every screen.
+/// The peach background behind every screen.
 struct AppBackground: View {
     var body: some View {
         Theme.backgroundGradient
@@ -273,8 +273,7 @@ extension View {
     }
 }
 
-/// Gives a screen a navigation title (used as the next screen's back-button label) without displaying it.
-/// Matches prototype screens that show only a back button above their own content.
+/// Sets a screen's title without showing it (the title is still used for the back button).
 private struct HiddenNavigationTitle: ViewModifier {
     let title: String
 
@@ -301,7 +300,7 @@ extension View {
     }
 }
 
-/// Full-width orange gradient button for the main action on a screen.
+/// The big orange button for a screen's main action.
 struct BrandPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -317,7 +316,7 @@ struct BrandPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Full-width grey button for secondary actions such as "Get directions".
+/// A grey button for other actions, e.g. "Get directions".
 struct BrandSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -329,7 +328,7 @@ struct BrandSecondaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Full-width light-orange button, e.g. "Done" and "Adjust budget" in pop-ups.
+/// A light orange button, e.g. "Done" in pop-ups.
 struct BrandTintedButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -341,7 +340,7 @@ struct BrandTintedButtonStyle: ButtonStyle {
     }
 }
 
-/// Text-only button with a full-width tap area, e.g. "Continue" or "I'm here – Log visit".
+/// A button that's just text, e.g. "Continue".
 struct BrandTextButtonStyle: ButtonStyle {
     var color: Color = Theme.ink
 
@@ -355,7 +354,7 @@ struct BrandTextButtonStyle: ButtonStyle {
     }
 }
 
-/// For cards that open another screen: the card shrinks slightly while pressed, so it feels like a button.
+/// For tappable cards: the card shrinks a little when pressed.
 struct PressableCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -393,21 +392,21 @@ private extension View {
 }
 
 extension String {
-    /// The text without leading or trailing spaces and new lines, e.g. for form input.
+    /// The text without spaces or new lines at the start and end.
     var trimmed: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 extension Int {
-    /// Formats an amount in Sri Lankan rupees, e.g. `3000.lkr` → "LKR 3,000".
+    /// Shows an amount in rupees: `3000.lkr` gives "LKR 3,000".
     var lkr: String {
         "LKR \(formatted(.number))"
     }
 }
 
 extension MKCoordinateRegion {
-    /// A region that contains every coordinate, with some breathing room around the edges.
+    /// A map area that fits all the points, with some space around them.
     static func fitting(
         _ coordinates: [CLLocationCoordinate2D],
         paddingFactor: Double = 1.8,
@@ -421,6 +420,7 @@ extension MKCoordinateRegion {
             return MKCoordinateRegion()
         }
 
+        // Centre on the middle of the points, and zoom out a bit past the outermost ones.
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
         let span = MKCoordinateSpan(
             latitudeDelta: max((maxLat - minLat) * paddingFactor, minimumDelta),
@@ -431,14 +431,14 @@ extension MKCoordinateRegion {
 }
 
 extension View {
-    /// Injects the shared app state and router so previews can render views that read them from the environment.
+    /// Gives previews the app state and router that screens need.
     func previewEnvironment() -> some View {
         self
             .environment(AppState())
             .environment(AppRouter())
     }
 
-    /// Wraps a screen in a navigation stack with all app routes registered, for previews of pushed screens.
+    /// Puts a preview inside a navigation stack, so its links work.
     func previewInNavigationStack() -> some View {
         NavigationStack {
             self.navigationDestination(for: AppRoute.self) { route in

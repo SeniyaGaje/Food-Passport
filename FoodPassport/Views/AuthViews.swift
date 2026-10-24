@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Logo, title and subtitle shared by the Sign in and Sign up screens.
+/// The logo and title at the top of Sign in and Sign up.
 struct AuthHeader: View {
     let title: String
     let subtitle: String
@@ -20,7 +20,7 @@ struct AuthHeader: View {
     }
 }
 
-/// Red message under a form, e.g. "Incorrect email or password."
+/// A red error message under a form.
 struct FormErrorText: View {
     let message: String
 
@@ -105,6 +105,7 @@ struct SignInView: View {
         }
     }
 
+    /// Signs in, or shows what went wrong.
     private func signIn() {
         isSigningIn = true
         errorMessage = nil
@@ -131,7 +132,7 @@ struct SignUpView: View {
     @State private var isCreatingAccount = false
     @State private var errorMessage: String?
 
-    /// Checked before contacting Firebase, so simple mistakes are explained straight away.
+    /// Checks the form before sending it to Firebase, so simple mistakes show straight away.
     private var validationMessage: String? {
         if name.trimmed.isEmpty { return "Enter your full name." }
         if !email.trimmed.contains("@") { return "Enter a valid email address." }
@@ -204,6 +205,7 @@ struct SignUpView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// Checks the form, creates the account, then moves on to permissions.
     private func createAccount() {
         if let validationMessage {
             errorMessage = validationMessage
@@ -279,6 +281,7 @@ struct ForgotPasswordView: View {
         .brandSheetStyle()
     }
 
+    /// Emails a password reset link.
     private func sendResetLink() {
         isSending = true
         errorMessage = nil
@@ -295,14 +298,14 @@ struct ForgotPasswordView: View {
     }
 }
 
-/// Covers the app when it opens or returns from the background while "Unlock with Face ID" is on.
+/// Covers the app when it opens, if "Unlock with Face ID" is on.
 struct FaceIDLockView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @Environment(\.scenePhase) private var scenePhase
 
-    /// The Face ID prompt is shown by itself once each time the app comes back.
-    /// After that the student taps to retry, so cancelling doesn't bring the prompt straight back.
+    /// Face ID pops up by itself once each time the app opens.
+    /// After that the student taps to try again, so cancelling doesn't keep bringing it back.
     @State private var hasPromptedAutomatically = false
     @State private var isAuthenticating = false
 
@@ -374,6 +377,7 @@ struct FaceIDLockView: View {
         }
     }
 
+    /// Shows the Face ID prompt.
     private func unlock() {
         isAuthenticating = true
         Task {

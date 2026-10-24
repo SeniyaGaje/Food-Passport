@@ -1,10 +1,9 @@
 import AVFoundation
 import UIKit
 
-/// The back camera, for photographing a meal (AVFoundation).
-///
-/// Starting the camera and taking photos block for a moment, so every use of the capture session happens on
-/// `sessionQueue`, never on the main thread. That rule is what makes `@unchecked Sendable` safe here.
+/// The back camera, for taking a photo of the meal.
+/// The camera is slow to start, so all camera work runs on `sessionQueue`, never the main thread.
+/// Because everything goes through that one queue, `@unchecked Sendable` is safe here.
 nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
     enum CameraError: LocalizedError {
         case captureFailed
@@ -14,7 +13,7 @@ nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, 
         }
     }
 
-    /// Shown by `CameraPreview`.
+    /// The live picture, shown by `CameraPreview`.
     let session = AVCaptureSession()
 
     private let photoOutput = AVCapturePhotoOutput()
@@ -22,12 +21,12 @@ nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, 
     private var isConfigured = false
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
 
-    /// False on the simulator and on devices without a back camera.
+    /// False on the simulator, which has no camera.
     static var isAvailable: Bool {
         AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
     }
 
-    /// Asks for camera permission the first time. Returns whether the camera may be used.
+    /// Asks for camera permission the first time. Returns true if we can use the camera.
     static func requestAccess() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized: true
@@ -55,9 +54,11 @@ nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, 
         }
     }
 
+    /// Takes a photo and waits for the result.
     func takePhoto(withFlash isFlashOn: Bool) async throws -> UIImage {
         try await withCheckedThrowingContinuation { continuation in
             sessionQueue.async { [self] in
+                // Only one photo at a time.
                 guard session.isRunning, photoContinuation == nil else {
                     continuation.resume(throwing: CameraError.captureFailed)
                     return
@@ -73,6 +74,7 @@ nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, 
         }
     }
 
+    /// Connects the back camera to the session, once.
     private func configure() {
         session.beginConfiguration()
         session.sessionPreset = .photo
@@ -92,6 +94,7 @@ nonisolated final class CameraService: NSObject, AVCapturePhotoCaptureDelegate, 
 
     // AVCapturePhotoCaptureDelegate
 
+    /// Called by iOS when the photo is ready. Hands it back to `takePhoto`.
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         let result: Result<UIImage, Error>
         if let error {

@@ -3,9 +3,9 @@ import CoreLocation
 
 enum LocationPermission: Equatable {
     case notDetermined
-    /// Location while the app is open. Arrivals are detected only while FoodPassport is on screen.
+    /// Only while the app is open.
     case whenInUse
-    /// Location at any time. iOS also watches the restaurant geofences while the app is closed.
+    /// Any time, so arrivals are noticed even when the app is closed.
     case always
     case denied
 
@@ -13,7 +13,7 @@ enum LocationPermission: Equatable {
         self == .whenInUse || self == .always
     }
 
-    /// Shown in Profile → Location access.
+    /// Shown in Profile under Location access.
     var label: String {
         switch self {
         case .notDetermined: "Not set"
@@ -24,46 +24,46 @@ enum LocationPermission: Equatable {
     }
 }
 
-/// Distances used for arrival alerts and visit verification.
+/// Distances for the arrival alert and for verifying visits.
 enum Geofence {
-    /// Walking inside this distance of a restaurant counts as arriving there.
+    /// Coming this close to a restaurant counts as arriving.
     static let arrivalRadius: CLLocationDistance = 100
-    /// A visit is "location verified" when it is logged within this distance of the restaurant.
-    /// Slightly larger than the arrival radius to allow for GPS drift indoors.
+    /// A visit is verified if it's logged this close to the restaurant.
+    /// A bit bigger than the arrival distance, because GPS is less accurate indoors.
     static let verificationRadius: CLLocationDistance = 150
-    /// iOS lets one app monitor at most 20 regions at a time.
+    /// iOS lets an app watch at most 20 areas at a time.
     static let maxMonitoredRestaurants = 20
 }
 
-/// Finds the student's location and watches restaurant geofences.
-/// `AppState` only talks to this protocol, so unit tests can move a mock "student" around instead of using GPS.
+/// Finds the student's location and watches for them arriving at restaurants.
+/// AppState only uses this protocol, so tests can move a fake "student" around instead of using GPS.
 protocol LocationService: AnyObject {
     var permission: LocationPermission { get }
-    /// The most recent location, or nil when it isn't known yet.
+    /// The latest location, or nil if we don't know it yet.
     var currentLocation: CLLocation? { get }
 
-    /// Called with each new location while updates are running.
+    /// Runs every time the location changes.
     var onLocationChange: ((CLLocation) -> Void)? { get set }
-    /// Called when the student changes location access, including in the Settings app.
+    /// Runs when the student changes location access (even in Settings).
     var onPermissionChange: ((LocationPermission) -> Void)? { get set }
-    /// Called with a restaurant ID when iOS reports the student entered that restaurant's geofence.
+    /// Runs with a restaurant's ID when iOS says the student arrived there.
     var onEnterRestaurant: ((Restaurant.ID) -> Void)? { get set }
 
-    /// Shows the "Allow While Using App" prompt the first time, then returns the student's answer.
+    /// Asks "Allow While Using App" the first time and returns the answer.
     func requestWhenInUsePermission() async -> LocationPermission
-    /// Asks iOS to upgrade to "Always", so arrivals are noticed with the phone in a pocket.
-    /// iOS decides whether and when to show this prompt, so the answer arrives later through `onPermissionChange`.
+    /// Asks to upgrade to "Always", so arrivals work with the phone in a pocket.
+    /// iOS decides when to ask, so the answer comes later through `onPermissionChange`.
     func requestAlwaysPermission()
 
     func startUpdatingLocation()
     func stopUpdatingLocation()
 
-    /// Replaces the watched geofences with ones around the nearest of these restaurants.
+    /// Starts watching the nearest restaurants (replacing any watched before).
     func monitorArrivals(at restaurants: [Restaurant])
     func stopMonitoringArrivals()
 }
 
-/// `LocationService` backed by Core Location: live location updates plus `CLCircularRegion` monitoring.
+/// The real location service, using Core Location (GPS plus a circle around each restaurant).
 final class CoreLocationService: NSObject, LocationService, CLLocationManagerDelegate {
     var onLocationChange: ((CLLocation) -> Void)?
     var onPermissionChange: ((LocationPermission) -> Void)?
@@ -74,11 +74,10 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
 
     override init() {
         super.init()
-        // Set up at launch: if iOS relaunches the app in the background for a geofence,
-        // the event is delivered to this delegate.
+        // Set up at launch, so an arrival that wakes the app in the background still reaches us.
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        // Ignore movements under 20 m so the app isn't recalculating distances constantly.
+        // Ignore moves under 20 m, so we're not recalculating all the time.
         manager.distanceFilter = 20
     }
 
@@ -133,7 +132,7 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
         }
     }
 
-    /// Distance from the student, or the stored campus distance when their location isn't known yet.
+    /// Distance from the student, or the saved campus distance if we don't know where they are.
     private func distance(to restaurant: Restaurant) -> CLLocationDistance {
         guard let currentLocation else { return restaurant.distanceKm * 1000 }
         return currentLocation.distance(from: CLLocation(latitude: restaurant.latitude, longitude: restaurant.longitude))
@@ -149,7 +148,7 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
     }
 
     // CLLocationManagerDelegate
-    // Core Location calls these on the thread that created the manager, which is the main thread here.
+    // These come in on the main thread, because that's where the manager was created.
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
@@ -178,15 +177,15 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        // Usually a temporary "location unknown". Core Location keeps trying, and the last known location is kept.
+        // Usually just "location unknown for now". Core Location keeps trying, so nothing to do.
     }
 }
 
-/// In-memory `LocationService` for previews and unit tests. Tests move the "student" with `simulateMove(to:)`.
+/// Fake location for previews and tests. Tests move the "student" with `simulateMove(to:)`.
 final class MockLocationService: LocationService {
     var permission: LocationPermission
     var currentLocation: CLLocation?
-    /// What the student answers when the permission prompt appears.
+    /// What the student taps when asked for permission.
     var answerWhenAsked: LocationPermission
 
     var onLocationChange: ((CLLocation) -> Void)?
@@ -238,14 +237,14 @@ final class MockLocationService: LocationService {
         monitoredRestaurantIDs = []
     }
 
-    /// Pretends the student walked to `coordinate`.
+    /// Pretend the student walked here.
     func simulateMove(to coordinate: CLLocationCoordinate2D) {
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         currentLocation = location
         onLocationChange?(location)
     }
 
-    /// Pretends iOS reported that the student entered a restaurant's geofence.
+    /// Pretend iOS said the student arrived at this restaurant.
     func simulateGeofenceEntry(at restaurantID: Restaurant.ID) {
         onEnterRestaurant?(restaurantID)
     }

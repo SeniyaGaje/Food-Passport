@@ -1,8 +1,8 @@
 import Foundation
 import CoreLocation
 
-/// Sample content used while building the UI.
-/// Replaced by Cloud Firestore data when the Firebase backend is integrated.
+/// Sample data for previews, tests, and running without Firebase.
+/// The restaurants are also uploaded to Firestore the first time (debug builds only).
 enum MockData {
 
     // Locations (University of Colombo area)
@@ -111,10 +111,9 @@ enum MockData {
         ]
     )
 
-    /// The canteen at NIBM Colombo, so the geofence and visit verification can be shown live on campus.
-    /// Centred on the NIBM building on Vidya Mawatha (OpenStreetMap way 327564305, about 56 × 49 m),
-    /// so the 100 m geofence covers the whole building. To move it, edit `latitude` and `longitude`
-    /// on its document in Firestore (restaurants/nibm-canteen); the app reads them at launch.
+    /// The NIBM canteen, so arrival alerts and verified visits can be shown live on campus.
+    /// It's centred on the NIBM building, so the 100 m circle covers all of it.
+    /// To move it, change its latitude and longitude in Firestore (restaurants/nibm-canteen).
     static let nibmCanteen = Restaurant(
         id: "nibm-canteen",
         name: "NIBM Canteen",
@@ -287,7 +286,7 @@ enum MockData {
         CuisineShare(cuisine: .indian, percentage: 33),
     ]
 
-    // Scanning (stand-ins for Core ML / Vision results)
+    // Scanning (fake results for previews)
 
     static let mealPredictions: [MealPrediction] = [
         MealPrediction(label: "Kottu", dishName: "Kottu Roti", confidence: 0.87, cuisine: .sriLankan),
@@ -295,7 +294,7 @@ enum MockData {
         MealPrediction(label: "Noodles", dishName: "Noodles", confidence: 0.05, cuisine: .chinese),
     ]
 
-    /// What the scanner returns in previews and tests.
+    /// The receipt the fake scanner returns.
     static let sampleReceipt = ReceiptScan(
         restaurantName: "CAMPUS BITES",
         date: "2026-10-26",
