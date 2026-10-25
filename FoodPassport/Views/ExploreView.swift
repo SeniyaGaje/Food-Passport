@@ -129,7 +129,8 @@ struct ExploreView: View {
     private var mapContent: some View {
         ExploreMapView(
             restaurants: filteredRestaurants,
-            highlightedRestaurantID: selectedRestaurant?.id
+            highlightedRestaurantID: selectedRestaurant?.id,
+            userLocation: appState.userLocation
         ) { restaurant in
             withAnimation(.spring(duration: 0.3)) {
                 selectedRestaurantID = restaurant.id
@@ -182,12 +183,32 @@ struct ExploreMapView: View {
 
     @State private var position: MapCameraPosition
 
-    init(restaurants: [Restaurant], highlightedRestaurantID: Restaurant.ID?, onSelect: @escaping (Restaurant) -> Void) {
+    /// Places this close to the student (or to campus) are framed when the map opens.
+    static let nearbyDistance: CLLocationDistance = 3000
+
+    init(
+        restaurants: [Restaurant],
+        highlightedRestaurantID: Restaurant.ID?,
+        userLocation: CLLocation? = nil,
+        onSelect: @escaping (Restaurant) -> Void
+    ) {
         self.restaurants = restaurants
         self.highlightedRestaurantID = highlightedRestaurantID
         self.onSelect = onSelect
-        // Start zoomed out to show every restaurant.
-        _position = State(initialValue: .region(.fitting(restaurants.map(\.coordinate), paddingFactor: 1.4)))
+        _position = State(initialValue: .region(Self.startRegion(for: restaurants, around: userLocation)))
+    }
+
+    /// Frames the places near the student, so a far-away place (e.g. one in Ratmalana)
+    /// doesn't zoom the map right out. Shows everything if nothing is nearby.
+    static func startRegion(for restaurants: [Restaurant], around userLocation: CLLocation?) -> MKCoordinateRegion {
+        let centre = userLocation ?? CLLocation(latitude: MockData.userLocation.latitude, longitude: MockData.userLocation.longitude)
+        let nearby = restaurants.filter { $0.location.distance(from: centre) <= nearbyDistance }
+
+        var points = (nearby.isEmpty ? restaurants : nearby).map(\.coordinate)
+        if let userLocation {
+            points.append(userLocation.coordinate)
+        }
+        return .fitting(points, paddingFactor: 1.4)
     }
 
     var body: some View {

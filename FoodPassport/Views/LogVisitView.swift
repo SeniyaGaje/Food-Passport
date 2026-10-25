@@ -96,7 +96,7 @@ struct LogVisitView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingReceiptScanner) {
-            ReceiptScanView { receipt in
+            ReceiptScanView(keepsYourItems: !namedItems.isEmpty) { receipt in
                 useReceipt(receipt)
             }
         }
@@ -112,18 +112,16 @@ struct LogVisitView: View {
         }
 
         items = VisitItemDraft.adding(newItems, to: items)
-        if cuisine.trimmed.isEmpty, let first = dishes.first {
-            cuisine = first.cuisine.rawValue
+        if cuisine.trimmed.isEmpty, let suggested = MealPrediction.suggestedCuisine(in: dishes) {
+            cuisine = suggested.rawValue
         }
         hasMealPhoto = true
     }
 
-    /// Fills in the items and total from a scanned receipt.
+    /// Fills in prices and the total from a scanned receipt.
+    /// Dishes the student already picked keep their names; they only get the receipt's prices.
     private func useReceipt(_ receipt: ReceiptScan) {
-        // The receipt lists everything that was bought, so its items replace the list.
-        if !receipt.items.isEmpty {
-            items = receipt.items.map { VisitItemDraft(name: $0.name, priceText: "\($0.price)") }
-        }
+        items = VisitItemDraft.applyingReceipt(receipt.items, to: items)
         if let total = receipt.total {
             amount = "\(total)"
             isAmountFromReceipt = true
@@ -688,7 +686,7 @@ struct MealCameraView: View {
                     step = .problem(photo, title: "No dish found", message: "Retake the photo with your plate in the middle of the frame, or enter the dish yourself.")
                 case .unknownFood(let lookalike):
                     step = .problem(photo, title: "Not one of our dishes yet",
-                                    message: "This looks like \(lookalike == "Drink" ? "a drink" : lookalike.lowercased()), which FoodPassport can't recognise yet. Enter the dish yourself.")
+                                    message: "This looks like \(lookalike.lowercased()), which FoodPassport can't recognise yet. Enter the dish yourself.")
                 case .notFood(let lookalike):
                     step = .problem(photo, title: "This doesn't look like a meal", message: notAMealMessage(lookalike))
                 }
@@ -774,9 +772,9 @@ struct MealRecognitionSheet: View {
 
     private var confirmTitle: String {
         switch selectedDishes.count {
-        case 0: "Pick at least one dish"
+        case 0: "Pick at least one item"
         case 1: "Add \(selectedDishes[0].label)"
-        default: "Add \(selectedDishes.count) dishes"
+        default: "Add \(selectedDishes.count) items"
         }
     }
 
@@ -820,7 +818,7 @@ struct MealRecognitionSheet: View {
             }
 
             Label(
-                isConfident ? "Tick every dish you had." : "Not sure about this one. Tick the right dishes, or enter them yourself.",
+                isConfident ? "Tick everything you had, food and drinks." : "Not sure about this one. Tick the right ones, or enter them yourself.",
                 systemImage: isConfident ? "checklist" : "questionmark.circle"
             )
             .font(.footnote)
@@ -835,12 +833,12 @@ struct MealRecognitionSheet: View {
                 .buttonStyle(.plain)
             }
 
-            if let first = selectedDishes.first {
+            if let suggested = MealPrediction.suggestedCuisine(in: selectedDishes) {
                 AdaptiveStack(spacing: 6) {
                     Text("Suggested cuisine")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    PillLabel(text: first.cuisine.rawValue, style: .green, font: .subheadline.weight(.semibold))
+                    PillLabel(text: suggested.rawValue, style: .green, font: .subheadline.weight(.semibold))
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -929,6 +927,8 @@ struct ReceiptScanView: View {
 
     private let scanner: ReceiptScanner
     private let initialImage: UIImage?
+    /// True when the student already picked their dishes, so the receipt only adds prices.
+    private let keepsYourItems: Bool
     private let onUseReceipt: (ReceiptScan) -> Void
 
     @State private var step: Step = .choosing
@@ -939,10 +939,12 @@ struct ReceiptScanView: View {
     init(
         scanner: ReceiptScanner = VisionReceiptScanner(),
         initialImage: UIImage? = nil,
+        keepsYourItems: Bool = false,
         onUseReceipt: @escaping (ReceiptScan) -> Void
     ) {
         self.scanner = scanner
         self.initialImage = initialImage
+        self.keepsYourItems = keepsYourItems
         self.onUseReceipt = onUseReceipt
     }
 
@@ -1140,7 +1142,14 @@ struct ReceiptScanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button(receipt.items.isEmpty ? "Use this amount" : "Use these items") {
+            if keepsYourItems && !receipt.items.isEmpty {
+                Label("Your dishes stay as they are. Their prices and the total come from this receipt.", systemImage: "checkmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button(useButtonTitle(for: receipt)) {
                 onUseReceipt(receipt)
                 dismiss()
             }
@@ -1159,6 +1168,13 @@ struct ReceiptScanView: View {
                 .buttonStyle(.brandPrimary)
                 .padding(.top, 12)
         }
+    }
+
+    private func useButtonTitle(for receipt: ReceiptScan) -> String {
+        if receipt.items.isEmpty {
+            return "Use this amount"
+        }
+        return keepsYourItems ? "Add these prices" : "Use these items"
     }
 
     /// Each item on the receipt with its price. Long receipts scroll, so the buttons stay on screen.

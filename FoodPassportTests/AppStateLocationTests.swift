@@ -107,6 +107,21 @@ struct AppStateLocationTests {
         #expect(reminder.destination == .logVisit(restaurantID: campusBites.id))
     }
 
+    @Test("The Ratmalana Tea Kade works like any other place: arriving there alerts and verifies visits")
+    func ratmalanaTeaKade() async throws {
+        let kade = MockData.ratmalanaTeaKade
+        let app = TestApp()
+        app.appState.isAppActive = true
+        try await app.signIn()
+
+        // About 80 m along Chakkindarama Road from the pin.
+        app.location.simulateMove(to: coordinate(80, northOf: kade.coordinate))
+
+        #expect(app.appState.arrivedRestaurant?.id == kade.id)
+        #expect(app.appState.isAtRestaurant(kade))
+        #expect(app.location.monitoredRestaurantIDs.contains(kade.id))
+    }
+
     @Test("Walking past the same door again within 3 hours doesn't alert twice")
     func arrivalCooldown() async throws {
         let app = TestApp()

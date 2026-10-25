@@ -88,14 +88,59 @@ struct MealClassifierTests {
         #expect(MealClassifier.classify(embedding: photo, labels: labels, menu: []) == .notFood("Receipt"))
     }
 
-    @Test("Food the app doesn't know, such as a drink, is reported as unknown food")
+    @Test("Food the app doesn't know, such as fruit, is reported as unknown food")
     func unknownFood() {
         let labels = [
-            label("Drink", similarity: 0.9, cuisine: nil, kind: .otherFood),
+            label("Fruit", similarity: 0.9, cuisine: nil, kind: .otherFood),
             label("Kottu Roti", similarity: 0.6),
         ]
 
-        #expect(MealClassifier.classify(embedding: photo, labels: labels, menu: []) == .unknownFood("Drink"))
+        #expect(MealClassifier.classify(embedding: photo, labels: labels, menu: []) == .unknownFood("Fruit"))
+    }
+
+    @Test("Drinks are recognised and can be added like dishes, even without a cuisine")
+    func drinks() throws {
+        let labels = [
+            label("Coffee", similarity: 0.9, cuisine: nil, kind: .drink),
+            label("Plain Tea", similarity: 0.85, kind: .drink),
+            label("Kottu Roti", similarity: 0.5),
+        ]
+
+        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
+
+        #expect(predictions.map(\.label) == ["Coffee", "Plain Tea", "Kottu Roti"])
+        #expect(predictions[0].isDrink)
+        #expect(predictions[0].cuisine == nil)
+        #expect(predictions[1].cuisine == .sriLankan)
+        #expect(!predictions[2].isDrink)
+    }
+
+    @Test("A dish without a cuisine is skipped, because every dish needs one")
+    func dishWithoutCuisine() throws {
+        let labels = [
+            label("Mystery Dish", similarity: 0.9, cuisine: nil),
+            label("Kottu Roti", similarity: 0.8),
+        ]
+
+        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
+
+        #expect(predictions.map(\.label) == ["Kottu Roti"])
+    }
+
+    @Test("The suggested cuisine comes from the food, not the drink", arguments: [
+        ([MealPrediction(label: "Coffee", dishName: "Coffee", confidence: 0.6, cuisine: nil, isDrink: true),
+          MealPrediction(label: "Croissant", dishName: "Croissant", confidence: 0.3, cuisine: .french)], Cuisine.french),
+        ([MealPrediction(label: "Plain Tea", dishName: "Plain Tea", confidence: 0.8, cuisine: .sriLankan, isDrink: true)], Cuisine.sriLankan),
+    ])
+    func suggestedCuisine(items: [MealPrediction], expected: Cuisine) {
+        #expect(MealPrediction.suggestedCuisine(in: items) == expected)
+    }
+
+    @Test("Only a coffee picked: there's no cuisine to suggest")
+    func noSuggestedCuisine() {
+        let coffee = MealPrediction(label: "Coffee", dishName: "Coffee", confidence: 0.9, cuisine: nil, isDrink: true)
+        #expect(MealPrediction.suggestedCuisine(in: [coffee]) == nil)
+        #expect(MealPrediction.suggestedCuisine(in: []) == nil)
     }
 
     @Test("When the app is unsure a photo isn't a meal, it still suggests dishes")
@@ -138,11 +183,26 @@ struct MealClassifierTests {
         #expect(labels.contains { $0.kind == .notFood && $0.name == "Receipt" })
     }
 
-    @Test("A photo matching a dish's description exactly is recognised as that dish")
+    @Test("The bundled labels include tea, coffee and more Sri Lankan food")
+    func bundledDrinksAndSriLankanFood() throws {
+        let labels = try loadBundledLabels()
+        let names = Set(labels.map(\.name))
+
+        for drink in ["Plain Tea", "Milk Tea", "Coffee", "Cappuccino", "Iced Coffee", "Iced Milo", "King Coconut", "Soft Drink"] {
+            #expect(labels.first { $0.name == drink }?.kind == .drink, "\(drink) should be a drink")
+        }
+        for dish in ["Kottu Roti", "Hoppers", "String Hoppers", "Pittu", "Parata", "Fish Bun", "Chinese Roll", "Pol Sambol", "Dhal Curry"] {
+            #expect(names.contains(dish), "\(dish) is missing")
+        }
+        // Drinks are recognised one by one now, so there's no general "Drink" label any more.
+        #expect(!names.contains("Drink"))
+    }
+
+    @Test("A photo matching a dish's or drink's description exactly is recognised as that item")
     func everyDishRecognisesItself() throws {
         let labels = try loadBundledLabels()
 
-        for dish in labels where dish.kind == .dish {
+        for dish in labels where dish.kind.isMenuItem {
             let predictions = dishes(MealClassifier.classify(embedding: dish.embedding, labels: labels, menu: []))
             #expect(predictions?.first?.label == dish.name, "\(dish.name) wasn't the top match for itself")
         }

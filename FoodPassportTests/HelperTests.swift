@@ -55,6 +55,23 @@ struct HelperTests {
         #expect(region.span.longitudeDelta == 0)
     }
 
+    @Test("The Explore map frames places near the student, not ones far away")
+    func exploreMapFramesNearbyPlaces() {
+        let restaurants = MockData.restaurants
+        let kade = MockData.ratmalanaTeaKade
+
+        // Without a location, the map shows the places around campus, leaving out Ratmalana (about 9 km away).
+        let campus = ExploreMapView.startRegion(for: restaurants, around: nil)
+        #expect(campus.span.latitudeDelta < 0.05)
+        #expect(abs(campus.center.latitude - kade.latitude) > 0.05)
+
+        // A student on Chakkindarama Road sees the tea kade.
+        let home = CLLocation(latitude: kade.latitude + 0.002, longitude: kade.longitude)
+        let ratmalana = ExploreMapView.startRegion(for: restaurants, around: home)
+        #expect(abs(ratmalana.center.latitude - kade.latitude) < 0.01)
+        #expect(ratmalana.span.latitudeDelta < 0.05)
+    }
+
     @Test("Each stamp has a small tilt, and not all stamps lean the same way")
     func stampTilt() {
         for cuisine in Cuisine.allCases {

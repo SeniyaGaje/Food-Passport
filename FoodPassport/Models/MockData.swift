@@ -134,7 +134,33 @@ enum MockData {
         ]
     )
 
-    static let restaurants = [campusBites, spiceRoute, dragonWok, hoppersHut, pastaCorner, nibmCanteen]
+    /// A tea kade on Chakkindarama Road, Ratmalana, so arrival alerts and verified visits can be tried there.
+    /// It's in the middle of the road (OpenStreetMap way 173024332), so the 150 m check covers almost all of it.
+    /// To move it, change its latitude and longitude in Firestore (restaurants/ratmalana-tea-kade).
+    static let ratmalanaTeaKade = Restaurant(
+        id: "ratmalana-tea-kade",
+        name: "Ratmalana Tea Kade",
+        cuisine: .sriLankan,
+        distanceKm: 9.0,
+        walkingMinutes: 113,
+        priceRange: 60...450,
+        latitude: 6.8231622,
+        longitude: 79.8728517,
+        imageName: "restaurant_ratmalana_tea_kade",
+        routeSummary: "Chakkindarama Road, Ratmalana",
+        pricesUpdated: "This week",
+        popularDishes: [
+            Dish(name: "Plain Tea", price: 60),
+            Dish(name: "Milk Tea", price: 100),
+            Dish(name: "Coffee", price: 150),
+            Dish(name: "Fish Bun", price: 120),
+            Dish(name: "Egg Roti", price: 200),
+            Dish(name: "Vadai", price: 80),
+            Dish(name: "String Hoppers", price: 350),
+        ]
+    )
+
+    static let restaurants = [campusBites, spiceRoute, dragonWok, hoppersHut, pastaCorner, nibmCanteen, ratmalanaTeaKade]
 
     // Profile, visits and stamps
 

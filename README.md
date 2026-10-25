@@ -48,20 +48,28 @@ The simulator has no camera, so add a receipt photo to its Photos app first: dra
 Simulator window, or run `xcrun simctl addmedia booted path/to/receipt.jpg`. Then go to Log your visit →
 Scan receipt → **Choose from Photos**. On a real iPhone, **Scan receipt** opens the document scanner.
 
+The receipt screen lists every item with its price, then the total. If you've already added your dishes (for example
+with Scan your meal), the receipt only fills in their prices and the total: your dish names stay as they are. Each dish
+is matched to the receipt line that shares the most words with it ("Kottu Roti" gets the price of "CHICKEN KOTTU").
+With no dishes added yet, the receipt's items are used instead.
+
 ## Meal recognition (Core ML)
 
 Log your visit → **Scan your meal** takes a photo with the camera (AVFoundation) or picks one from Photos, and
-recognises the dish on the device. It shows the top three dishes with their likelihood, suggests the cuisine,
-and fills in the dish and cuisine. Photos that aren't a meal (a receipt, a selfie) or aren't one of the app's
-dishes (fruit, a drink, a salad) get a clear message instead of a wrong guess.
+recognises food and drinks on the device. It shows the top three matches with their likelihood; the student ticks
+everything they had (e.g. kottu and an iced Milo), and they're added to the visit with the menu price when the
+restaurant sells them. Photos that aren't a meal (a receipt, a selfie) or aren't something the app knows (fruit,
+a salad) get a clear message instead of a wrong guess.
 
 Ready-made food models such as Food-101 have no Sri Lankan dishes, so the app uses **MobileCLIP-S1**, Apple's
 on-device image and text model, from [apple/coreml-mobileclip](https://huggingface.co/apple/coreml-mobileclip):
 
 1. **Ahead of time:** `Tools/make_dish_embeddings.py` runs MobileCLIP's *text* model on short descriptions of
-   95 labels in `Tools/dishes.json`: 86 dishes across 12 cuisines (Sri Lankan, Indian, Chinese, Italian,
-   Japanese, Thai, American, Mexican, Korean, Middle Eastern, French and Vietnamese), about 25 of them desserts,
-   plus "other food" (fruit, drinks, salad) and "not a meal" (receipt, person, room…). It writes one 512-number
+   120 labels in `Tools/dishes.json`: 95 dishes across 12 cuisines (Sri Lankan, Indian, Chinese, Italian,
+   Japanese, Thai, American, Mexican, Korean, Middle Eastern, French and Vietnamese), including 24 Sri Lankan
+   dishes and short eats; 17 drinks (plain tea, milk tea, ginger tea, coffee, cappuccino, iced coffee, iced tea,
+   hot chocolate, iced Milo, king coconut, juice, soft drinks, milkshake, lassi, bubble tea, water, faluda);
+   plus "other food" (fruit, salad) and "not a meal" (receipt, person, room…). It writes one 512-number
    embedding per label to `FoodPassport/ML/DishEmbeddings.json`. The model itself isn't retrained: adding a dish
    only needs a description.
 2. **On the phone:** Core ML runs MobileCLIP's *image* model (`FoodPassport/ML/MobileCLIPImageEncoder.mlpackage`)
@@ -70,19 +78,32 @@ on-device image and text model, from [apple/coreml-mobileclip](https://huggingfa
    restaurant's menu count double. If "not a meal" or "other food" is at least 50% likely, the app says so;
    otherwise it offers the top three dishes, and asks the student to check when the best is under 40%.
 
-**Accuracy** on test photos from Wikimedia Commons and the prototype (not shipped):
+**Accuracy.** `Tools/evaluation_photos.json` lists 298 Wikimedia Commons photos, each checked by eye. Half of the
+dish and drink photos were used while writing the descriptions ("tuning"); the other half were only used for the
+final score ("test"), so that score is the honest one. "Check" photos are other dishes, to make sure new labels
+don't make them worse. Scores on the test half, with the app's own rules:
 
-| Photos | Right first time | Right in the top three |
+| Test photos | Before (95 labels) | After (120 labels) |
 |---|---|---|
-| Original set: Sri Lankan, Indian, Chinese, Italian, Japanese, Thai (37) | 78% | 89% |
-| Desserts (45) | 80% | 93% |
-| American, Mexican, Korean, Middle Eastern, French, Vietnamese and other new dishes (51) | 80% | 92% |
+| Sri Lankan food (38) | 34% first time, 50% in the top three | **58%** first time, **92%** in the top three |
+| Drinks (44) | 7%, 7% (drinks had no labels) | **73%**, **91%** |
+| Other food (29) | 97%, 100% | 93%, 100% |
+| All (111) | 40%, 46% | **73%**, **94%** |
+| Check set: other dishes (56) | 84%, 100% | 82%, 100% |
 
-Every kottu, string hoppers, pizza, sushi, burger and pho photo was right. The usual mistakes are between
-similar dishes: hoppers / pol roti, kavum / kokis, chocolate cake / brownie, crêpes / pancakes, and Korean /
-American fried chicken. Adding the 49 new labels cost the original set one photo in each column (biryani was
-taken for mandi). MobileCLIP-S0 (23 MB) and S2 (71 MB) were also tested: S0 was slightly less accurate, and S2
-no better than S1.
+The biggest gains came from new labels (drinks, pittu, parata, curries, short eats) and clearer descriptions for
+dishes the model mixed up, e.g. hoppers ("white bowl-shaped lacy pancake") vs pol roti ("thick dense flatbread").
+The usual remaining mistakes are between dishes that look alike: plain tea / black coffee, pittu / idli, iced
+coffee / milkshake. Two ways of learning from example photos (Tip-Adapter, and moving each label towards its
+photos) raised Sri Lankan food to 63–68% first time, but made dishes without example photos worse (check set
+down to 61–77%), so they aren't used. They would need checked photos for every label.
+
+To measure it yourself:
+
+```
+python3 -m pip install coremltools numpy pillow
+python3 Tools/evaluate_recognizer.py
+```
 
 To add or change dishes, edit `Tools/dishes.json`, then:
 
@@ -107,6 +128,18 @@ visits can be shown live on a real iPhone on campus.
 - Opening the app inside NIBM shows "You've arrived at NIBM Canteen!". **Get directions → Start** shows it again on demand.
 - To move it (e.g. to the exact viva room), edit `latitude` and `longitude` on that Firestore document and reopen the app.
 - Simulator backup: **Features → Location → Custom Location…** `6.90635`, `79.87080`.
+
+## Demo at home: Ratmalana Tea Kade
+
+**Ratmalana Tea Kade** is a sample tea shop in the middle of Chakkindarama Road, Ratmalana (6.8231622, 79.8728517,
+from OpenStreetMap). The road is 362 m long, so a visit logged almost anywhere on it is location verified (within
+150 m), and the arrival alert fires within 100 m. It sells tea, coffee and short eats, which is handy for trying
+drink recognition.
+
+- Like the NIBM Canteen, the first debug run uploads it to Firestore (`restaurants/ratmalana-tea-kade`).
+- The Explore map opens on the places within 3 km of the student, so on Chakkindarama Road it shows the tea kade.
+- To move it, edit `latitude` and `longitude` on that Firestore document and reopen the app.
+- Simulator: **Features → Location → Custom Location…** `6.82316`, `79.87285`.
 
 ## Firebase setup
 
@@ -172,8 +205,10 @@ FoodPassport/
     └── Components.swift      Reusable UI pieces (headers, chips, fields, pins, rows, …)
 FoodPassportTests/            Swift Testing unit tests
 Tools/
-├── dishes.json                   The dishes the meal recogniser knows, with descriptions
-└── make_dish_embeddings.py       Turns dishes.json into ML/DishEmbeddings.json
+├── dishes.json                   The dishes and drinks the meal recogniser knows, with descriptions
+├── make_dish_embeddings.py       Turns dishes.json into ML/DishEmbeddings.json
+├── evaluation_photos.json        Checked test photos (Wikimedia Commons links) for measuring accuracy
+└── evaluate_recognizer.py        Scores the recogniser on those photos
 ```
 
 Each file holds a screen area and its smaller views; use the Xcode jump bar to find a specific view.
@@ -181,9 +216,10 @@ The project uses Xcode folder-synced groups, so any file added inside `FoodPassp
 
 ## Photos
 
-Food photos come from the Figma prototype and live in `Assets.xcassets`:
+Restaurant and dish photos are real photos from Wikimedia Commons, resized to 1,400–1,600 px wide so they're sharp
+on every iPhone; the welcome screen photo is the one from the Figma prototype. They live in `Assets.xcassets`:
 `welcome_hero`, `restaurant_campus_bites`, `restaurant_spice_route`, `restaurant_dragon_wok`,
-`restaurant_hoppers_hut`, `restaurant_pasta_corner`, `dish_kottu`, `dish_masala_dosa`, `dish_butter_chicken`.
+`restaurant_hoppers_hut`, `restaurant_pasta_corner`, `restaurant_nibm_canteen`, `restaurant_ratmalana_tea_kade`,
+`dish_kottu`, `dish_masala_dosa`, `dish_butter_chicken`. The Commons photos' authors and licences are in
+[`PHOTO_CREDITS.md`](PHOTO_CREDITS.md); the licences allow reuse as long as the authors are credited.
 To change a photo, replace the image in that set. Any missing photo falls back to a cuisine-coloured placeholder.
-
-The meal camera and receipt scanner show placeholders until the camera is connected.

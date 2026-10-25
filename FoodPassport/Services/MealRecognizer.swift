@@ -9,10 +9,17 @@ struct DishLabel: Decodable, Equatable {
     enum Kind: String, Decodable {
         /// A dish the app knows, e.g. Kottu Roti.
         case dish
-        /// Food that isn't one of our dishes, e.g. fruit or a drink.
+        /// A drink the app knows, e.g. Plain Tea or Iced Coffee. Some drinks have no cuisine.
+        case drink
+        /// Food that isn't one of our dishes, e.g. fruit.
         case otherFood
         /// Not food at all, e.g. a receipt or a selfie.
         case notFood
+
+        /// Dishes and drinks can be added to a visit; the other kinds can't.
+        var isMenuItem: Bool {
+            self == .dish || self == .drink
+        }
     }
 
     let id: String
@@ -36,9 +43,9 @@ struct DishLabel: Decodable, Equatable {
 }
 
 enum MealRecognition: Equatable {
-    /// Up to three dishes, most likely first.
+    /// Up to three dishes or drinks, most likely first.
     case dishes([MealPrediction])
-    /// Food, but not a dish we know, e.g. "Drink".
+    /// Food, but not one we know, e.g. "Fruit".
     case unknownFood(String)
     /// Not a meal, e.g. "Receipt".
     case notFood(String)
@@ -172,28 +179,30 @@ enum MealClassifier {
         let ranked = labels.indices.sorted { chances[$0] > chances[$1] }
         let best = labels[ranked[0]]
 
-        // The photo is most likely not one of our dishes, and we're fairly sure.
-        if best.kind != .dish && chances[ranked[0]] >= notMealThreshold {
+        // The photo is most likely not one of our dishes or drinks, and we're fairly sure.
+        if !best.kind.isMenuItem && chances[ranked[0]] >= notMealThreshold {
             if best.kind == .otherFood {
                 return .unknownFood(best.name)
             }
             return .notFood(best.name)
         }
 
-        // Otherwise suggest the top three dishes.
+        // Otherwise suggest the top three dishes and drinks.
         var predictions: [MealPrediction] = []
-        let topDishes = ranked.filter { labels[$0].kind == .dish }.prefix(3)
-        for index in topDishes {
+        let topItems = ranked.filter { labels[$0].kind.isMenuItem }.prefix(3)
+        for index in topItems {
             let label = labels[index]
-            guard let cuisine = label.cuisine else { continue }
+            // Every dish has a cuisine; only drinks may leave it out.
+            if label.kind == .dish && label.cuisine == nil { continue }
 
             let menuName = label.menuName(in: menu)
             predictions.append(MealPrediction(
                 label: menuName ?? label.name,
                 dishName: menuName ?? label.name,
                 confidence: chances[index],
-                cuisine: cuisine,
-                isOnMenu: menuName != nil
+                cuisine: label.cuisine,
+                isOnMenu: menuName != nil,
+                isDrink: label.kind == .drink
             ))
         }
         return .dishes(predictions)

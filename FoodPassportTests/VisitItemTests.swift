@@ -109,6 +109,81 @@ struct VisitItemTests {
         #expect(result[0].isEmpty)
     }
 
+    // Using a receipt
+
+    @Test("A receipt adds prices to the dishes already picked, and keeps their names")
+    func receiptAddsPricesOnly() {
+        let picked = [VisitItemDraft(name: "Kottu Roti"), VisitItemDraft(name: "Iced Milo")]
+        let receipt = [
+            ReceiptScan.LineItem(id: 0, name: "MILO ICED 400ML", price: 200),
+            ReceiptScan.LineItem(id: 1, name: "CHICKEN KOTTU", price: 750),
+        ]
+
+        let result = VisitItemDraft.applyingReceipt(receipt, to: picked)
+
+        #expect(result.map(\.name) == ["Kottu Roti", "Iced Milo"])
+        #expect(result.map(\.price) == [750, 200])
+    }
+
+    @Test("Receipt lines that match nothing aren't added to the student's list")
+    func extraReceiptLinesAreIgnored() {
+        let picked = [VisitItemDraft(name: "Fried Rice")]
+        let receipt = [
+            ReceiptScan.LineItem(id: 0, name: "Fried Rice", price: 650),
+            ReceiptScan.LineItem(id: 1, name: "Takeaway Box", price: 50),
+        ]
+
+        let result = VisitItemDraft.applyingReceipt(receipt, to: picked)
+
+        #expect(result.map(\.name) == ["Fried Rice"])
+        #expect(result[0].price == 650)
+    }
+
+    @Test("One dish and one receipt line left over are paired, even if the names differ")
+    func lastDishGetsLastPrice() {
+        let picked = [VisitItemDraft(name: "Hoppers"), VisitItemDraft(name: "Plain Tea")]
+        let receipt = [
+            ReceiptScan.LineItem(id: 0, name: "TEA", price: 60),
+            ReceiptScan.LineItem(id: 1, name: "APPA x3", price: 150),
+        ]
+
+        let result = VisitItemDraft.applyingReceipt(receipt, to: picked)
+
+        #expect(result.map(\.name) == ["Hoppers", "Plain Tea"])
+        #expect(result.map(\.price) == [150, 60])
+    }
+
+    @Test("With no dishes picked yet, the receipt's items are used")
+    func receiptFillsEmptyList() {
+        let receipt = [ReceiptScan.LineItem(id: 0, name: "Kottu Roti", price: 750)]
+
+        let result = VisitItemDraft.applyingReceipt(receipt, to: [VisitItemDraft()])
+
+        #expect(result.map(\.name) == ["Kottu Roti"])
+        #expect(result[0].price == 750)
+    }
+
+    @Test("Each receipt line is only used once")
+    func receiptLineUsedOnce() {
+        let picked = [VisitItemDraft(name: "Plain Tea"), VisitItemDraft(name: "Milk Tea"), VisitItemDraft(name: "Vadai")]
+        let receipt = [ReceiptScan.LineItem(id: 0, name: "Milk Tea", price: 100)]
+
+        let result = VisitItemDraft.applyingReceipt(receipt, to: picked)
+
+        #expect(result.map(\.price) == [nil, 100, nil])
+    }
+
+    @Test("Names match on whole words, ignoring sizes and capitals", arguments: [
+        ("Kottu Roti", "CHICKEN KOTTU", 1),
+        ("Egg Hoppers", "egg hopper", 2),
+        ("Iced Milo", "Milo (Large)", 1),
+        ("Fried Rice", "Fish Curry", 0),
+        ("Plain Tea", "Large Plate", 0),
+    ])
+    func matchScores(first: String, second: String, expected: Int) {
+        #expect(VisitItemDraft.matchScore(first, second) == expected)
+    }
+
     // Saving through AppState
 
     @Test("A visit with several items is saved with all of them")

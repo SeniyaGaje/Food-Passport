@@ -146,6 +146,65 @@ struct VisitItemDraft: Identifiable, Equatable {
         return result.isEmpty ? [VisitItemDraft()] : result
     }
 
+    /// Uses a scanned receipt. The student's own dishes are kept and only get the receipt's prices,
+    /// matched by name (e.g. "Kottu Roti" gets the price of "CHICKEN KOTTU"). If the student hasn't
+    /// added any dishes yet, the receipt's items are used instead.
+    static func applyingReceipt(_ receiptItems: [ReceiptScan.LineItem], to list: [VisitItemDraft]) -> [VisitItemDraft] {
+        var result = list.filter { !$0.name.trimmed.isEmpty }
+
+        if result.isEmpty {
+            let fromReceipt = receiptItems.map { VisitItemDraft(name: $0.name, priceText: "\($0.price)") }
+            return fromReceipt.isEmpty ? [VisitItemDraft()] : fromReceipt
+        }
+
+        // Every dish/receipt-line pair that shares a word, closest names first,
+        // so "Milk Tea" gets the MILK TEA line even if "Plain Tea" comes first in the list.
+        var pairs: [(dish: Int, line: Int, score: Int)] = []
+        for dish in result.indices {
+            for line in receiptItems.indices {
+                let score = matchScore(result[dish].name, receiptItems[line].name)
+                if score > 0 {
+                    pairs.append((dish, line, score))
+                }
+            }
+        }
+        pairs.sort { $0.score > $1.score }
+
+        var pricedDishes = Set<Int>()
+        var usedLines = Set<Int>()
+        for pair in pairs where !pricedDishes.contains(pair.dish) && !usedLines.contains(pair.line) {
+            result[pair.dish].priceText = "\(receiptItems[pair.line].price)"
+            pricedDishes.insert(pair.dish)
+            usedLines.insert(pair.line)
+        }
+
+        // One dish and one receipt line left over: they're almost certainly the same thing
+        // (e.g. the scanner said "Hoppers" but the receipt says "APPA").
+        let leftoverDishes = result.indices.filter { !pricedDishes.contains($0) }
+        let leftoverLines = receiptItems.indices.filter { !usedLines.contains($0) }
+        if leftoverDishes.count == 1 && leftoverLines.count == 1 {
+            result[leftoverDishes[0]].priceText = "\(receiptItems[leftoverLines[0]].price)"
+        }
+        return result
+    }
+
+    /// How many words two item names share, e.g. "Iced Milo" and "MILO ICED 400ML" share 2.
+    /// Words match on their first four letters, so "Hopper" and "Hoppers" count as the same word.
+    static func matchScore(_ first: String, _ second: String) -> Int {
+        Set(keyWords(first)).intersection(keyWords(second)).count
+    }
+
+    /// Words that mean nothing on their own for matching, like sizes.
+    private static let fillerWords: Set<String> = ["with", "and", "the", "large", "small", "regular", "plate", "portion", "extra", "half", "full"]
+
+    private static func keyWords(_ name: String) -> [String] {
+        name.lowercased()
+            .split { !$0.isLetter }
+            .map(String.init)
+            .filter { $0.count >= 3 && !fillerWords.contains($0) }
+            .map { String($0.prefix(4)) }
+    }
+
     /// The prices added up. Items without a price count as 0.
     static func total(of items: [VisitItemDraft]) -> Int {
         var sum = 0
@@ -362,9 +421,18 @@ struct MealPrediction: Identifiable, Hashable {
     let dishName: String
     /// How sure we are, from 0 to 1.
     let confidence: Double
-    let cuisine: Cuisine
+    /// nil for drinks that don't belong to a cuisine, like coffee.
+    let cuisine: Cuisine?
     /// True if this restaurant sells the dish.
     var isOnMenu = false
+    var isDrink = false
+
+    /// The cuisine to suggest for a visit: the first food's, or a drink's if only drinks were picked.
+    static func suggestedCuisine(in items: [MealPrediction]) -> Cuisine? {
+        let food = items.first { !$0.isDrink && $0.cuisine != nil }
+        let drink = items.first { $0.cuisine != nil }
+        return (food ?? drink)?.cuisine
+    }
 }
 
 /// What we read from a photo of a receipt.
