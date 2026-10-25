@@ -1,7 +1,7 @@
 {
-  "autoApplyEnabled" : true,
   "classes" : [
     {
+      "category" : "Chopped roti",
       "cuisine" : "Sri Lankan",
       "id" : "kottu",
       "isDrink" : false,
@@ -12,6 +12,7 @@
       "name" : "Kottu Roti"
     },
     {
+      "category" : "Pancake",
       "cuisine" : "Sri Lankan",
       "id" : "hoppers",
       "isDrink" : false,
@@ -22,6 +23,7 @@
       "name" : "Hoppers"
     },
     {
+      "category" : "Rice noodles",
       "cuisine" : "Sri Lankan",
       "id" : "string-hoppers",
       "isDrink" : false,
@@ -31,6 +33,7 @@
       "name" : "String Hoppers"
     },
     {
+      "category" : "Pancake",
       "cuisine" : "Indian",
       "id" : "dosa",
       "isDrink" : false,
@@ -41,6 +44,7 @@
       "name" : "Dosa"
     },
     {
+      "category" : "Rice dish",
       "cuisine" : "Chinese",
       "id" : "fried-rice",
       "isDrink" : false,
@@ -50,6 +54,7 @@
       "name" : "Fried Rice"
     },
     {
+      "category" : "Fast food",
       "cuisine" : "Italian",
       "id" : "pizza",
       "isDrink" : false,
@@ -60,6 +65,7 @@
       "name" : "Pizza"
     },
     {
+      "category" : "Fast food",
       "cuisine" : "American",
       "id" : "burger",
       "isDrink" : false,
@@ -70,6 +76,7 @@
       "name" : "Burger"
     },
     {
+      "category" : "Drink",
       "cuisine" : null,
       "id" : "coffee",
       "isDrink" : true,
@@ -81,6 +88,7 @@
       "name" : "Coffee"
     },
     {
+      "category" : "Drink",
       "cuisine" : null,
       "id" : "tea",
       "isDrink" : true,
@@ -93,6 +101,20 @@
       "name" : "Tea"
     },
     {
+      "category" : "Dessert",
+      "cuisine" : null,
+      "id" : "cake-dessert",
+      "isDrink" : false,
+      "menuNames" : [
+        "Cake",
+        "Chocolate Cake",
+        "Cheesecake",
+        "Cupcake"
+      ],
+      "name" : "Cake & Dessert"
+    },
+    {
+      "category" : "Other",
       "cuisine" : null,
       "id" : "other",
       "isDrink" : false,
@@ -102,8 +124,9 @@
       "name" : "Other"
     }
   ],
-  "confidenceThreshold" : 0.82712500121744192,
+  "confidenceThreshold" : 0.99974098506393017,
   "embeddingCount" : 512,
   "encoder" : "MobileCLIP-S0",
-  "schemaVersion" : 1
+  "requiresConfirmation" : true,
+  "schemaVersion" : 2
 }

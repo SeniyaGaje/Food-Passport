@@ -174,8 +174,9 @@ struct StampDetailSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            FoodImageView(imageName: stamp.imageName, cuisine: stamp.cuisine, cornerRadius: 24)
+            VisitPhotoView(photoID: visit?.photoIDs?.first, fallbackImage: stamp.imageName, cuisine: stamp.cuisine)
                 .aspectRatio(2, contentMode: .fit)
+                .clipped().clipShape(RoundedRectangle(cornerRadius: 24))
 
             if let visit {
                 Button {

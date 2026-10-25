@@ -14,13 +14,13 @@ struct MealClassifierTests {
         MealClass(id: "other", name: "Other", cuisine: nil, isDrink: false, menuNames: [])
     ]
 
-    private func configuration(threshold: Double = 0.8, enabled: Bool = true) -> MealModelConfiguration {
-        MealModelConfiguration(schemaVersion: 1, encoder: "MobileCLIP-S0", embeddingCount: 512,
-                               confidenceThreshold: threshold, autoApplyEnabled: enabled, classes: classes)
+    private func configuration(threshold: Double = 0.8) -> MealModelConfiguration {
+        MealModelConfiguration(schemaVersion: 2, encoder: "MobileCLIP-S0", embeddingCount: 512,
+                               confidenceThreshold: threshold, requiresConfirmation: true, classes: classes)
     }
 
-    private func recognition(_ chances: [String: Double], threshold: Double = 0.8, enabled: Bool = true) throws -> MealRecognition {
-        try MealClassifier.parse(chances, configuration: configuration(threshold: threshold, enabled: enabled), menu: ["Chicken Kottu"])
+    private func recognition(_ chances: [String: Double], threshold: Double = 0.8) throws -> MealRecognition {
+        try MealClassifier.parse(chances, configuration: configuration(threshold: threshold), menu: ["Chicken Kottu"])
     }
 
     @Test("The top three known classes keep their trained probabilities and menu names")
@@ -30,28 +30,28 @@ struct MealClassifierTests {
         #expect(result.predictions.first?.dishName == "Chicken Kottu")
         #expect(result.predictions.first?.confidence == 0.85)
         #expect(result.predictions.first?.isOnMenu == true)
-        #expect(result.canAutoApply)
+        #expect(result.isConfident)
     }
 
     @Test("A calibrated boundary includes the threshold and excludes lower scores", arguments: [0.79, 0.8, 0.81])
     func thresholdBoundary(score: Double) throws {
         let result = try recognition(["Kottu Roti": score, "Tea": 0.05, "Coffee": 0.05, "Other": 0.9 - score])
-        #expect(result.canAutoApply == (score >= 0.8))
+        #expect(result.isConfident == (score >= 0.8))
     }
 
     @Test("Other keeps alternatives visible and is never selected automatically")
     func otherNeedsChoice() throws {
         let result = try recognition(["Kottu Roti": 0.03, "Tea": 0.02, "Coffee": 0.01, "Other": 0.94])
         #expect(result.isOther)
-        #expect(!result.canAutoApply)
+        #expect(!result.isConfident)
         #expect(result.predictions.count == 3)
         #expect(!result.predictions.contains { $0.label == "Other" })
     }
 
-    @Test("Automatic selection stays off when validation could not establish a threshold")
-    func disabledThreshold() throws {
-        let result = try recognition(["Kottu Roti": 0.97, "Tea": 0.01, "Coffee": 0.01, "Other": 0.01], enabled: false)
-        #expect(!result.canAutoApply)
+    @Test("Confidence is reported separately from the mandatory confirmation policy")
+    func confidenceAndConfirmation() throws {
+        let result = try recognition(["Kottu Roti": 0.97, "Tea": 0.01, "Coffee": 0.01, "Other": 0.01])
+        #expect(result.isConfident)
     }
 
     @Test("Missing, unknown, negative, non-finite and unnormalised outputs are rejected")
@@ -72,7 +72,7 @@ struct MealClassifierTests {
     func tiedScores() throws {
         let result = try recognition(["Kottu Roti": 0.25, "Tea": 0.25, "Coffee": 0.25, "Other": 0.25])
         #expect(result.predictions.map(\.label) == ["Coffee", "Kottu Roti", "Tea"])
-        #expect(!result.canAutoApply)
+        #expect(!result.isConfident)
     }
 
     @Test("A broad tea class does not invent which tea was served")
@@ -88,6 +88,8 @@ struct MealClassifierTests {
         let review = MealScanViewModel(recognizer: MockMealRecognizer(result: result))
         #expect(review.confirm() == nil)
         await review.scan(UIImage(), menu: [])
+        #expect(review.selectedDishes.isEmpty)
+        review.toggle("Kottu Roti")
         #expect(review.selectedDishes.map(\.label) == ["Kottu Roti"])
         #expect(review.result != nil)
         #expect(review.confirm()?.map(\.label) == ["Kottu Roti"])
@@ -95,13 +97,15 @@ struct MealClassifierTests {
         #expect(review.confirm() == nil)
     }
 
-    @Test("A confident scan can fill an editable draft once")
-    func automaticDraft() async {
-        let review = MealScanViewModel(recognizer: MockMealRecognizer())
+    @Test("Even a 100 percent scan starts empty and requires a choice")
+    func perfectConfidenceNeedsChoice() async throws {
+        let result = try recognition(["Kottu Roti": 1, "Tea": 0, "Coffee": 0, "Other": 0])
+        let review = MealScanViewModel(recognizer: MockMealRecognizer(result: result))
         await review.scan(UIImage(), menu: [])
-        #expect(review.automaticDraft()?.map(\.label) == ["Kottu Roti"])
-        #expect(review.automaticDraft() == nil)
-        #expect(review.result == nil)
+        #expect(review.selectedDishes.isEmpty)
+        #expect(review.confirm() == nil)
+        review.toggle("Kottu Roti")
+        #expect(review.confirm()?.first?.label == "Kottu Roti")
     }
 
     @Test("Low confidence and Other start empty and need the student's choice", arguments: [false, true])
@@ -112,7 +116,6 @@ struct MealClassifierTests {
         let review = MealScanViewModel(recognizer: MockMealRecognizer(result: try recognition(output)))
         await review.scan(UIImage(), menu: [])
         #expect(review.selectedDishes.isEmpty)
-        #expect(review.automaticDraft() == nil)
         #expect(review.confirm() == nil)
         review.toggle("Tea")
         review.toggle("Unknown")
@@ -181,7 +184,7 @@ struct MealClassifierTests {
         let result = try await CoreMLMealRecognizer.shared.recognize(photo, menu: [])
         #expect(result.predictions.contains { $0.label == expected }, "\(asset): \(result.predictions.map(\.label))")
         #expect(result.predictions.allSatisfy { (0...1).contains($0.confidence) })
-        if result.canAutoApply { #expect(result.topLabel == expected) }
+        if result.isConfident { #expect(result.topLabel == expected) }
     }
 
     @Test("An unreadable image fails without suggesting a meal")

@@ -146,6 +146,8 @@ struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isConfirmingDelete = false
+    @State private var selectedPhoto = 0
+    @State private var isShowingPhotos = false
 
     let visit: Visit
 
@@ -163,6 +165,7 @@ struct VisitDetailView: View {
 
                 restaurantCard
                 itemsCard
+                if let ids = visit.photoIDs, !ids.isEmpty { photoSection(ids) }
 
                 VStack(alignment: .leading, spacing: 10) {
                     SectionCaption("Rating")
@@ -198,6 +201,9 @@ struct VisitDetailView: View {
         .scrollIndicators(.hidden)
         .appBackground()
         .navigationTitleHidden(visit.title)
+        .sheet(isPresented: $isShowingPhotos) {
+            VisitPhotoGallery(ids: visit.photoIDs ?? [], startingAt: selectedPhoto)
+        }
         .alert("Delete Visit?", isPresented: $isConfirmingDelete) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -215,8 +221,9 @@ struct VisitDetailView: View {
     private var hero: some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 8) {
-                FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine, cornerRadius: Theme.Radius.sheet)
+                VisitPhotoView(photoID: visit.photoIDs?.first, fallbackImage: visit.imageName, cuisine: visit.cuisine)
                     .aspectRatio(1.45, contentMode: .fit)
+                    .clipped().clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet))
                 Label(visit.date.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)), systemImage: "calendar")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -231,7 +238,7 @@ struct VisitDetailView: View {
     }
 
     private var heroWithTitleOnPhoto: some View {
-        FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine)
+        VisitPhotoView(photoID: visit.photoIDs?.first, fallbackImage: visit.imageName, cuisine: visit.cuisine)
             .aspectRatio(1.45, contentMode: .fit)
             .overlay {
                 LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
@@ -295,7 +302,15 @@ struct VisitDetailView: View {
 
             ForEach(visit.allItems) { item in
                 AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
-                    Text(item.name)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.name)
+                        if let category = item.category {
+                            Text([item.isDrink == true ? "Drink" : "Food", category,
+                                  item.cuisine.map { "Suggested: " + $0.rawValue }]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     Spacer(minLength: 12)
                     if let price = item.price {
                         Text(price.lkr)
@@ -329,6 +344,29 @@ struct VisitDetailView: View {
                     }
                 }
             }
+        }
+        .cardStyle(padding: 18)
+    }
+
+    private func photoSection(_ ids: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionCaption("Your meal photos")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], spacing: 10) {
+                ForEach(Array(ids.enumerated()), id: \.element) { index, id in
+                    Button {
+                        selectedPhoto = index
+                        isShowingPhotos = true
+                    } label: {
+                        VisitPhotoView(photoID: id, fallbackImage: visit.imageName, cuisine: visit.cuisine)
+                            .frame(height: 100).clipped()
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View meal photo \(index + 1)")
+                }
+            }
+            Text("Saved on this device")
+                .font(.footnote).foregroundStyle(.secondary)
         }
         .cardStyle(padding: 18)
     }

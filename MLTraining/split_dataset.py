@@ -28,6 +28,12 @@ def main():
     for row in rows:
         groups[author_key(row)].append(row)
     targets = (0.7, 0.15, 0.15)
+    previous = ROOT / "split.csv"
+    frozen = {}
+    if previous.exists():
+        for row in csv.DictReader(previous.open()):
+            frozen[row["author_group"]] = ("train", "validation", "test").index(row["split"])
+
     best_score, best = float("inf"), None
     rng = random.Random(38)
     # Large author groups go first; random tie ordering explores several balanced assignments.
@@ -38,6 +44,13 @@ def main():
         sizes = [collections.Counter() for _ in targets]
         assignment = {}
         for author in authors:
+            if author in frozen:
+                chosen = frozen[author]
+                assignment[author] = chosen
+                sizes[chosen].update(x["label"] for x in groups[author])
+        for author in authors:
+            if author in frozen:
+                continue
             extra = collections.Counter(x["label"] for x in groups[author])
             costs = []
             for split, target in enumerate(targets):
@@ -61,7 +74,7 @@ def main():
             raise SystemExit(f"{label} needs more independent authors before it can be evaluated: {totals}")
         print(label, dict(totals))
     with (ROOT / "split.csv").open("w", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(output, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     catalogue = json.loads((ROOT / "catalogue.json").read_text())

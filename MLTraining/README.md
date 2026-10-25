@@ -32,6 +32,7 @@ From the project root:
 
 ```sh
 python3 MLTraining/download_encoder.py
+python3 MLTraining/download_detector.py
 python3 MLTraining/collect_dataset.py --limit 40 --other 150
 swift MLTraining/review.swift
 python3 MLTraining/exclude.py Images/kottu/example.jpg "Wrong food"
@@ -51,21 +52,41 @@ dataset and tested separately.
 images, equipment, preparation shots, wrong dishes and duplicate views. Record
 each exclusion with `exclude.py`; keep the source ledger intact.
 
-The split is approximately 70/15/15, using seed 38. A photographer stays in one
+The split targets 70/15/15, using seed 38. Existing author assignments stay fixed
+when the dataset is extended. A photographer stays in one
 set across all classes, so related images do not leak into another split.
 The exact counts differ where author groups cannot be divided. Training adds
 mirrored copies; validation and test photos are never augmented.
 
 Training exports `FoodPassport/ML/FoodClassifier.mlpackage` and `FoodModel.json`.
-The JSON includes the lowest observed validation threshold achieving at least
-95% precision on five or more accepted known-class predictions. Test precision
-is reported separately; it is not used to change the threshold. If no threshold
-qualifies, automatic selection is disabled. Other never gets automatically selected.
+The JSON includes label metadata and a measured confidence threshold. The threshold
+is retained for evaluation; the app **always requires a user choice**, regardless
+of the confidence score. Nothing is automatically selected or added to the form.
 
-Above the threshold, the app fills an editable draft item automatically. Low
-confidence and Other show three known-class alternatives and require a choice.
-Confirming a reviewed result also adds a draft item. The separate Save visit
-button is always required to persist the visit.
+## Multiple items and saved photos
+
+The separate pretrained YOLOv3-tiny FP16 model from Apple's model gallery locates
+common food and drink objects. The app removes overlapping duplicate boxes,
+centre-crops each detected region and runs the trained food classifier on it.
+Three rows are three alternative names for one region. The user chooses one per
+item; two separate regions can both be cake. Up to six regions are processed.
+If fewer than two objects are located, the whole image gets one set of guesses.
+
+The object detector was not trained here. The reported classification accuracy
+measures held-out whole images, not multi-item detection accuracy. A natural
+coffee-and-cake integration fixture checks the two-region path; it is an existing
+Coffee training photo, so it is not presented as independent accuracy evidence.
+The four bundled app-photo tests remain unseen by our classifier training.
+
+Food/drink type, suggested cuisine and category come from `catalogue.json`.
+They are label metadata, not independent visual predictions. Cake & Dessert is a
+broad class covering the cake varieties in the dataset, not every possible dessert.
+
+`LocalVisitPhotoStore` saves resized JPEGs under Application Support, scoped by
+account, and the visit keeps their IDs. They are viewable in the history gallery
+and survive reopening. Firebase stores those references with the visit, but
+images stay on this device. Deleting/resetting a visit also deletes its photos.
+No Firebase Storage configuration or image-upload service is required.
 
 ## Limits and viva explanation
 

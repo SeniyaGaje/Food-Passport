@@ -15,7 +15,8 @@
       "queries": [
         "kottu roti",
         "kothu parotta"
-      ]
+      ],
+      "category": "Chopped roti"
     },
     {
       "id": "hoppers",
@@ -32,7 +33,8 @@
       "queries": [
         "Sri Lankan hoppers",
         "egg hopper appam"
-      ]
+      ],
+      "category": "Pancake"
     },
     {
       "id": "string-hoppers",
@@ -48,7 +50,8 @@
       "queries": [
         "idiyappam",
         "string hoppers"
-      ]
+      ],
+      "category": "Rice noodles"
     },
     {
       "id": "rice-curry",
@@ -62,7 +65,8 @@
       "queries": [
         "\"Sri Lankan\" \"rice\" \"curry\"",
         "\"Sri Lankan meal\""
-      ]
+      ],
+      "category": "Rice dish"
     },
     {
       "id": "dosa",
@@ -78,7 +82,8 @@
       ],
       "queries": [
         "masala dosa"
-      ]
+      ],
+      "category": "Pancake"
     },
     {
       "id": "fried-rice",
@@ -93,7 +98,8 @@
       ],
       "queries": [
         "fried rice"
-      ]
+      ],
+      "category": "Rice dish"
     },
     {
       "id": "pizza",
@@ -109,7 +115,8 @@
       ],
       "queries": [
         "pizza margherita"
-      ]
+      ],
+      "category": "Fast food"
     },
     {
       "id": "burger",
@@ -125,7 +132,8 @@
       ],
       "queries": [
         "cheeseburger"
-      ]
+      ],
+      "category": "Fast food"
     },
     {
       "id": "coffee",
@@ -144,7 +152,8 @@
       "queries": [
         "cup coffee",
         "cappuccino"
-      ]
+      ],
+      "category": "Drink"
     },
     {
       "id": "tea",
@@ -161,8 +170,33 @@
         "Cups of tea"
       ],
       "queries": [
-        "cup tea",
-        "milk tea cup"
+        "black tea glass",
+        "milk tea cup",
+        "ceylon tea cup"
+      ],
+      "category": "Drink"
+    },
+    {
+      "id": "cake-dessert",
+      "name": "Cake & Dessert",
+      "cuisine": null,
+      "isDrink": false,
+      "category": "Dessert",
+      "menuNames": [
+        "Cake",
+        "Chocolate Cake",
+        "Cheesecake",
+        "Cupcake"
+      ],
+      "categories": [
+        "Chocolate cakes",
+        "Cheesecakes",
+        "Cupcakes"
+      ],
+      "queries": [
+        "slice chocolate cake",
+        "cheesecake slice",
+        "cupcake"
       ]
     },
     {
@@ -182,7 +216,8 @@
         "books shelf",
         "apples fruit",
         "salad bowl"
-      ]
+      ],
+      "category": "Other"
     }
   ]
 }

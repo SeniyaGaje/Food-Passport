@@ -1020,8 +1020,10 @@ struct VisitRow: View {
 
     var body: some View {
         AdaptiveStack(spacing: 14) {
-            FoodImageView(imageName: visit.imageName, cuisine: visit.cuisine, cornerRadius: 14)
+            VisitPhotoView(photoID: visit.photoIDs?.first, fallbackImage: visit.imageName, cuisine: visit.cuisine)
                 .frame(width: 64, height: 64)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 14))
 
             // The amount keeps its full width; the rest can shrink to fit small iPhones.
             VStack(alignment: .leading, spacing: 4) {

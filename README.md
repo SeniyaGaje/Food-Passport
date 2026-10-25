@@ -53,30 +53,40 @@ with Scan your meal), the receipt only fills in their prices and the total: your
 is matched to the receipt line that shares the most words with it ("Kottu Roti" gets the price of "CHICKEN KOTTU").
 With no dishes added yet, the receipt's items are used instead.
 
-## Meal recognition (hybrid Core ML)
+## Meal recognition and photos
 
 Log your visit → **Scan your meal** takes a camera photo or chooses one from Photos.
-Everything runs on the phone:
+All recognition runs on the device:
 
-1. Apple's frozen **MobileCLIP-S0 image encoder** turns the centre-cropped photo into 512 features.
-2. Our **logistic regression classifier**, trained with **Create ML Components** on labelled food photos,
-   predicts a small set of familiar foods, Sri Lankan dishes, coffee and tea, plus **Other**.
-3. `ML/FoodModel.json` supplies the catalogue and the confidence threshold measured on validation photos.
-   A confident match fills an editable item in the form. An uncertain match or Other needs the student's
-   choice from three alternatives. **Confirm** adds that item to the form; **Save visit** always saves the visit.
+1. **YOLOv3-tiny** locates common food and drink objects, such as cups, bowls and cake.
+2. When multiple objects are found, each region is classified separately using Apple's frozen
+   **MobileCLIP-S0** encoder and our **Create ML Components logistic regression classifier**.
+3. Each item gets three alternative names. **Nothing starts selected, even at 100% confidence.**
+   Choose one name for each item you had, then tap **Add selected items**.
+4. The editable form receives those items. **Save visit** is always required to persist the visit.
 
-Menu aliases fill a price only when the matched name is on the restaurant's menu. Menu information does not
-change the model's probabilities. Broad drink classes do not distinguish plain tea from milk tea.
+The catalogue includes Sri Lankan foods, familiar meals, coffee, tea, **Cake & Dessert** (including
+chocolate cakes, cheesecake and cupcakes), and Other. Suggestions show food/drink type, category and
+suggested cuisine where one applies. These extra details are catalogue mappings, not separate
+ingredient or nutrition predictions. A broad Tea result does not distinguish plain tea from milk tea.
 
-This is transfer learning: **we train the food classifier; Apple's image encoder stays pretrained**.
-Training uses openly licensed Wikimedia Commons and Openverse photos, author-separated train/validation/test
-sets and mirrored training images. App illustrations are kept out of training and used as additional unseen tests.
+The object detector can miss small or overlapping items. If fewer than two separate regions are found,
+the app shows three guesses for the whole photo. Scan a missing item separately when needed.
 
-See [MLTraining/README.md](MLTraining/README.md) for the training steps and limitations,
+Meal photos are saved privately in **Application Support on this device**, separately for each account.
+Visit history, recent activity and stamp details show the saved photo, and **Your meal photos** opens
+a full-size gallery. Photos also survive reopening the app. Choosing manual entry keeps a valid photo.
+Deleting a visit or resetting its data removes the associated photos after the database deletion succeeds.
+
+Firebase continues to store visit metadata, including photo references; image files are not uploaded.
+Photos do not sync to another device and are removed when the app's local data is deleted/uninstalled.
+Firebase Storage setup is not required.
+
+See [MLTraining/README.md](MLTraining/README.md) for training steps and limits,
 [MLTraining/EvaluationReport.md](MLTraining/EvaluationReport.md) for measured results, and
-[CREDITS.md](CREDITS.md) for the model and dataset credits.
+[CREDITS.md](CREDITS.md) for model and dataset credits.
 
-The simulator has no camera: drag a food photo onto it, then use **Choose from Photos**.
+The Simulator has no camera. Add a food photo to its Photos app, then use **Choose from Photos**.
 
 ## Demo at NIBM Colombo (viva)
 
@@ -148,7 +158,8 @@ FoodPassport/
 ├── ML/
 │   ├── MobileCLIPImageEncoder.mlpackage   Apple's frozen MobileCLIP-S0 image encoder
 │   ├── FoodClassifier.mlpackage    Food classifier trained with Create ML Components
-│   ├── FoodModel.json              Catalogue and measured confidence threshold
+│   ├── FoodModel.json              Catalogue, categories and confirmation policy
+│   ├── MealObjectDetector.mlmodel  YOLOv3-tiny food/drink object detector
 │   └── MobileCLIP-LICENSE.txt      Apple's licence for the model
 ├── Views/
 │   ├── MainTabView.swift     Tab bar, screen routing, pop-up and toast hosts

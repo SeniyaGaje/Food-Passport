@@ -5,10 +5,14 @@ import Foundation
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 let images = root.appendingPathComponent("Images")
 let output = root.appendingPathComponent("Review")
+let requested = Set(CommandLine.arguments.dropFirst())
+let excludedURL = root.appendingPathComponent("excluded.csv")
+let excluded = Set(((try? String(contentsOf: excludedURL, encoding: .utf8)) ?? "").components(separatedBy: .newlines).dropFirst().filter { !$0.isEmpty }.map { String($0.split(separator: ",")[0]) })
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 for folder in try FileManager.default.contentsOfDirectory(at: images, includingPropertiesForKeys: nil).sorted(by: { $0.path < $1.path }) {
+    if !requested.isEmpty && !requested.contains(folder.lastPathComponent) { continue }
     let photos = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-        .filter { ["jpg", "png"].contains($0.pathExtension) }.sorted { $0.path < $1.path }
+        .filter { ["jpg", "png"].contains($0.pathExtension) && !excluded.contains("Images/" + folder.lastPathComponent + "/" + $0.lastPathComponent) }.sorted { $0.path < $1.path }
     for start in stride(from: 0, to: photos.count, by: 60) {
         let batch = Array(photos[start..<min(start + 60, photos.count)])
         let size = NSSize(width: 1200, height: ceil(Double(batch.count) / 6) * 130)
