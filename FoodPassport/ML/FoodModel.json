@@ -1,0 +1,109 @@
+{
+  "autoApplyEnabled" : true,
+  "classes" : [
+    {
+      "cuisine" : "Sri Lankan",
+      "id" : "kottu",
+      "isDrink" : false,
+      "menuNames" : [
+        "Kottu Roti",
+        "Chicken Kottu"
+      ],
+      "name" : "Kottu Roti"
+    },
+    {
+      "cuisine" : "Sri Lankan",
+      "id" : "hoppers",
+      "isDrink" : false,
+      "menuNames" : [
+        "Egg Hoppers",
+        "Plain Hoppers (3)"
+      ],
+      "name" : "Hoppers"
+    },
+    {
+      "cuisine" : "Sri Lankan",
+      "id" : "string-hoppers",
+      "isDrink" : false,
+      "menuNames" : [
+        "String Hoppers"
+      ],
+      "name" : "String Hoppers"
+    },
+    {
+      "cuisine" : "Indian",
+      "id" : "dosa",
+      "isDrink" : false,
+      "menuNames" : [
+        "Masala Dosa",
+        "Dosa"
+      ],
+      "name" : "Dosa"
+    },
+    {
+      "cuisine" : "Chinese",
+      "id" : "fried-rice",
+      "isDrink" : false,
+      "menuNames" : [
+        "Fried Rice"
+      ],
+      "name" : "Fried Rice"
+    },
+    {
+      "cuisine" : "Italian",
+      "id" : "pizza",
+      "isDrink" : false,
+      "menuNames" : [
+        "Margherita Pizza",
+        "Pizza"
+      ],
+      "name" : "Pizza"
+    },
+    {
+      "cuisine" : "American",
+      "id" : "burger",
+      "isDrink" : false,
+      "menuNames" : [
+        "Burger",
+        "Cheeseburger"
+      ],
+      "name" : "Burger"
+    },
+    {
+      "cuisine" : null,
+      "id" : "coffee",
+      "isDrink" : true,
+      "menuNames" : [
+        "Coffee",
+        "Cappuccino",
+        "Iced Coffee"
+      ],
+      "name" : "Coffee"
+    },
+    {
+      "cuisine" : null,
+      "id" : "tea",
+      "isDrink" : true,
+      "menuNames" : [
+        "Plain Tea",
+        "Milk Tea",
+        "Tea",
+        "Ginger Tea"
+      ],
+      "name" : "Tea"
+    },
+    {
+      "cuisine" : null,
+      "id" : "other",
+      "isDrink" : false,
+      "menuNames" : [
+
+      ],
+      "name" : "Other"
+    }
+  ],
+  "confidenceThreshold" : 0.82712500121744192,
+  "embeddingCount" : 512,
+  "encoder" : "MobileCLIP-S0",
+  "schemaVersion" : 1
+}

@@ -381,6 +381,7 @@ struct MealCameraView: View {
     @State private var isShowingResults = false
     @State private var confirmedDishes: [MealPrediction] = []
     @State private var wantsManualEntry = false
+    @State private var review: MealScanViewModel
 
     /// `menu` is the restaurant's dishes (they get a boost).
     /// `initialPhoto` is recognised straight away, for previews.
@@ -394,6 +395,7 @@ struct MealCameraView: View {
         self.recognizer = recognizer
         self.initialPhoto = initialPhoto
         self.onConfirm = onConfirm
+        _review = State(initialValue: MealScanViewModel(recognizer: recognizer))
     }
 
     var body: some View {
@@ -422,15 +424,16 @@ struct MealCameraView: View {
         }
         .onDisappear {
             camera.stop()
+            review.reject()
         }
         .onChange(of: selectedPhoto) { _, item in
             loadPhoto(item)
         }
         .sheet(isPresented: $isShowingResults, onDismiss: handleResultsDismissed) {
-            if case .results(let photo, let predictions) = step {
+            if case .results(let photo, _) = step {
                 MealRecognitionSheet(
                     photo: photo,
-                    predictions: predictions,
+                    review: review,
                     onConfirm: { dishes in
                         confirmedDishes = dishes
                         isShowingResults = false
@@ -677,36 +680,25 @@ struct MealCameraView: View {
     private func recognise(_ photo: UIImage) {
         step = .recognising(photo)
         Task {
-            do {
-                switch try await recognizer.recognize(photo, menu: menu) {
-                case .dishes(let predictions) where !predictions.isEmpty:
-                    step = .results(photo, predictions)
+            await review.scan(photo, menu: menu)
+            if let result = review.result {
+                if let dishes = review.automaticDraft() {
+                    // Fill the form, then let the student check it and tap Save visit.
+                    onConfirm(dishes)
+                    dismiss()
+                } else {
+                    step = .results(photo, result.predictions)
                     isShowingResults = true
-                case .dishes:
-                    step = .problem(photo, title: "No dish found", message: "Retake the photo with your plate in the middle of the frame, or enter the dish yourself.")
-                case .unknownFood(let lookalike):
-                    step = .problem(photo, title: "Not one of our dishes yet",
-                                    message: "This looks like \(lookalike.lowercased()), which FoodPassport can't recognise yet. Enter the dish yourself.")
-                case .notFood(let lookalike):
-                    step = .problem(photo, title: "This doesn't look like a meal", message: notAMealMessage(lookalike))
                 }
-            } catch {
-                step = .problem(photo, title: "Couldn't recognise the photo", message: error.localizedDescription)
+            } else if let message = review.errorMessage {
+                step = .problem(photo, title: "Couldn't recognise the photo", message: message)
             }
-        }
-    }
-
-    /// What to tell the student when the photo isn't a meal.
-    private func notAMealMessage(_ lookalike: String) -> String {
-        switch lookalike {
-        case "Receipt": "It looks like a receipt. Use Scan receipt for the bill, and photograph your plate here."
-        case "Unclear photo": "The photo is too dark or blurry. Retake it in better light with your plate in the frame."
-        default: "It looks like a \(lookalike.lowercased()). Retake the photo with your plate in the middle of the frame."
         }
     }
 
     /// Clears the photo so the student can try again.
     private func retake() {
+        review.reject()
         selectedPhoto = nil
         confirmedDishes = []
         wantsManualEntry = false
@@ -719,6 +711,7 @@ struct MealCameraView: View {
             onConfirm(confirmedDishes)
             dismiss()
         } else if wantsManualEntry {
+            review.reject()
             dismiss()
         } else {
             // They swiped the results away, so go back to the camera.
@@ -754,20 +747,19 @@ private struct CameraPreview: UIViewRepresentable {
 /// "We found matches!": the top three dishes for the photo. The student can pick more than one.
 struct MealRecognitionSheet: View {
     let photo: UIImage?
-    let predictions: [MealPrediction]
+    let review: MealScanViewModel
     let onConfirm: ([MealPrediction]) -> Void
     let onEnterManually: () -> Void
 
-    /// Positions of the ticked dishes. The most likely one starts ticked.
-    @State private var selectedIndexes: Set<Int> = [0]
+    private var predictions: [MealPrediction] { review.result?.predictions ?? [] }
 
     /// The ticked dishes, in the order they're listed.
     private var selectedDishes: [MealPrediction] {
-        predictions.indices.filter { selectedIndexes.contains($0) }.map { predictions[$0] }
+        review.selectedDishes
     }
 
     private var isConfident: Bool {
-        (predictions.first?.confidence ?? 0) >= MealClassifier.confidentThreshold
+        review.result?.canAutoApply == true
     }
 
     private var confirmTitle: String {
@@ -786,7 +778,7 @@ struct MealRecognitionSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .presentationDetents([.fraction(0.8), .large])
         .brandSheetStyle()
-        .sensoryFeedback(.selection, trigger: selectedIndexes)
+        .sensoryFeedback(.selection, trigger: review.selectedLabels)
     }
 
     private var sheetContent: some View {
@@ -810,7 +802,7 @@ struct MealRecognitionSheet: View {
                         .textCase(.uppercase)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(isConfident ? "We found matches!" : "Is it one of these?")
+                    Text(review.result?.isOther == true ? "This may be something else" : (isConfident ? "Check your meal" : "Is it one of these?"))
                         .font(.title3.bold())
                         .foregroundStyle(Theme.ink)
                         .accessibilityAddTraits(.isHeader)
@@ -818,17 +810,17 @@ struct MealRecognitionSheet: View {
             }
 
             Label(
-                isConfident ? "Tick everything you had, food and drinks." : "Not sure about this one. Tick the right ones, or enter them yourself.",
+                isConfident ? "Check the suggestion before adding it to your visit." : "Choose the right match below, or enter the dish yourself.",
                 systemImage: isConfident ? "checklist" : "questionmark.circle"
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
 
-            ForEach(Array(predictions.enumerated()), id: \.element.id) { index, prediction in
+            ForEach(predictions) { prediction in
                 Button {
-                    toggle(index)
+                    review.toggle(prediction.label)
                 } label: {
-                    PredictionRow(prediction: prediction, isSelected: selectedIndexes.contains(index))
+                    PredictionRow(prediction: prediction, isSelected: review.selectedLabels.contains(prediction.label))
                 }
                 .buttonStyle(.plain)
             }
@@ -844,7 +836,7 @@ struct MealRecognitionSheet: View {
             }
 
             Button(confirmTitle) {
-                onConfirm(selectedDishes)
+                if let dishes = review.confirm() { onConfirm(dishes) }
             }
             .buttonStyle(.brandPrimary)
             .disabled(selectedDishes.isEmpty)
@@ -854,14 +846,6 @@ struct MealRecognitionSheet: View {
         }
     }
 
-    /// Ticks or unticks a dish.
-    private func toggle(_ index: Int) {
-        if selectedIndexes.contains(index) {
-            selectedIndexes.remove(index)
-        } else {
-            selectedIndexes.insert(index)
-        }
-    }
 }
 
 private struct PredictionRow: View {
@@ -1406,9 +1390,11 @@ struct StampEarnedPopup: View {
 }
 
 #Preview {
+    let review = MealScanViewModel(recognizer: MockMealRecognizer())
     Color.black
         .sheet(isPresented: .constant(true)) {
-            MealRecognitionSheet(photo: nil, predictions: MockData.mealPredictions, onConfirm: { _ in }, onEnterManually: {})
+            MealRecognitionSheet(photo: nil, review: review, onConfirm: { _ in }, onEnterManually: {})
+                .task { await review.scan(UIImage(), menu: []) }
         }
 }
 

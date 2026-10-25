@@ -1,219 +1,228 @@
-import Testing
+import CoreML
 import Foundation
+import Testing
+import UIKit
 @testable import FoodPassport
 
-/// Tests the meal classifier without the real model.
-/// Each label gets a single number, which is how similar it is to the photo, so tests control the result.
-@Suite("Meal recognition")
+@Suite("Hybrid meal recognition")
 @MainActor
 struct MealClassifierTests {
+    private let classes = [
+        MealClass(id: "kottu", name: "Kottu Roti", cuisine: .sriLankan, isDrink: false, menuNames: ["Chicken Kottu"]),
+        MealClass(id: "tea", name: "Tea", cuisine: nil, isDrink: true, menuNames: ["Plain Tea", "Milk Tea"]),
+        MealClass(id: "coffee", name: "Coffee", cuisine: nil, isDrink: true, menuNames: ["Coffee"]),
+        MealClass(id: "other", name: "Other", cuisine: nil, isDrink: false, menuNames: [])
+    ]
 
-    private func label(
-        _ name: String,
-        similarity: Float,
-        cuisine: Cuisine? = .sriLankan,
-        kind: DishLabel.Kind = .dish,
-        menuNames: [String] = []
-    ) -> DishLabel {
-        DishLabel(id: name.lowercased(), name: name, cuisine: cuisine, kind: kind, menuNames: menuNames, embedding: [similarity])
+    private func configuration(threshold: Double = 0.8, enabled: Bool = true) -> MealModelConfiguration {
+        MealModelConfiguration(schemaVersion: 1, encoder: "MobileCLIP-S0", embeddingCount: 512,
+                               confidenceThreshold: threshold, autoApplyEnabled: enabled, classes: classes)
     }
 
-    private let photo: [Float] = [1]
-
-    private func dishes(_ result: MealRecognition) -> [MealPrediction]? {
-        if case .dishes(let predictions) = result { return predictions }
-        return nil
+    private func recognition(_ chances: [String: Double], threshold: Double = 0.8, enabled: Bool = true) throws -> MealRecognition {
+        try MealClassifier.parse(chances, configuration: configuration(threshold: threshold, enabled: enabled), menu: ["Chicken Kottu"])
     }
 
-    @Test("The closest dish comes first, with the most confidence")
-    func closestDishFirst() throws {
-        let labels = [
-            label("Fried Rice", similarity: 0.7, cuisine: .chinese),
-            label("Kottu Roti", similarity: 0.9),
-            label("String Hoppers", similarity: 0.8),
+    @Test("The top three known classes keep their trained probabilities and menu names")
+    func parseResults() throws {
+        let result = try recognition(["Kottu Roti": 0.85, "Tea": 0.08, "Coffee": 0.05, "Other": 0.02])
+        #expect(result.predictions.map(\.label) == ["Kottu Roti", "Tea", "Coffee"])
+        #expect(result.predictions.first?.dishName == "Chicken Kottu")
+        #expect(result.predictions.first?.confidence == 0.85)
+        #expect(result.predictions.first?.isOnMenu == true)
+        #expect(result.canAutoApply)
+    }
+
+    @Test("A calibrated boundary includes the threshold and excludes lower scores", arguments: [0.79, 0.8, 0.81])
+    func thresholdBoundary(score: Double) throws {
+        let result = try recognition(["Kottu Roti": score, "Tea": 0.05, "Coffee": 0.05, "Other": 0.9 - score])
+        #expect(result.canAutoApply == (score >= 0.8))
+    }
+
+    @Test("Other keeps alternatives visible and is never selected automatically")
+    func otherNeedsChoice() throws {
+        let result = try recognition(["Kottu Roti": 0.03, "Tea": 0.02, "Coffee": 0.01, "Other": 0.94])
+        #expect(result.isOther)
+        #expect(!result.canAutoApply)
+        #expect(result.predictions.count == 3)
+        #expect(!result.predictions.contains { $0.label == "Other" })
+    }
+
+    @Test("Automatic selection stays off when validation could not establish a threshold")
+    func disabledThreshold() throws {
+        let result = try recognition(["Kottu Roti": 0.97, "Tea": 0.01, "Coffee": 0.01, "Other": 0.01], enabled: false)
+        #expect(!result.canAutoApply)
+    }
+
+    @Test("Missing, unknown, negative, non-finite and unnormalised outputs are rejected")
+    func invalidOutputs() {
+        let invalid: [[String: Double]] = [
+            [:], ["Unknown": 1],
+            ["Kottu Roti": -0.1, "Tea": 0.5, "Coffee": 0.5, "Other": 0.1],
+            ["Kottu Roti": .nan, "Tea": 0, "Coffee": 0, "Other": 0],
+            ["Kottu Roti": .infinity, "Tea": 0, "Coffee": 0, "Other": 0],
+            ["Kottu Roti": 0.5, "Tea": 0.5, "Coffee": 0.5, "Other": 0.5]
         ]
-
-        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
-
-        #expect(predictions.map(\.label) == ["Kottu Roti", "String Hoppers", "Fried Rice"])
-        #expect(predictions[0].confidence > MealClassifier.confidentThreshold)
-        #expect(predictions[0].cuisine == .sriLankan)
-        #expect(predictions.map(\.confidence) == predictions.map(\.confidence).sorted(by: >))
-        // Every label is a dish here, so the three chances add up to 100%.
-        #expect(abs(predictions.map(\.confidence).reduce(0, +) - 1) < 0.0001)
+        for output in invalid {
+            #expect(throws: MealRecognitionError.self) { try recognition(output) }
+        }
     }
 
-    @Test("At most three dishes are suggested")
-    func topThreeOnly() throws {
-        let labels = (0..<6).map { label("Dish \($0)", similarity: 0.5 + Float($0) / 100) }
-
-        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
-
-        #expect(predictions.count == 3)
-        #expect(predictions[0].label == "Dish 5")
+    @Test("Equal scores have a stable ordering")
+    func tiedScores() throws {
+        let result = try recognition(["Kottu Roti": 0.25, "Tea": 0.25, "Coffee": 0.25, "Other": 0.25])
+        #expect(result.predictions.map(\.label) == ["Coffee", "Kottu Roti", "Tea"])
+        #expect(!result.canAutoApply)
     }
 
-    @Test("A dish on the restaurant's menu is favoured and shown with the menu's name")
-    func menuBoost() throws {
-        let labels = [
-            label("Kottu Roti", similarity: 0.8, menuNames: ["Kottu Roti", "Chicken Kottu"]),
-            label("Hoppers", similarity: 0.8, menuNames: ["Egg Hoppers", "Plain Hoppers (3)"]),
-        ]
-
-        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: ["Egg Hoppers", "Pol Roti"])))
-
-        // Equally likely from the photo alone, so the menu boost (×2) decides: 2/3 against 1/3.
-        #expect(predictions[0].label == "Egg Hoppers")
-        #expect(predictions[0].dishName == "Egg Hoppers")
-        #expect(predictions[0].isOnMenu)
-        #expect(abs(predictions[0].confidence - 2.0 / 3.0) < 0.0001)
-        #expect(!predictions[1].isOnMenu)
+    @Test("A broad tea class does not invent which tea was served")
+    func menuAmbiguity() {
+        let tea = classes[1]
+        #expect(tea.menuName(in: ["Plain Tea", "Milk Tea"]) == nil)
+        #expect(tea.menuName(in: ["PLAIN TEA"]) == "PLAIN TEA")
     }
 
-    @Test("Menu names are matched ignoring capital letters")
-    func menuNameMatching() {
-        let kottu = label("Kottu Roti", similarity: 1, menuNames: ["Kottu Roti", "Chicken Kottu"])
-
-        #expect(kottu.menuName(in: ["Rice & Curry", "chicken kottu"]) == "chicken kottu")
-        #expect(kottu.menuName(in: ["Rice & Curry"]) == nil)
+    @Test("A confident fake scan fills a draft, and only confirmation returns dishes")
+    func confirmFlow() async throws {
+        let result = try recognition(["Kottu Roti": 0.9, "Tea": 0.04, "Coffee": 0.03, "Other": 0.03])
+        let review = MealScanViewModel(recognizer: MockMealRecognizer(result: result))
+        #expect(review.confirm() == nil)
+        await review.scan(UIImage(), menu: [])
+        #expect(review.selectedDishes.map(\.label) == ["Kottu Roti"])
+        #expect(review.result != nil)
+        #expect(review.confirm()?.map(\.label) == ["Kottu Roti"])
+        #expect(review.result == nil)
+        #expect(review.confirm() == nil)
     }
 
-    @Test("A photo of a receipt is reported as not a meal")
-    func notFood() {
-        let labels = [
-            label("Receipt", similarity: 0.9, cuisine: nil, kind: .notFood),
-            label("Kottu Roti", similarity: 0.6),
-        ]
-
-        #expect(MealClassifier.classify(embedding: photo, labels: labels, menu: []) == .notFood("Receipt"))
+    @Test("A confident scan can fill an editable draft once")
+    func automaticDraft() async {
+        let review = MealScanViewModel(recognizer: MockMealRecognizer())
+        await review.scan(UIImage(), menu: [])
+        #expect(review.automaticDraft()?.map(\.label) == ["Kottu Roti"])
+        #expect(review.automaticDraft() == nil)
+        #expect(review.result == nil)
     }
 
-    @Test("Food the app doesn't know, such as fruit, is reported as unknown food")
-    func unknownFood() {
-        let labels = [
-            label("Fruit", similarity: 0.9, cuisine: nil, kind: .otherFood),
-            label("Kottu Roti", similarity: 0.6),
-        ]
-
-        #expect(MealClassifier.classify(embedding: photo, labels: labels, menu: []) == .unknownFood("Fruit"))
+    @Test("Low confidence and Other start empty and need the student's choice", arguments: [false, true])
+    func uncertainFlow(other: Bool) async throws {
+        let output = other
+            ? ["Kottu Roti": 0.04, "Tea": 0.03, "Coffee": 0.03, "Other": 0.9]
+            : ["Kottu Roti": 0.5, "Tea": 0.2, "Coffee": 0.2, "Other": 0.1]
+        let review = MealScanViewModel(recognizer: MockMealRecognizer(result: try recognition(output)))
+        await review.scan(UIImage(), menu: [])
+        #expect(review.selectedDishes.isEmpty)
+        #expect(review.automaticDraft() == nil)
+        #expect(review.confirm() == nil)
+        review.toggle("Tea")
+        review.toggle("Unknown")
+        #expect(review.selectedDishes.map(\.label) == ["Tea"])
+        #expect(review.confirm()?.first?.isDrink == true)
     }
 
-    @Test("Drinks are recognised and can be added like dishes, even without a cuisine")
-    func drinks() throws {
-        let labels = [
-            label("Coffee", similarity: 0.9, cuisine: nil, kind: .drink),
-            label("Plain Tea", similarity: 0.85, kind: .drink),
-            label("Kottu Roti", similarity: 0.5),
-        ]
-
-        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
-
-        #expect(predictions.map(\.label) == ["Coffee", "Plain Tea", "Kottu Roti"])
-        #expect(predictions[0].isDrink)
-        #expect(predictions[0].cuisine == nil)
-        #expect(predictions[1].cuisine == .sriLankan)
-        #expect(!predictions[2].isDrink)
+    @Test("Rejecting a scan discards its suggestions and selection")
+    func rejectFlow() async {
+        let review = MealScanViewModel(recognizer: MockMealRecognizer())
+        await review.scan(UIImage(), menu: [])
+        review.reject()
+        #expect(review.result == nil)
+        #expect(review.selectedDishes.isEmpty)
+        #expect(review.confirm() == nil)
     }
 
-    @Test("A dish without a cuisine is skipped, because every dish needs one")
-    func dishWithoutCuisine() throws {
-        let labels = [
-            label("Mystery Dish", similarity: 0.9, cuisine: nil),
-            label("Kottu Roti", similarity: 0.8),
-        ]
-
-        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
-
-        #expect(predictions.map(\.label) == ["Kottu Roti"])
+    @Test("A failed rescan clears the earlier prediction")
+    func failedScan() async {
+        let review = MealScanViewModel(recognizer: MockMealRecognizer(error: .unreadableImage))
+        await review.scan(UIImage(), menu: [])
+        #expect(review.errorMessage != nil)
+        #expect(review.result == nil)
+        #expect(!review.isScanning)
+        #expect(review.confirm() == nil)
     }
 
-    @Test("The suggested cuisine comes from the food, not the drink", arguments: [
-        ([MealPrediction(label: "Coffee", dishName: "Coffee", confidence: 0.6, cuisine: nil, isDrink: true),
-          MealPrediction(label: "Croissant", dishName: "Croissant", confidence: 0.3, cuisine: .french)], Cuisine.french),
-        ([MealPrediction(label: "Plain Tea", dishName: "Plain Tea", confidence: 0.8, cuisine: .sriLankan, isDrink: true)], Cuisine.sriLankan),
+    @Test("Closing review during inference cannot bring an old result back")
+    func rejectPendingScan() async {
+        let recognizer = SuspendedMealRecognizer()
+        let review = MealScanViewModel(recognizer: recognizer)
+        let task = Task { await review.scan(UIImage(), menu: []) }
+        await recognizer.waitUntilStarted()
+        review.reject()
+        recognizer.finish()
+        await task.value
+        #expect(review.result == nil)
+        #expect(review.selectedDishes.isEmpty)
+        #expect(!review.isScanning)
+    }
+
+    @Test("The catalogue agrees with the exported classifier and both model interfaces")
+    func bundledModelContract() throws {
+        let configuration = try MealModelConfiguration.load()
+        let url = try #require(Bundle.main.url(forResource: "FoodClassifier", withExtension: "mlmodelc"))
+        let compute = MLModelConfiguration()
+        compute.computeUnits = .cpuOnly
+        let classifier = try MLModel(contentsOf: url, configuration: compute)
+        #expect(Set(classifier.modelDescription.classLabels as? [String] ?? []) == Set(configuration.classes.map(\.name)))
+        #expect(classifier.modelDescription.inputDescriptionsByName["features"]?.multiArrayConstraint?.shape == [512])
+        #expect(classifier.modelDescription.predictedFeatureName == "target")
+        #expect(classifier.modelDescription.predictedProbabilitiesName == "targetProbability")
+        let encoderURL = try #require(Bundle.main.url(forResource: "MobileCLIPImageEncoder", withExtension: "mlmodelc"))
+        let encoder = try MLModel(contentsOf: encoderURL, configuration: compute)
+        #expect(encoder.modelDescription.inputDescriptionsByName["image"]?.imageConstraint?.pixelsWide == 256)
+        #expect(encoder.modelDescription.inputDescriptionsByName["image"]?.imageConstraint?.pixelsHigh == 256)
+        #expect(encoder.modelDescription.outputDescriptionsByName["final_emb_1"]?.multiArrayConstraint?.shape == [1, 512])
+    }
+
+    @Test("The real model recognises unseen app photos among its three suggestions", arguments: [
+        ("dish_kottu", "Kottu Roti"), ("dish_masala_dosa", "Dosa"),
+        ("restaurant_hoppers_hut", "Hoppers"), ("restaurant_ratmalana_tea_kade", "Tea")
     ])
-    func suggestedCuisine(items: [MealPrediction], expected: Cuisine) {
-        #expect(MealPrediction.suggestedCuisine(in: items) == expected)
+    func unseenAppPhotos(asset: String, expected: String) async throws {
+        let photo = try #require(UIImage(named: asset))
+        let result = try await CoreMLMealRecognizer.shared.recognize(photo, menu: [])
+        #expect(result.predictions.contains { $0.label == expected }, "\(asset): \(result.predictions.map(\.label))")
+        #expect(result.predictions.allSatisfy { (0...1).contains($0.confidence) })
+        if result.canAutoApply { #expect(result.topLabel == expected) }
     }
 
-    @Test("Only a coffee picked: there's no cuisine to suggest")
-    func noSuggestedCuisine() {
-        let coffee = MealPrediction(label: "Coffee", dishName: "Coffee", confidence: 0.9, cuisine: nil, isDrink: true)
+    @Test("An unreadable image fails without suggesting a meal")
+    func unreadablePhoto() async {
+        await #expect(throws: MealRecognitionError.self) {
+            try await CoreMLMealRecognizer.shared.recognize(UIImage(), menu: [])
+        }
+    }
+
+    @Test("Food determines the cuisine ahead of a drink")
+    func suggestedCuisine() {
+        let coffee = MealPrediction(label: "Coffee", dishName: "Coffee", confidence: 0.8, cuisine: nil, isDrink: true)
+        let kottu = MealPrediction(label: "Kottu Roti", dishName: "Kottu Roti", confidence: 0.7, cuisine: .sriLankan)
+        #expect(MealPrediction.suggestedCuisine(in: [coffee, kottu]) == .sriLankan)
         #expect(MealPrediction.suggestedCuisine(in: [coffee]) == nil)
-        #expect(MealPrediction.suggestedCuisine(in: []) == nil)
     }
+}
 
-    @Test("When the app is unsure a photo isn't a meal, it still suggests dishes")
-    func unsureNonMealFallsBackToDishes() throws {
-        // The receipt is the best match, but only about 45% sure (we need 50% to say "not a meal").
-        let labels = [
-            label("Receipt", similarity: 0.5, cuisine: nil, kind: .notFood),
-            label("Kottu Roti", similarity: 0.495),
-            label("String Hoppers", similarity: 0.495),
-        ]
+/// Lets the test close the screen while a photo is still being processed.
+@MainActor
+private final class SuspendedMealRecognizer: MealRecognizer {
+    private var pending: CheckedContinuation<MealRecognition, Never>?
+    private var started: CheckedContinuation<Void, Never>?
 
-        let predictions = try #require(dishes(MealClassifier.classify(embedding: photo, labels: labels, menu: [])))
+    func prepare() async {}
 
-        #expect(Set(predictions.map(\.label)) == ["Kottu Roti", "String Hoppers"])
-        #expect(predictions.allSatisfy { $0.confidence < MealClassifier.confidentThreshold })
-    }
-
-    @Test("With no labels loaded, the photo is reported as unclear")
-    func noLabels() {
-        #expect(MealClassifier.classify(embedding: photo, labels: [], menu: []) == .notFood("Unclear photo"))
-    }
-
-    // The bundled data file
-
-    @Test("The bundled dish embeddings are complete and valid")
-    func bundledEmbeddings() throws {
-        let labels = try loadBundledLabels()
-
-        #expect(labels.count >= 50)
-        #expect(Set(labels.map(\.id)).count == labels.count, "Every label needs its own ID")
-
-        for label in labels {
-            #expect(label.embedding.count == 512, "\(label.name) has the wrong number of values")
-            let length = sqrt(label.embedding.reduce(0) { $0 + $1 * $1 })
-            #expect(abs(length - 1) < 0.001, "\(label.name) isn't length 1")
-            if label.kind == .dish {
-                #expect(label.cuisine != nil, "\(label.name) is a dish without a cuisine")
-            }
-        }
-        #expect(labels.contains { $0.kind == .notFood && $0.name == "Receipt" })
-    }
-
-    @Test("The bundled labels include tea, coffee and more Sri Lankan food")
-    func bundledDrinksAndSriLankanFood() throws {
-        let labels = try loadBundledLabels()
-        let names = Set(labels.map(\.name))
-
-        for drink in ["Plain Tea", "Milk Tea", "Coffee", "Cappuccino", "Iced Coffee", "Iced Milo", "King Coconut", "Soft Drink"] {
-            #expect(labels.first { $0.name == drink }?.kind == .drink, "\(drink) should be a drink")
-        }
-        for dish in ["Kottu Roti", "Hoppers", "String Hoppers", "Pittu", "Parata", "Fish Bun", "Chinese Roll", "Pol Sambol", "Dhal Curry"] {
-            #expect(names.contains(dish), "\(dish) is missing")
-        }
-        // Drinks are recognised one by one now, so there's no general "Drink" label any more.
-        #expect(!names.contains("Drink"))
-    }
-
-    @Test("A photo matching a dish's or drink's description exactly is recognised as that item")
-    func everyDishRecognisesItself() throws {
-        let labels = try loadBundledLabels()
-
-        for dish in labels where dish.kind.isMenuItem {
-            let predictions = dishes(MealClassifier.classify(embedding: dish.embedding, labels: labels, menu: []))
-            #expect(predictions?.first?.label == dish.name, "\(dish.name) wasn't the top match for itself")
+    func recognize(_ image: UIImage, menu: [String]) async throws -> MealRecognition {
+        await withCheckedContinuation { continuation in
+            pending = continuation
+            started?.resume()
+            started = nil
         }
     }
 
-    private func loadBundledLabels() throws -> [DishLabel] {
-        struct EmbeddingsFile: Decodable {
-            let labels: [DishLabel]
-        }
-        // The tests run inside the app, so the app's bundle holds the file.
-        let url = try #require(Bundle.main.url(forResource: "DishEmbeddings", withExtension: "json"))
-        return try JSONDecoder().decode(EmbeddingsFile.self, from: Data(contentsOf: url)).labels
+    func waitUntilStarted() async {
+        if pending != nil { return }
+        await withCheckedContinuation { started = $0 }
+    }
+
+    func finish() {
+        pending?.resume(returning: MockMealRecognizer().result)
+        pending = nil
     }
 }
