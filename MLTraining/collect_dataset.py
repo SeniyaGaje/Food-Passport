@@ -6,6 +6,7 @@ import csv
 import hashlib
 import html
 import json
+import itertools
 from pathlib import Path
 import re
 import socket
@@ -26,7 +27,7 @@ KEYWORDS = {
     "rice-curry": ["rice", "sri lankan meal"], "dosa": ["dosa", "dosai"],
     "fried-rice": ["fried rice", "nasi goreng", "chahan"], "pizza": ["pizza"],
     "burger": ["burger"], "coffee": ["coffee", "cappuccino", "espresso", "latte"],
-    "tea": ["tea", "chai"]
+    "tea": ["tea", "chai"], "cake-dessert": ["cake", "cupcake", "cheesecake", "brownie"]
 }
 
 
@@ -84,10 +85,13 @@ def commons(titles):
 
 def candidates(entry):
     titles = []
+    category_lists = []
     for category in entry["categories"]:
         data = api("https://commons.wikimedia.org/w/api.php", action="query", format="json",
                    list="categorymembers", cmtitle="Category:" + category, cmtype="file", cmlimit=100)
-        titles += [x["title"] for x in data.get("query", {}).get("categorymembers", [])]
+        category_lists.append([x["title"] for x in data.get("query", {}).get("categorymembers", [])])
+    for row in itertools.zip_longest(*category_lists):
+        titles += [title for title in row if title]
     for query in entry["queries"]:
         data = api("https://commons.wikimedia.org/w/api.php", action="query", format="json",
                    list="search", srsearch=query + " filetype:bitmap", srnamespace=6,
@@ -174,7 +178,7 @@ def main():
                      "Tach tra o sri lanka.jpg", "Kottu.jpg", "Masala dosa 01.jpg", "Chicken makhani.jpg"]
     blocked.update(("file:" + x).replace("_", " ").casefold() for x in blocked_names)
     with log.open("a", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=FIELDS)
+        writer = csv.DictWriter(output, fieldnames=FIELDS, lineterminator="\n")
         if not rows:
             writer.writeheader()
         for entry in json.loads((ROOT / "catalogue.json").read_text())["classes"]:

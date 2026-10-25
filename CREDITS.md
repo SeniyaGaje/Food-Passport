@@ -37,3 +37,22 @@ Original training images are not bundled in the app or tracked in Git.
 See [`PHOTO_CREDITS.md`](PHOTO_CREDITS.md) for the separate credits and licences of
 restaurant, meal and welcome-screen illustrations. These remain unseen examples
 for testing the classifier.
+
+## Multi-item detector
+
+`FoodPassport/ML/MealObjectDetector.mlmodel` is Apple's distribution of
+**YOLOv3TinyFP16**, by Joseph Redmon and Ali Farhadi, from the
+[Apple Core ML model gallery](https://developer.apple.com/machine-learning/models/).
+Original work: [YOLOv3: An Incremental Improvement](https://pjreddie.com/media/files/papers/YOLOv3.pdf).
+Its model metadata refers to the [Darknet licence](https://github.com/pjreddie/darknet/blob/master/LICENSE),
+which states that Darknet is public domain. The licence is included in
+`FoodPassport/ML/YOLO-LICENSE.txt`.
+
+## Multi-item test fixture
+
+`FoodPassportTests/Fixtures/coffee-and-cake.jpg` is
+[Americano Coffee + Cake (45523282251)](https://commons.wikimedia.org/wiki/File:Americano_Coffee_%2B_Cake_(45523282251).jpg),
+by Vee Satayamas from Bangkok, Thailand, licensed
+[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).
+It is also a logged Coffee training image. It is used as an integration regression
+fixture, not as an independent model-accuracy test.

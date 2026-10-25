@@ -1,4 +1,5 @@
 import CoreML
+import CoreImage
 import Foundation
 import UIKit
 import Vision
@@ -10,6 +11,7 @@ struct MealClass: Codable, Equatable, Identifiable {
     let cuisine: Cuisine?
     let isDrink: Bool
     let menuNames: [String]
+    var category: String? = nil
 
     var isOther: Bool { id == "other" }
 
@@ -26,7 +28,7 @@ struct MealModelConfiguration: Codable, Equatable {
     let encoder: String
     let embeddingCount: Int
     let confidenceThreshold: Double
-    let autoApplyEnabled: Bool
+    let requiresConfirmation: Bool
     let classes: [MealClass]
 
     static func load(from bundle: Bundle = .main) throws -> Self {
@@ -39,7 +41,7 @@ struct MealModelConfiguration: Codable, Equatable {
     }
 
     func validate() throws {
-        guard schemaVersion == 1, encoder == "MobileCLIP-S0", embeddingCount == 512,
+        guard schemaVersion == 2, requiresConfirmation, encoder == "MobileCLIP-S0", embeddingCount == 512,
               confidenceThreshold.isFinite, (0...1).contains(confidenceThreshold),
               classes.count >= 2, classes.filter(\.isOther).count == 1,
               Set(classes.map(\.name)).count == classes.count,
@@ -55,8 +57,17 @@ struct MealRecognition: Equatable {
     let topLabel: String
     let confidence: Double
     let isOther: Bool
-    /// Allows filling the editable visit form. It never saves a visit.
-    let canAutoApply: Bool
+    let isConfident: Bool
+    var regions: [MealRegion] = []
+}
+
+/// A separate object in the photo, with three alternative names for that object.
+struct MealRegion: Identifiable, Equatable {
+    let id: Int
+    /// Normalised coordinates from the top-left of the upright photo.
+    let bounds: CGRect
+    let predictions: [MealPrediction]
+    let isOther: Bool
 }
 
 enum MealRecognitionError: LocalizedError {
@@ -88,6 +99,7 @@ final class CoreMLMealRecognizer: MealRecognizer {
     private struct LoadedModels {
         let encoder: VNCoreMLModel
         let classifier: MLModel
+        let detector: VNCoreMLModel
         let configuration: MealModelConfiguration
     }
 
@@ -101,30 +113,69 @@ final class CoreMLMealRecognizer: MealRecognizer {
         let loaded = try await loadModels()
         let encoder = loaded.encoder
         let classifier = loaded.classifier
-        // Model work stays off the main thread, so the camera remains responsive.
-        let probabilities = try await Task.detached(priority: .userInitiated) {
-            let request = VNCoreMLRequest(model: encoder)
-            request.imageCropAndScaleOption = .centerCrop
-            try VNImageRequestHandler(cgImage: cgImage, orientation: orientation).perform([request])
-            guard let observation = request.results?.first as? VNCoreMLFeatureValueObservation,
-                  let embedding = observation.featureValue.shapedArrayValue(of: Float.self),
-                  embedding.scalarCount == 512, embedding.scalars.allSatisfy(\.isFinite) else {
-                throw MealRecognitionError.invalidOutput
+        let detector = loaded.detector
+        let analysis = try await Task.detached(priority: .userInitiated) {
+            let upright: CGImage
+            if orientation == .up {
+                upright = cgImage
+            } else {
+                let oriented = CIImage(cgImage: cgImage).oriented(forExifOrientation: Int32(orientation.rawValue))
+                // Keep an 8-bit image; a floating-point render changes the detector's input.
+                guard let rotated = CIContext(options: [.cacheIntermediates: false]).createCGImage(
+                    oriented, from: oriented.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)) else {
+                    throw MealRecognitionError.unreadableImage
+                }
+                upright = rotated
             }
-            let features = MLShapedArray<Float>(scalars: embedding.scalars, shape: [512])
-            let input = try MLDictionaryFeatureProvider(dictionary: ["features": MLMultiArray(features)])
-            let output = try classifier.prediction(from: input)
-            guard let values = output.featureValue(for: "targetProbability"), values.type == .dictionary else {
-                throw MealRecognitionError.invalidOutput
+            let whole = try Self.probabilities(for: upright, encoder: encoder, classifier: classifier)
+            let request = VNCoreMLRequest(model: detector)
+            request.imageCropAndScaleOption = .scaleFit
+            try VNImageRequestHandler(cgImage: upright).perform([request])
+            let objects = (request.results as? [VNRecognizedObjectObservation] ?? []).compactMap { observation -> DetectedMealObject? in
+                guard let label = observation.labels.first else { return nil }
+                return DetectedMealObject(bounds: observation.boundingBox, label: label.identifier, confidence: Double(label.confidence))
             }
-            var probabilities: [String: Double] = [:]
-            for (key, value) in values.dictionaryValue {
-                guard let label = key as? String else { throw MealRecognitionError.invalidOutput }
-                probabilities[label] = value.doubleValue
+            let boxes = MealRegionGeometry.regions(from: objects)
+            var crops: [(CGRect, [String: Double])] = []
+            if boxes.count >= 2 {
+                for box in boxes {
+                    let rect = MealRegionGeometry.cropRect(box, imageSize: CGSize(width: upright.width, height: upright.height))
+                    if let crop = upright.cropping(to: rect) {
+                        crops.append((box, try Self.probabilities(for: crop, encoder: encoder, classifier: classifier)))
+                    }
+                }
             }
-            return probabilities
+            return (whole, crops)
         }.value
-        return try MealClassifier.parse(probabilities, configuration: loaded.configuration, menu: menu)
+        var result = try MealClassifier.parse(analysis.0, configuration: loaded.configuration, menu: menu)
+        for (index, crop) in analysis.1.enumerated() {
+            let item = try MealClassifier.parse(crop.1, configuration: loaded.configuration, menu: menu)
+            result.regions.append(MealRegion(id: index + 1, bounds: crop.0, predictions: item.predictions, isOther: item.isOther))
+        }
+        return result
+    }
+
+    nonisolated private static func probabilities(for image: CGImage, encoder: VNCoreMLModel, classifier: MLModel) throws -> [String: Double] {
+        let request = VNCoreMLRequest(model: encoder)
+        request.imageCropAndScaleOption = .centerCrop
+        try VNImageRequestHandler(cgImage: image).perform([request])
+        guard let observation = request.results?.first as? VNCoreMLFeatureValueObservation,
+              let embedding = observation.featureValue.shapedArrayValue(of: Float.self),
+              embedding.scalarCount == 512, embedding.scalars.allSatisfy(\.isFinite) else {
+            throw MealRecognitionError.invalidOutput
+        }
+        let features = MLShapedArray<Float>(scalars: embedding.scalars, shape: [512])
+        let input = try MLDictionaryFeatureProvider(dictionary: ["features": MLMultiArray(features)])
+        let output = try classifier.prediction(from: input)
+        guard let values = output.featureValue(for: "targetProbability"), values.type == .dictionary else {
+            throw MealRecognitionError.invalidOutput
+        }
+        var probabilities: [String: Double] = [:]
+        for (key, value) in values.dictionaryValue {
+            guard let label = key as? String else { throw MealRecognitionError.invalidOutput }
+            probabilities[label] = value.doubleValue
+        }
+        return probabilities
     }
 
     private func loadModels() async throws -> LoadedModels {
@@ -133,7 +184,8 @@ final class CoreMLMealRecognizer: MealRecognizer {
         let task = Task { () throws -> LoadedModels in
             let configuration = try MealModelConfiguration.load()
             guard let encoderURL = Bundle.main.url(forResource: "MobileCLIPImageEncoder", withExtension: "mlmodelc"),
-                  let classifierURL = Bundle.main.url(forResource: "FoodClassifier", withExtension: "mlmodelc") else {
+                  let classifierURL = Bundle.main.url(forResource: "FoodClassifier", withExtension: "mlmodelc"),
+                  let detectorURL = Bundle.main.url(forResource: "MealObjectDetector", withExtension: "mlmodelc") else {
                 throw MealRecognitionError.modelUnavailable
             }
             let compute = MLModelConfiguration()
@@ -144,11 +196,12 @@ final class CoreMLMealRecognizer: MealRecognizer {
             #endif
             let encoder = try await MLModel.load(contentsOf: encoderURL, configuration: compute)
             let classifier = try await MLModel.load(contentsOf: classifierURL, configuration: compute)
+            let detector = try await MLModel.load(contentsOf: detectorURL, configuration: compute)
             guard Set(classifier.modelDescription.classLabels as? [String] ?? []) == Set(configuration.classes.map(\.name)),
                   classifier.modelDescription.inputDescriptionsByName["features"]?.multiArrayConstraint?.shape == [512] else {
                 throw MealRecognitionError.modelUnavailable
             }
-            return LoadedModels(encoder: try VNCoreMLModel(for: encoder), classifier: classifier, configuration: configuration)
+            return LoadedModels(encoder: try VNCoreMLModel(for: encoder), classifier: classifier, detector: try VNCoreMLModel(for: detector), configuration: configuration)
         }
         loadingTask = task
         do {
@@ -183,17 +236,17 @@ enum MealClassifier {
             let menuName = label.menuName(in: menu)
             return MealPrediction(label: label.name, dishName: menuName ?? label.name,
                                   confidence: probabilities[label.name]!, cuisine: label.cuisine,
-                                  isOnMenu: menuName != nil, isDrink: label.isDrink)
+                                  isOnMenu: menuName != nil, isDrink: label.isDrink, category: label.category)
         }
         return MealRecognition(predictions: predictions, topLabel: best.name, confidence: confidence,
                                isOther: best.isOther,
-                               canAutoApply: configuration.autoApplyEnabled && !best.isOther && confidence >= configuration.confidenceThreshold)
+                               isConfident: !best.isOther && confidence >= configuration.confidenceThreshold)
     }
 }
 
 struct MockMealRecognizer: MealRecognizer {
     var result = MealRecognition(predictions: MockData.mealPredictions, topLabel: "Kottu Roti", confidence: 0.87,
-                                 isOther: false, canAutoApply: true)
+                                 isOther: false, isConfident: true)
     var error: MealRecognitionError?
 
     func prepare() async {}

@@ -191,27 +191,27 @@ let threshold = thresholds.first { candidate in
 }
 var catalogue = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("training_catalogue.json"))) as! [String: Any]
 let entries = (catalogue["classes"] as! [[String: Any]]).map { entry in
-    entry.filter { ["id", "name", "cuisine", "isDrink", "menuNames"].contains($0.key) }
+    entry.filter { ["id", "name", "cuisine", "isDrink", "menuNames", "category"].contains($0.key) }
 }
 try writeJSON([
-    "schemaVersion": 1, "encoder": "MobileCLIP-S0", "embeddingCount": 512,
-    "confidenceThreshold": threshold ?? 1.0, "autoApplyEnabled": threshold != nil,
+    "schemaVersion": 2, "encoder": "MobileCLIP-S0", "embeddingCount": 512,
+    "confidenceThreshold": threshold ?? 1.0, "requiresConfirmation": true,
     "classes": entries
 ], to: appML.appendingPathComponent("FoodModel.json"))
 try JSONEncoder().encode(scores).write(to: root.appendingPathComponent("evaluation_predictions.json"))
 
 var report = "# Food classifier evaluation\n\n"
 report += "Frozen Apple MobileCLIP-S0 image encoder + Create ML Components logistic regression. Only the classifier was trained on these photos.\n\n"
-report += "Split seed: 38. Authors stay in one split across every class. Only training images have mirrored copies. Validation selects the stopping point and confidence threshold; test photos are used only for final evaluation.\n\n"
+report += "Split seed: 38. Existing author assignments are preserved when extending the dataset. Authors stay in one split across every class. Only training images have mirrored copies. Validation selects the stopping point and confidence threshold; test photos are used only for final evaluation.\n\n"
 report += "| Split | Original photos | Top-1 accuracy |\n|---|---:|---:|\n"
 for split in ["train", "validation", "test"] {
     let selected = scores.filter { $0.split == split }
     report += "| \(split) | \(selected.count) | \(percent(accuracy(selected))) |\n"
 }
 report += "\nTraining examples with augmentation: \(training.count). Maximum iterations: 500; L2 penalty: 0.01.\n\n"
-report += "## Confirmation threshold\n\n"
+report += "## Confidence calibration\n\n"
 if let threshold {
-    report += "Lowest observed validation threshold reaching at least 95% precision with at least five accepted examples: **\(String(format: "%.6f", threshold))**. Other is never auto-applied.\n\n"
+    report += "Lowest observed validation threshold reaching at least 95% precision with at least five accepted examples: **\(String(format: "%.6f", threshold))**. All results require an explicit choice, including 100% confidence. The threshold is retained for evaluation only.\n\n"
     report += "| Split | Accepted known predictions | Precision | Coverage (all photos) |\n|---|---:|---:|---:|\n"
     for split in ["validation", "test"] {
         let all = scores.filter { $0.split == split }
@@ -219,7 +219,7 @@ if let threshold {
         report += "| \(split) | \(accepted.count) | \(accepted.isEmpty ? "N/A" : percent(accuracy(accepted))) | \(percent(Double(accepted.count) / Double(all.count))) |\n"
     }
 } else {
-    report += "No validation threshold met 95% precision with five accepted examples. Automatic draft filling is disabled; users choose and confirm every result.\n"
+    report += "No validation threshold met 95% precision with five accepted examples. Users choose and confirm every result at every confidence level.\n"
 }
 let test = scores.filter { $0.split == "test" }
 report += "\n## Test precision and recall\n\n| Class | Train | Validation | Test | Precision | Recall |\n|---|---:|---:|---:|---:|---:|\n"
@@ -234,7 +234,7 @@ report += "\n## Test confusion matrix\n\nRows are actual labels; columns are pre
 for label in sortedLabels {
     report += "| \(label) | " + sortedLabels.map { prediction in String(test.filter { $0.label == label && $0.prediction == prediction }.count) }.joined(separator: " | ") + " |\n"
 }
-report += "\n## Limits\n\nThis is a small web-photo dataset, not a claim of real-world accuracy. A few photos per held-out class give wide uncertainty. Similar dishes, mixed plates, lighting, and unseen drinks can confuse it. Other covers varied everyday scenes and unsupported foods, but cannot cover every unknown image. Confidence is a model score, not a guarantee. Every visit still needs an explicit Save visit action; uncertain predictions also need a label confirmation.\n\n"
+report += "\n## Limits\n\nThis is a small web-photo dataset, not a claim of real-world accuracy. A few photos per held-out class give wide uncertainty. Similar dishes, mixed plates, lighting, and unseen drinks can confuse it. Other covers varied everyday scenes and unsupported foods, but cannot cover every unknown image. Confidence is a model score, not a guarantee. Every prediction needs a label confirmation, and every visit needs an explicit Save visit action.\n\n"
 report += "Dropped classes with fewer than ten usable photos: \(catalogue["droppedClasses"] ?? [:]).\n"
 try report.write(to: root.appendingPathComponent("EvaluationReport.md"), atomically: true, encoding: .utf8)
 print(report)

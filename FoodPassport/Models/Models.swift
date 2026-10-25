@@ -88,6 +88,8 @@ struct Visit: Identifiable, Hashable, Codable {
     let imageName: String
     /// Everything eaten on this visit. Visits saved before this existed don't have it.
     var items: [VisitItem]? = nil
+    /// Local photo references; older visits don't have photos.
+    var photoIDs: [String]? = nil
 
     /// The visit's items. Older visits get one item made from their dish name and amount.
     var allItems: [VisitItem] {
@@ -113,6 +115,9 @@ struct VisitItem: Identifiable, Hashable, Codable {
     var name: String
     /// nil if the student didn't enter a price for it.
     var price: Int?
+    var cuisine: Cuisine? = nil
+    var category: String? = nil
+    var isDrink: Bool? = nil
 }
 
 /// An item while it's being typed on Log your visit. The price is kept as text until saving.
@@ -120,6 +125,9 @@ struct VisitItemDraft: Identifiable, Equatable {
     var id = UUID()
     var name = ""
     var priceText = ""
+    var cuisine: Cuisine? = nil
+    var category: String? = nil
+    var isDrink: Bool? = nil
 
     /// The price as a number, ignoring "LKR" and commas.
     var price: Int? {
@@ -426,6 +434,7 @@ struct MealPrediction: Identifiable, Hashable {
     /// True if this restaurant sells the dish.
     var isOnMenu = false
     var isDrink = false
+    var category: String? = nil
 
     /// The cuisine to suggest for a visit: the first food's, or a drink's if only drinks were picked.
     static func suggestedCuisine(in items: [MealPrediction]) -> Cuisine? {

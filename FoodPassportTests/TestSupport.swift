@@ -28,7 +28,8 @@ final class TestApp {
         // On campus, the same spot as MockData.userLocation.
         coordinate: CLLocationCoordinate2D? = CLLocationCoordinate2D(latitude: 6.9028, longitude: 79.8598),
         answerWhenAskedForLocation: LocationPermission = .whenInUse,
-        relaunching previousLaunch: TestApp? = nil
+        relaunching previousLaunch: TestApp? = nil,
+        photoStore: VisitPhotoStore = LocalVisitPhotoStore()
     ) {
         auth = MockAuthService(signedInUserID: signedIn ? "mock-user" : nil)
         let database = database ?? MockDatabaseService()
@@ -45,7 +46,8 @@ final class TestApp {
             biometrics: biometrics,
             notifications: notifications,
             location: location,
-            settings: UserDefaults(suiteName: settingsName)!
+            settings: UserDefaults(suiteName: settingsName)!,
+            photoStore: photoStore
         )
     }
 

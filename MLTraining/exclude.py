@@ -14,6 +14,6 @@ rows = list(csv.DictReader(path.open())) if path.exists() else []
 rows = [row for row in rows if row["file"] != args.file]
 rows.append({"file": args.file, "reason": args.reason})
 with path.open("w", newline="") as output:
-    writer = csv.DictWriter(output, fieldnames=["file", "reason"])
+    writer = csv.DictWriter(output, fieldnames=["file", "reason"], lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)

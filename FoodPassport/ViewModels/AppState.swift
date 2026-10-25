@@ -2,6 +2,7 @@ import Foundation
 import CoreLocation
 import Observation
 import SwiftUI
+import UIKit
 
 /// The app's shared data: who is signed in, their visits and stamps, and their settings.
 /// The services (Firebase, Face ID, notifications, location) are passed in, so tests can pass in mocks instead.
@@ -79,6 +80,8 @@ final class AppState {
     private let notifications: NotificationService
     private let location: LocationService
     private let settings: UserDefaults
+    private let photoStore: VisitPhotoStore
+    private var photoSaveGeneration = 0
 
     /// Background saves that haven't finished yet, so tests can wait for them.
     private var pendingWrites: [UUID: Task<Void, Never>] = [:]
@@ -89,7 +92,8 @@ final class AppState {
         biometrics: BiometricService = MockBiometricService(),
         notifications: NotificationService = MockNotificationService(),
         location: LocationService = MockLocationService(),
-        settings: UserDefaults = .standard
+        settings: UserDefaults = .standard,
+        photoStore: VisitPhotoStore = LocalVisitPhotoStore()
     ) {
         self.auth = auth
         self.database = database
@@ -97,6 +101,7 @@ final class AppState {
         self.notifications = notifications
         self.location = location
         self.settings = settings
+        self.photoStore = photoStore
 
         isFaceIDEnabled = settings.bool(forKey: SettingsKey.faceIDEnabled)
         plannedVisitRemindersEnabled = settings.bool(forKey: SettingsKey.plannedVisitReminders)
@@ -189,6 +194,7 @@ final class AppState {
             return
         }
         // Clear this student's reminders, so the next person on the phone doesn't get them.
+        photoSaveGeneration += 1
         notifications.cancelAllReminders()
         notificationDestination = nil
         location.stopMonitoringArrivals()
@@ -465,6 +471,30 @@ final class AppState {
 
     // Visits and stamps
 
+    /// Save photos first, so a visit never points to a photo that failed to save.
+    func saveVisit(_ visit: Visit, photos: [UIImage]) async throws -> Stamp? {
+        guard let userID = auth.currentUserID else { throw VisitPhotoError.signedOut }
+        let generation = photoSaveGeneration
+        let ids = try await photoStore.save(photos, userID: userID)
+        guard auth.currentUserID == userID else {
+            await photoStore.delete(ids: ids, userID: userID)
+            throw VisitPhotoError.signedOut
+        }
+        guard generation == photoSaveGeneration else {
+            await photoStore.delete(ids: ids, userID: userID)
+            throw VisitPhotoError.cancelled
+        }
+        var savedVisit = visit
+        savedVisit.photoIDs = ids.isEmpty ? nil : ids
+        return addVisit(savedVisit)
+    }
+
+    func mealPhoto(id: String) async -> UIImage? {
+        guard let userID = auth.currentUserID else { return nil }
+        let image = await photoStore.load(id: id, userID: userID)
+        return auth.currentUserID == userID ? image : nil
+    }
+
     /// Adds a visit and saves it.
     /// Returns a new stamp if it's the first verified visit for that cuisine.
     @discardableResult
@@ -491,7 +521,10 @@ final class AppState {
     /// Deletes a visit, and the stamp it earned (if any).
     func deleteVisit(_ visit: Visit) {
         visits.removeAll { $0.id == visit.id }
-        save { database, userID in try await database.deleteVisit(id: visit.id, userID: userID) }
+        save { database, userID in
+            try await database.deleteVisit(id: visit.id, userID: userID)
+            await self.photoStore.delete(ids: visit.photoIDs ?? [], userID: userID)
+        }
 
         for stamp in stamps where stamp.visitID == visit.id {
             stamps.removeAll { $0.cuisine == stamp.cuisine }
@@ -500,9 +533,14 @@ final class AppState {
     }
 
     func resetAllData() {
+        photoSaveGeneration += 1
+        let photoIDs = visits.flatMap { $0.photoIDs ?? [] }
         visits = []
         stamps = []
-        save { database, userID in try await database.deleteVisitsAndStamps(userID: userID) }
+        save { database, userID in
+            try await database.deleteVisitsAndStamps(userID: userID)
+            await self.photoStore.delete(ids: photoIDs, userID: userID)
+        }
     }
 
     // Profile
