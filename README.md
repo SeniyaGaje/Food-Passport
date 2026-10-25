@@ -6,12 +6,12 @@ Students set a food quest, find restaurants on a map, log meals, earn cuisine st
 ## Requirements
 
 - Xcode 26 or later
-- iOS 17.0+ (iPhone)
+- iOS 17.0+ (iPhone and iPad)
 
 ## Running
 
 1. Open `FoodPassport.xcodeproj`.
-2. Select the **FoodPassport** scheme and an iPhone simulator.
+2. Select the **FoodPassport** scheme and an iPhone or iPad simulator.
 3. Press **Run** (⌘R). Run the unit tests with **Test** (⌘U).
 
 Without `GoogleService-Info.plist` the app runs on mock data (any email and password signs in).
@@ -73,14 +73,18 @@ ingredient or nutrition predictions. A broad Tea result does not distinguish pla
 The object detector can miss small or overlapping items. If fewer than two separate regions are found,
 the app shows three guesses for the whole photo. Scan a missing item separately when needed.
 
-Meal photos are saved privately in **Application Support on this device**, separately for each account.
+Meal photos are cached privately in **Application Support**, separately for each account. Firebase-enabled builds also upload them to that account's private Storage folder.
 Visit history, recent activity and stamp details show the saved photo, and **Your meal photos** opens
 a full-size gallery. Photos also survive reopening the app. Choosing manual entry keeps a valid photo.
 Deleting a visit or resetting its data removes the associated photos after the database deletion succeeds.
 
-Firebase continues to store visit metadata, including photo references; image files are not uploaded.
-Photos do not sync to another device and are removed when the app's local data is deleted/uninstalled.
-Firebase Storage setup is not required.
+With Firebase configured, resized meal photos upload to the signed-in account's Firebase Storage folder.
+Other devices download them on demand, and previously viewed photos remain cached offline.
+A failed upload keeps the visit form open for retry. Older local-only photos still need their original device.
+Without Firebase, the app uses the local store.
+
+See [the increments 8–10 report](Docs/Increment8-10Report.md) for iPad layout decisions, cloud setup,
+push limitations, widgets, rule tests and verification evidence.
 
 See [MLTraining/README.md](MLTraining/README.md) for training steps and limits,
 [MLTraining/EvaluationReport.md](MLTraining/EvaluationReport.md) for measured results, and
@@ -94,7 +98,7 @@ The Simulator has no camera. Add a food photo to its Photos app, then use **Choo
 from OpenStreetMap). Its 100 m geofence covers the whole building, so the arrival alert and location-verified
 visits can be shown live on a real iPhone on campus.
 
-- The first debug run on a phone uploads it to Firestore (`restaurants/nibm-canteen`) alongside the other restaurants.
+- Add or maintain `restaurants/nibm-canteen` in the Firebase console. Client restaurant writes are disabled.
 - Opening the app inside NIBM shows "You've arrived at NIBM Canteen!". **Get directions → Start** shows it again on demand.
 - To move it (e.g. to the exact viva room), edit `latitude` and `longitude` on that Firestore document and reopen the app.
 - Simulator backup: **Features → Location → Custom Location…** `6.90635`, `79.87080`.
@@ -106,7 +110,7 @@ from OpenStreetMap). The road is 362 m long, so a visit logged almost anywhere o
 150 m), and the arrival alert fires within 100 m. It sells tea, coffee and short eats, which is handy for trying
 drink recognition.
 
-- Like the NIBM Canteen, the first debug run uploads it to Firestore (`restaurants/ratmalana-tea-kade`).
+- Add or maintain `restaurants/ratmalana-tea-kade` in the Firebase console. Debug builds do not upload restaurants.
 - The Explore map opens on the places within 3 km of the student, so on Chakkindarama Road it shows the tea kade.
 - To move it, edit `latitude` and `longitude` on that Firestore document and reopen the app.
 - Simulator: **Features → Location → Custom Location…** `6.82316`, `79.87285`.
@@ -120,8 +124,10 @@ drink recognition.
 4. **Authentication → Sign-in method:** enable **Email/Password**.
 5. **Firestore Database:** create a database in production mode, then paste the contents of
    [`firestore.rules`](firestore.rules) into the **Rules** tab and publish.
-6. Run the app and create an account. On the first run, a debug build uploads the sample restaurants
-   to the `restaurants` collection.
+6. Create restaurant documents in the Firebase console or a trusted Admin SDK tool; the app cannot write the shared catalogue.
+7. Enable **Storage** on Blaze and publish [`storage.rules`](storage.rules). Photos use private account paths.
+8. Follow [the increment report](Docs/Increment8-10Report.md) for APNs, App Group signing, widgets and rule deployment.
+9. Run the app and create an account. Use the Debug launch argument `--demo` for a sample-data demonstration without Firebase.
 
 Firestore layout:
 
@@ -130,6 +136,9 @@ restaurants/{restaurantID}          shared restaurant list
 users/{userID}                      profile: name, email, monthly budget, bookmarks
 users/{userID}/visits/{visitID}     logged visits
 users/{userID}/stamps/{cuisine}     one stamp per cuisine
+users/{userID}/quests/active        saved quest settings
+users/{userID}/devices/{tokenHash}  private FCM registration
+Storage: users/{userID}/mealPhotos/{UUID}.jpg
 ```
 
 ## Project structure
@@ -185,8 +194,7 @@ The project uses Xcode folder-synced groups, so any file added inside `FoodPassp
 
 ## Photos
 
-Restaurant and dish photos are real photos from Wikimedia Commons, resized to 1,400–1,600 px wide so they're sharp
-on every iPhone; the welcome screen photo is the one from the Figma prototype. They live in `Assets.xcassets`:
+Restaurant and dish photos are real photos from Wikimedia Commons, resized to 1,400–1,600 px wide for iPhone and iPad; the welcome screen photo is the one from the Figma prototype. They live in `Assets.xcassets`:
 `welcome_hero`, `restaurant_campus_bites`, `restaurant_spice_route`, `restaurant_dragon_wok`,
 `restaurant_hoppers_hut`, `restaurant_pasta_corner`, `restaurant_nibm_canteen`, `restaurant_ratmalana_tea_kade`,
 `dish_kottu`, `dish_masala_dosa`, `dish_butter_chicken`. The Commons photos' authors and licences are in

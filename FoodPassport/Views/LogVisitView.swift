@@ -182,6 +182,8 @@ struct LogVisitView: View {
     private var mealPhotosSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionCaption("Meal photos")
+            Text("Photos upload when you save. Keep this form open if you need to retry.")
+                .font(.footnote).foregroundStyle(.secondary)
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
                     ForEach(mealPhotos.indices, id: \.self) { index in
