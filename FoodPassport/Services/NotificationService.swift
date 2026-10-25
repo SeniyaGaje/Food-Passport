@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import UIKit
 
 enum NotificationPermission: Equatable {
     case notDetermined
@@ -130,15 +131,19 @@ final class UserNotificationService: NSObject, NotificationService, UNUserNotifi
 
     func permission() async -> NotificationPermission {
         switch await center.notificationSettings().authorizationStatus {
-        case .notDetermined: .notDetermined
-        case .denied: .denied
-        default: .allowed
+        case .notDetermined: return .notDetermined
+        case .denied: return .denied
+        default:
+            UIApplication.shared.registerForRemoteNotifications()
+            return .allowed
         }
     }
 
     func requestPermission() async -> Bool {
         do {
-            return try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            let allowed = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            if allowed { UIApplication.shared.registerForRemoteNotifications() }
+            return allowed
         } catch {
             return false
         }

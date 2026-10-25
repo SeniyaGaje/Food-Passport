@@ -1,0 +1,8 @@
+{
+  "aps": {
+    "alert": { "title": "A place to try", "body": "Explore Campus Bites." },
+    "sound": "default"
+  },
+  "destination": "restaurant",
+  "restaurantID": "campus-bites"
+}

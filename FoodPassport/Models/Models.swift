@@ -88,7 +88,7 @@ struct Visit: Identifiable, Hashable, Codable {
     let imageName: String
     /// Everything eaten on this visit. Visits saved before this existed don't have it.
     var items: [VisitItem]? = nil
-    /// Local photo references; older visits don't have photos.
+    /// Photo IDs work with the local cache and the account's Firebase Storage folder.
     var photoIDs: [String]? = nil
 
     /// The visit's items. Older visits get one item made from their dish name and amount.
@@ -271,18 +271,34 @@ struct Stamp: Identifiable, Hashable, Codable {
     let imageName: String
 }
 
-enum QuestType: String, CaseIterable, Identifiable {
+enum QuestType: String, CaseIterable, Identifiable, Codable {
     case newCuisines = "New cuisines"
     case foodTrail = "Food trail"
 
     var id: Self { self }
 }
 
-enum QuestDuration: String, CaseIterable, Identifiable {
+enum QuestDuration: String, CaseIterable, Identifiable, Codable {
     case thisWeek = "This week"
     case thisMonth = "This month"
 
     var id: Self { self }
+}
+
+/// The student's choices; progress is calculated from their real visits.
+struct QuestSettings: Codable, Equatable {
+    var type: QuestType = .newCuisines
+    var targetCuisines = 3
+    var budget = 3000
+    var duration: QuestDuration = .thisMonth
+    var maxDistanceKm = 2.0
+    var trailID: String? = nil
+    var startedAt: Date = .now
+
+    func endDate(calendar: Calendar = .current) -> Date {
+        let component: Calendar.Component = duration == .thisWeek ? .weekOfYear : .month
+        return calendar.dateInterval(of: component, for: startedAt)?.end ?? startedAt
+    }
 }
 
 /// A suggested place in the quest plan, with what it should cost.
@@ -304,6 +320,8 @@ struct Quest: Hashable {
     let maxDistanceKm: Double
     let plan: [PlannedStop]
     let planExplanation: String
+
+    var progressUnit: String { type == .foodTrail ? "stops visited" : "cuisines tried" }
 
     var remainingBudget: Int { budget - spent }
 

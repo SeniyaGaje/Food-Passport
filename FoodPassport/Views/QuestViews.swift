@@ -78,7 +78,7 @@ struct QuestDetailView: View {
                         .font(.system(size: ringNumberSize, weight: .bold))
                         .foregroundStyle(Theme.ink)
                         .contentTransition(.numericText())
-                    Text("cuisines tried")
+                    Text(quest.progressUnit)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -143,6 +143,7 @@ struct QuestDetailView: View {
 
 /// The sheet for making or editing a quest.
 struct QuestEditorSheet: View {
+    @Environment(AppState.self) private var appState
     enum Mode {
         case create
         case edit
@@ -216,6 +217,15 @@ struct QuestEditorSheet: View {
         .brandSheetStyle()
         .sensoryFeedback(.selection, trigger: duration)
         .sensoryFeedback(.selection, trigger: cuisineCount)
+        .onAppear {
+            guard mode == .edit, let settings = appState.questSettings else { return }
+            questType = settings.type
+            cuisineCount = settings.targetCuisines
+            budget = settings.budget
+            duration = settings.duration
+            maxDistanceKm = settings.maxDistanceKm
+            selectedTrailID = settings.trailID
+        }
     }
 
     private var cuisineCountRow: some View {
@@ -297,8 +307,12 @@ struct QuestEditorSheet: View {
         }
     }
 
-    /// Closes the sheet and confirms. (Quests aren't saved to Firestore yet.)
+    /// Progress stays based on visits, so editing doesn't invent completed stops.
     private func save() {
+        let settings = QuestSettings(type: questType, targetCuisines: cuisineCount, budget: max(0, budget),
+            duration: duration, maxDistanceKm: maxDistanceKm, trailID: selectedTrailID,
+            startedAt: mode == .edit ? (appState.questSettings?.startedAt ?? .now) : .now)
+        appState.saveQuest(settings)
         dismiss()
         router.showToast(mode == .create ? "Quest created – your plan is ready" : "Quest updated – plan recalculated")
     }
