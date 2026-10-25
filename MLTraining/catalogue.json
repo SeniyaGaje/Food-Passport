@@ -1,0 +1,188 @@
+{
+  "classes": [
+    {
+      "id": "kottu",
+      "name": "Kottu Roti",
+      "cuisine": "Sri Lankan",
+      "isDrink": false,
+      "menuNames": [
+        "Kottu Roti",
+        "Chicken Kottu"
+      ],
+      "categories": [
+        "Kottu"
+      ],
+      "queries": [
+        "kottu roti",
+        "kothu parotta"
+      ]
+    },
+    {
+      "id": "hoppers",
+      "name": "Hoppers",
+      "cuisine": "Sri Lankan",
+      "isDrink": false,
+      "menuNames": [
+        "Egg Hoppers",
+        "Plain Hoppers (3)"
+      ],
+      "categories": [
+        "Appam"
+      ],
+      "queries": [
+        "Sri Lankan hoppers",
+        "egg hopper appam"
+      ]
+    },
+    {
+      "id": "string-hoppers",
+      "name": "String Hoppers",
+      "cuisine": "Sri Lankan",
+      "isDrink": false,
+      "menuNames": [
+        "String Hoppers"
+      ],
+      "categories": [
+        "Idiyappam"
+      ],
+      "queries": [
+        "idiyappam",
+        "string hoppers"
+      ]
+    },
+    {
+      "id": "rice-curry",
+      "name": "Rice & Curry",
+      "cuisine": "Sri Lankan",
+      "isDrink": false,
+      "menuNames": [
+        "Rice & Curry"
+      ],
+      "categories": [],
+      "queries": [
+        "\"Sri Lankan\" \"rice\" \"curry\"",
+        "\"Sri Lankan meal\""
+      ]
+    },
+    {
+      "id": "dosa",
+      "name": "Dosa",
+      "cuisine": "Indian",
+      "isDrink": false,
+      "menuNames": [
+        "Masala Dosa",
+        "Dosa"
+      ],
+      "categories": [
+        "Dosas"
+      ],
+      "queries": [
+        "masala dosa"
+      ]
+    },
+    {
+      "id": "fried-rice",
+      "name": "Fried Rice",
+      "cuisine": "Chinese",
+      "isDrink": false,
+      "menuNames": [
+        "Fried Rice"
+      ],
+      "categories": [
+        "Fried rice"
+      ],
+      "queries": [
+        "fried rice"
+      ]
+    },
+    {
+      "id": "pizza",
+      "name": "Pizza",
+      "cuisine": "Italian",
+      "isDrink": false,
+      "menuNames": [
+        "Margherita Pizza",
+        "Pizza"
+      ],
+      "categories": [
+        "Margherita pizzas"
+      ],
+      "queries": [
+        "pizza margherita"
+      ]
+    },
+    {
+      "id": "burger",
+      "name": "Burger",
+      "cuisine": "American",
+      "isDrink": false,
+      "menuNames": [
+        "Burger",
+        "Cheeseburger"
+      ],
+      "categories": [
+        "Cheeseburgers"
+      ],
+      "queries": [
+        "cheeseburger"
+      ]
+    },
+    {
+      "id": "coffee",
+      "name": "Coffee",
+      "cuisine": null,
+      "isDrink": true,
+      "menuNames": [
+        "Coffee",
+        "Cappuccino",
+        "Iced Coffee"
+      ],
+      "categories": [
+        "Cups of coffee",
+        "Cappuccino"
+      ],
+      "queries": [
+        "cup coffee",
+        "cappuccino"
+      ]
+    },
+    {
+      "id": "tea",
+      "name": "Tea",
+      "cuisine": null,
+      "isDrink": true,
+      "menuNames": [
+        "Plain Tea",
+        "Milk Tea",
+        "Tea",
+        "Ginger Tea"
+      ],
+      "categories": [
+        "Cups of tea"
+      ],
+      "queries": [
+        "cup tea",
+        "milk tea cup"
+      ]
+    },
+    {
+      "id": "other",
+      "name": "Other",
+      "cuisine": null,
+      "isDrink": false,
+      "menuNames": [],
+      "categories": [],
+      "queries": [
+        "park bench",
+        "office desk",
+        "cat portrait",
+        "flower garden",
+        "bicycle",
+        "dog portrait",
+        "books shelf",
+        "apples fruit",
+        "salad bowl"
+      ]
+    }
+  ]
+}

@@ -319,9 +319,9 @@ enum MockData {
     // Scanning (fake results for previews)
 
     static let mealPredictions: [MealPrediction] = [
-        MealPrediction(label: "Kottu", dishName: "Kottu Roti", confidence: 0.87, cuisine: .sriLankan),
-        MealPrediction(label: "Fried rice", dishName: "Fried Rice", confidence: 0.08, cuisine: .chinese),
-        MealPrediction(label: "Noodles", dishName: "Noodles", confidence: 0.05, cuisine: .chinese),
+        MealPrediction(label: "Kottu Roti", dishName: "Kottu Roti", confidence: 0.87, cuisine: .sriLankan),
+        MealPrediction(label: "Fried Rice", dishName: "Fried Rice", confidence: 0.08, cuisine: .chinese),
+        MealPrediction(label: "Tea", dishName: "Tea", confidence: 0.05, cuisine: nil, isDrink: true),
     ]
 
     /// The receipt the fake scanner returns.
