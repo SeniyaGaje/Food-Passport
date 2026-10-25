@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The Profile tab: the student's details, totals and settings.
 struct ProfileView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @Environment(\.openURL) private var openURL
@@ -127,10 +128,11 @@ struct ProfileView: View {
             .padding(.top, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.xl)
         }
+        .refreshable { await appState.refreshData() }
         .scrollIndicators(.hidden)
         .appBackground()
-        .navigationTitle("Profile")
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitleHidden("Profile")
+        .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
         .sensoryFeedback(.selection, trigger: isDarkModeOn)
         .sheet(isPresented: $isShowingReminderSheet) {
             ReminderTimeSheet(time: appState.weeklyReminderTime) { newTime in

@@ -4,23 +4,42 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         @Bindable var router = router
 
-        TabView(selection: $router.selectedTab) {
-            ForEach(AppTab.allCases) { tab in
-                NavigationStack(path: router.path(for: tab)) {
-                    rootView(for: tab)
-                        .navigationDestination(for: AppRoute.self) { route in
-                            AppRouteDestination(route: route)
+        Group {
+            if sizeClass == .regular {
+                NavigationSplitView {
+                    List(selection: sidebarSelection) {
+                        ForEach(AppTab.allCases) { tab in
+                            Label(tab.title, systemImage: tab.systemImage)
+                                .accessibilityIdentifier("sidebar.\(tab.rawValue)").tag(tab)
                         }
+                    }
+                    .navigationTitle("FoodPassport")
+                    .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
+                } detail: {
+                    navigation(for: router.selectedTab)
+                        .id(router.selectedTab)
                 }
-                .tabItem { Label(tab.title, systemImage: tab.systemImage) }
-                .tag(tab)
+                .navigationSplitViewStyle(.balanced)
+            } else {
+                TabView(selection: $router.selectedTab) {
+                    ForEach(AppTab.allCases) { tab in
+                        navigation(for: tab)
+                            .tabItem { Label(tab.title, systemImage: tab.systemImage) }
+                            .tag(tab)
+                    }
+                }
             }
         }
         .tint(Theme.orange)
+        .sensoryFeedback(.selection, trigger: router.selectedTab)
+        .sensoryFeedback(.success, trigger: router.toast?.id)
+        .sensoryFeedback(.success, trigger: appState.stamps.count)
+
         .overlay { PopupHost() }
         .overlay(alignment: .top) { TopMessageHost() }
         .sheet(item: $router.sheet) { sheet in
@@ -44,6 +63,17 @@ struct MainTabView: View {
                     route: .logVisit(restaurant)
                 )
             )
+        }
+    }
+
+    private var sidebarSelection: Binding<AppTab?> {
+        Binding(get: { router.selectedTab }, set: { if let tab = $0 { router.selectedTab = tab } })
+    }
+
+    private func navigation(for tab: AppTab) -> some View {
+        NavigationStack(path: router.path(for: tab)) {
+            rootView(for: tab)
+                .navigationDestination(for: AppRoute.self) { AppRouteDestination(route: $0) }
         }
     }
 
@@ -79,6 +109,7 @@ struct MainTabView: View {
 
 /// Turns an `AppRoute` into its screen.
 struct AppRouteDestination: View {
+    @Environment(AppState.self) private var appState
     let route: AppRoute
 
     var body: some View {
@@ -90,11 +121,11 @@ struct AppRouteDestination: View {
         case .logVisit(let restaurant):
             LogVisitView(restaurant: restaurant)
         case .questDetail:
-            QuestDetailView(quest: MockData.activeQuest)
+            QuestDetailView(quest: appState.activeQuest)
         case .foodTrail:
-            FoodTrailView(trail: MockData.campusFoodTrail)
+            FoodTrailView(trail: appState.currentTrail)
         case .weeklyChallenge:
-            WeeklyChallengeView(challenge: MockData.weeklyChallenge)
+            WeeklyChallengeView(challenge: appState.currentChallenge)
         case .visitDetail(let visit):
             VisitDetailView(visit: visit)
         case .about:

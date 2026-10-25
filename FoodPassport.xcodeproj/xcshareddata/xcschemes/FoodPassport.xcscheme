@@ -41,6 +41,15 @@
                ReferencedContainer = "container:FoodPassport.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference skipped = "NO" parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F00D00000000000000000060"
+               BuildableName = "FoodPassportUITests.xctest"
+               BlueprintName = "FoodPassportUITests"
+               ReferencedContainer = "container:FoodPassport.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

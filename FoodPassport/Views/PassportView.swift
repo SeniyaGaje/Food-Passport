@@ -2,13 +2,14 @@ import SwiftUI
 
 /// The Passport tab: stamps, the active quest and challenges.
 struct PassportView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @State private var selectedStamp: Stamp?
 
-    private let quest = MockData.activeQuest
-    private let trail = MockData.campusFoodTrail
-    private let challenge = MockData.weeklyChallenge
+    private var quest: Quest { appState.activeQuest }
+    private var trail: FoodTrail { appState.currentTrail }
+    private var challenge: WeeklyChallenge { appState.currentChallenge }
 
     var body: some View {
         ScrollView {
@@ -21,10 +22,14 @@ struct PassportView: View {
                     selectedStamp = stamp
                 }
 
+                if appState.hasActiveQuest {
                 NavigationLink(value: AppRoute.questDetail) {
                     ActiveQuestCard(quest: quest)
                 }
                 .buttonStyle(.pressableCard)
+                } else {
+                    NoQuestCard()
+                }
 
                 SectionHeader("Challenges")
 
@@ -54,10 +59,11 @@ struct PassportView: View {
             .padding(.top, Theme.Spacing.xs)
             .padding(.bottom, Theme.Spacing.xl)
         }
+        .refreshable { await appState.refreshData() }
         .scrollIndicators(.hidden)
         .appBackground()
-        .navigationTitle("Passport")
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitleHidden("Passport")
+        .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
         .sheet(item: $selectedStamp) { stamp in
             StampDetailSheet(stamp: stamp, visit: visit(for: stamp)) { visit in
                 selectedStamp = nil
