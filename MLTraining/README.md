@@ -85,8 +85,6 @@ broad class covering the cake varieties in the dataset, not every possible desse
 With Firebase configured, `FirebaseVisitPhotoStore` uploads resized meal JPEGs to private account paths,
 then caches downloaded photos in `LocalVisitPhotoStore` for offline viewing. The visit stores photo IDs.
 Previews/demo mode still use local storage. Photo upload is separate from recognition: the hybrid models
-continue to run entirely on device. See [the increments report](../Docs/Increment8-10Report.md) for
-Storage rules, cloud setup and the limitation for older local-only photos.
 
 ## Limits and viva explanation
 

@@ -83,12 +83,7 @@ Other devices download them on demand, and previously viewed photos remain cache
 A failed upload keeps the visit form open for retry. Older local-only photos still need their original device.
 Without Firebase, the app uses the local store.
 
-See [the increments 8–10 report](Docs/Increment8-10Report.md) for iPad layout decisions, cloud setup,
-push limitations, widgets, rule tests and verification evidence.
-
-See [MLTraining/README.md](MLTraining/README.md) for training steps and limits,
-[MLTraining/EvaluationReport.md](MLTraining/EvaluationReport.md) for measured results, and
-[CREDITS.md](CREDITS.md) for model and dataset credits.
+(CREDITS.md) for model and dataset credits.
 
 The Simulator has no camera. Add a food photo to its Photos app, then use **Choose from Photos**.
 
