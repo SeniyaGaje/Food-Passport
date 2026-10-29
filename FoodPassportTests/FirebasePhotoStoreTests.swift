@@ -28,8 +28,8 @@ struct FirebasePhotoStoreTests {
         #expect(await second.load(id: "../outside", userID: "alice") == nil)
     }
 
-    @Test("An upload failure rolls back files and leaves the visit uncreated")
-    func uploadFailure() async throws {
+    @Test("Offline, the visit still saves and its photo waits on the phone to upload")
+    func uploadFailureStillSavesVisit() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let local = LocalVisitPhotoStore(folder: root)
@@ -38,25 +38,45 @@ struct FirebasePhotoStoreTests {
         let store = FirebaseVisitPhotoStore(local: local, remote: remote, pendingFile: nil)
         let app = TestApp(database: MockDatabaseService(visits: [], stamps: []), photoStore: store)
         try await app.signIn()
-        await #expect(throws: VisitPhotoError.self) {
-            try await app.appState.saveVisit(makeVisit(), photos: [photo()])
-        }
-        #expect(app.appState.visits.isEmpty)
-        let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []
-        #expect(!files.contains { $0.pathExtension == "jpg" })
+
+        let result = try await app.appState.saveVisit(makeVisit(), photos: [photo()])
+
+        #expect(app.appState.visits.count == 1)
+        #expect(result.photosWaitingToUpload)
+        let id = try #require(app.appState.visits[0].photoIDs?.first)
+        #expect(await local.load(id: id, userID: "mock-user") != nil)
+        #expect(await remote.count() == 0)
+
+        // Back online: the queued photo uploads.
+        await remote.setOffline(false)
+        app.appState.updateConnectivity(isOffline: true)
+        app.appState.updateConnectivity(isOffline: false)
+        await app.appState.waitForPendingWrites()
+        #expect(await remote.count() == 1)
+        #expect(await !store.hasPendingUploads(ids: [id], userID: "mock-user"))
     }
 
-    @Test("A later upload failure removes the earlier uploaded photo too")
-    func partialUploadRollback() async throws {
+    @Test("If the second upload fails, the first stays uploaded and the second is queued")
+    func partialUploadQueued() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let remote = FakeMealPhotoRemote()
         await remote.failUpload(number: 2)
-        let store = FirebaseVisitPhotoStore(local: LocalVisitPhotoStore(folder: root), remote: remote, pendingFile: nil)
-        await #expect(throws: VisitPhotoError.self) {
-            try await store.save([photo(), photo(color: .blue)], userID: "alice")
-        }
-        #expect(await remote.count() == 0)
+        let queue = root.appendingPathComponent("pending.json")
+        let local = LocalVisitPhotoStore(folder: root.appendingPathComponent("cache"))
+        let store = FirebaseVisitPhotoStore(local: local, remote: remote, pendingFile: queue)
+
+        let ids = try await store.save([photo(), photo(color: .blue)], userID: "alice")
+
+        #expect(ids.count == 2)
+        #expect(await remote.count() == 1)
+        #expect(await store.hasPendingUploads(ids: [ids[1]], userID: "alice"))
+        // The queue survives reopening the app, and only uploads for the right account.
+        let reopened = FirebaseVisitPhotoStore(local: local, remote: remote, pendingFile: queue)
+        await reopened.retryPendingWork(userID: "bob")
+        #expect(await remote.count() == 1)
+        await reopened.retryPendingWork(userID: "alice")
+        #expect(await remote.count() == 2)
     }
 
     @Test("Failed remote deletions survive reopening and retry for the correct account")
@@ -73,9 +93,9 @@ struct FirebasePhotoStoreTests {
         #expect(await local.load(id: ids[0], userID: "alice") == nil)
         let reopened = FirebaseVisitPhotoStore(local: local, remote: remote, pendingFile: queue)
         await remote.setOffline(false)
-        await reopened.retryPendingDeletions(userID: "bob")
+        await reopened.retryPendingWork(userID: "bob")
         #expect(await remote.count() == 1)
-        await reopened.retryPendingDeletions(userID: "alice")
+        await reopened.retryPendingWork(userID: "alice")
         #expect(await remote.count() == 0)
     }
 }

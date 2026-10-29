@@ -25,6 +25,11 @@ final class AppState {
     var visits = MockData.visits
     var stamps = MockData.stamps
     private(set) var questSettings: QuestSettings?
+    /// Visits planned with Plan visit that haven't happened yet.
+    private(set) var plannedVisits: [PlannedVisit] = []
+    /// From Firestore if an administrator has added some, otherwise the built-in ones.
+    private(set) var trails = MockData.foodTrails
+    private(set) var challengeTemplate = ChallengeDocument.standard
     private(set) var isLoading = false
     private(set) var loadError: String?
     private(set) var isOffline = false
@@ -139,34 +144,14 @@ final class AppState {
         Set(visits.map(\.cuisine)).count
     }
 
+    /// Works out the quest from the real visits. See QuestPlanner for how the plan is picked.
+    var questPlanner: QuestPlanner {
+        QuestPlanner(settings: questSettings ?? QuestSettings(), restaurants: restaurants, visits: visits,
+                     trails: trails, plannedVisits: plannedVisits)
+    }
+
     var activeQuest: Quest {
-        let settings = questSettings ?? QuestSettings()
-        let end = settings.endDate()
-        let meals = visits.filter { $0.date >= settings.startedAt && $0.date < end }
-        let tried = Set(meals.map(\.cuisine))
-        let spent = meals.map(\.amount).reduce(0, +)
-        let trail = MockData.foodTrails.first { $0.id == settings.trailID } ?? MockData.campusFoodTrail
-        let completedStops = Set(meals.map { $0.restaurant.id })
-        let target = settings.type == .foodTrail ? trail.stops.count : settings.targetCuisines
-        var suggestedCuisines = tried
-        let candidates = settings.type == .foodTrail
-            ? trail.stops.map(\.restaurant).filter { !completedStops.contains($0.id) }
-            : restaurants.sorted { $0.distanceKm < $1.distanceKm }.filter {
-                $0.distanceKm <= settings.maxDistanceKm && suggestedCuisines.insert($0.cuisine).inserted
-            }
-        var remaining = max(0, settings.budget - spent)
-        let plan = candidates.prefix(target).map { restaurant in
-            let estimate = restaurant.priceRange.lowerBound
-            let fits = estimate <= remaining
-            if fits { remaining -= estimate }
-            return PlannedStop(restaurant: restaurant, estimatedCost: estimate, fitsBudget: fits)
-        }
-        return Quest(title: settings.type == .foodTrail ? trail.name : "Explore \(settings.targetCuisines) cuisines",
-                     type: settings.type, targetCuisines: target,
-                     cuisinesTried: settings.type == .foodTrail ? completedStops.intersection(Set(trail.stops.map(\.id))).count : tried.count,
-                     budget: settings.budget, spent: spent, duration: settings.duration,
-                     maxDistanceKm: settings.maxDistanceKm, plan: plan,
-                     planExplanation: "Suggestions use your distance limit, untried cuisines and remaining budget. Prices are estimates.")
+        questPlanner.quest()
     }
 
     var hasActiveQuest: Bool {
@@ -174,19 +159,32 @@ final class AppState {
         return questSettings.endDate() > .now
     }
 
+    /// The quest's trail (or the first one), with the stops the student has been to ticked off.
     var currentTrail: FoodTrail {
-        let sample = MockData.campusFoodTrail
+        let trail = questPlanner.trail
         let visited = Set(visits.map { $0.restaurant.id })
-        return FoodTrail(id: sample.id, name: sample.name, summary: sample.summary,
-                         stops: sample.stops.map { TrailStop(restaurant: $0.restaurant, isVisited: visited.contains($0.id)) })
+        return FoodTrail(id: trail.id, name: trail.name, summary: trail.summary,
+                         stops: trail.stops.map { TrailStop(restaurant: $0.restaurant, isVisited: visited.contains($0.id)) })
     }
 
+    /// This week's challenge: try a number of different cuisines between Monday and Sunday.
     var currentChallenge: WeeklyChallenge {
-        let week = Calendar.current.dateInterval(of: .weekOfYear, for: .now)
+        let calendar = Calendar.current
+        let week = calendar.dateInterval(of: .weekOfYear, for: .now)
         let meals = visits.filter { week?.contains($0.date) == true }
-        return WeeklyChallenge(title: "Try 3 cuisines this week", details: "Log meals from three different cuisines.",
-                               daysLeft: max(0, Calendar.current.dateComponents([.day], from: .now, to: week?.end ?? .now).day ?? 0),
-                               completed: Set(meals.map(\.cuisine)).count, target: 3, suggestions: activeQuest.plan)
+        let triedThisWeek = Set(meals.map(\.cuisine))
+        // Suggest the nearest places with a cuisine they haven't had this week.
+        let planner = questPlanner
+        var suggestedCuisines = triedThisWeek
+        let suggestions = restaurants
+            .sorted { $0.distanceKm < $1.distanceKm }
+            .filter { suggestedCuisines.insert($0.cuisine).inserted }
+            .prefix(3)
+            .map { PlannedStop(restaurant: $0, estimatedCost: planner.estimatedCost(at: $0)) }
+        let daysLeft = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: week?.end ?? .now).day ?? 0
+        return WeeklyChallenge(title: challengeTemplate.title, details: challengeTemplate.details,
+                               daysLeft: max(0, daysLeft), completed: triedThisWeek.count,
+                               target: challengeTemplate.target, suggestions: Array(suggestions))
     }
 
     func saveQuest(_ settings: QuestSettings) {
@@ -195,7 +193,45 @@ final class AppState {
         publishWidgets()
     }
 
-    func updateConnectivity(isOffline: Bool) { self.isOffline = isOffline }
+    /// Onboarding's last step: start a "try 3 new cuisines this month" quest with the student's budget,
+    /// so Home and Passport have a plan straight away.
+    func startFirstQuestIfNeeded(budget: Int) {
+        guard questSettings == nil else { return }
+        saveQuest(QuestSettings(type: .newCuisines, targetCuisines: 3, budget: max(0, budget), duration: .thisMonth))
+    }
+
+    /// "Increase budget" on the Budget limit pop-up: adds just enough for the stop that doesn't fit,
+    /// rounded up to the next LKR 100. Returns the new budget.
+    @discardableResult
+    func increaseQuestBudgetToFitPlan() -> Int? {
+        guard var settings = questSettings else { return nil }
+        let quest = activeQuest
+        guard let blocked = quest.plan.first(where: { !$0.fitsBudget }) else { return settings.budget }
+        let alreadyPlanned = quest.plan.filter(\.fitsBudget).map(\.estimatedCost).reduce(0, +)
+        let shortfall = alreadyPlanned + blocked.estimatedCost - max(0, quest.remainingBudget)
+        settings.budget += Int((Double(max(shortfall, 0)) / 100).rounded(.up)) * 100
+        saveQuest(settings)
+        return settings.budget
+    }
+
+    /// "Extend deadline" on the Budget limit pop-up: gives the quest another week. Returns the new end date.
+    @discardableResult
+    func extendQuestDeadline(byDays days: Int = 7) -> Date? {
+        guard var settings = questSettings else { return nil }
+        let end = settings.endDate()
+        settings.extendedUntil = Calendar.current.date(byAdding: .day, value: days, to: max(end, .now)) ?? end
+        saveQuest(settings)
+        return settings.extendedUntil
+    }
+
+    func updateConnectivity(isOffline: Bool) {
+        let cameBackOnline = self.isOffline && !isOffline
+        self.isOffline = isOffline
+        // Meal photos saved while offline upload now.
+        if cameBackOnline, let userID = auth.currentUserID {
+            runInBackground { [photoStore] in await photoStore.retryPendingWork(userID: userID) }
+        }
+    }
 
     func refreshData() async {
         guard let userID = auth.currentUserID, !isLoading else { return }
@@ -214,11 +250,21 @@ final class AppState {
         }
         let month = Calendar.current.dateInterval(of: .month, for: .now)
         let spent = visits.filter { month?.contains($0.date) == true }.map(\.amount).reduce(0, +)
-        widgets.publish(WidgetSnapshot(isSignedIn: true, questTitle: hasActiveQuest ? activeQuest.title : nil,
-            cuisinesTried: activeQuest.cuisinesTried, targetCuisines: activeQuest.targetCuisines,
-            questUnit: activeQuest.progressUnit,
+        let quest = activeQuest
+        let challenge = currentChallenge
+        var snapshot = WidgetSnapshot(isSignedIn: true, questTitle: hasActiveQuest ? quest.title : nil,
+            cuisinesTried: quest.cuisinesTried, targetCuisines: quest.targetCuisines,
+            questUnit: quest.progressUnit,
             questEndsAt: questSettings?.endDate(), monthlyBudget: profile.monthlyBudget,
-            monthlySpent: spent, budgetMonth: WidgetSnapshot.monthKey(for: .now)))
+            monthlySpent: spent, budgetMonth: WidgetSnapshot.monthKey(for: .now))
+        snapshot.questBudgetLeft = quest.remainingBudget
+        snapshot.nextPickName = quest.nextPick?.restaurant.name
+        snapshot.nextPickCost = quest.nextPick?.estimatedCost
+        snapshot.challengeTitle = challenge.title
+        snapshot.challengeCompleted = challenge.completed
+        snapshot.challengeTarget = challenge.target
+        snapshot.challengeEndsAt = Calendar.current.dateInterval(of: .weekOfYear, for: .now)?.end
+        widgets.publish(snapshot)
     }
 
     // Session
@@ -298,6 +344,7 @@ final class AppState {
         stage = .onboarding
         isLocked = false
         questSettings = nil
+        plannedVisits = []
         failedWrites = [:]
         visits = []
         stamps = []
@@ -334,8 +381,29 @@ final class AppState {
 
     /// True if the student is close enough for the visit to count as verified.
     func isAtRestaurant(_ restaurant: Restaurant) -> Bool {
-        guard let userLocation else { return false }
-        return userLocation.distance(from: restaurant.location) <= Geofence.verificationRadius
+        locationCheck(for: restaurant) == .verified
+    }
+
+    /// Whether the location proves the student is at the restaurant. An old or very rough GPS fix
+    /// doesn't count, so a visit can't be verified from where the phone was earlier.
+    func locationCheck(for restaurant: Restaurant, now: Date = .now) -> LocationCheck {
+        guard let userLocation else { return .unknown }
+        guard userLocation.horizontalAccuracy >= 0, userLocation.horizontalAccuracy <= Geofence.maxAccuracy else { return .inaccurate }
+        guard now.timeIntervalSince(userLocation.timestamp) <= Geofence.maxLocationAge else { return .outOfDate }
+        return userLocation.distance(from: restaurant.location) <= Geofence.verificationRadius ? .verified : .tooFar
+    }
+
+    /// Asks for a fresh GPS fix, e.g. when Log your visit opens, since the last one may be old.
+    func refreshLocation() {
+        guard locationPermission.allowsLocation else { return }
+        location.refreshLocation()
+    }
+
+    /// The restaurant the student is at right now, for the widgets' "Log visit" button.
+    var restaurantHere: Restaurant? {
+        restaurants
+            .filter { isAtRestaurant($0) }
+            .min { ($0.location.distance(from: userLocation ?? $0.location)) < ($1.location.distance(from: userLocation ?? $1.location)) }
     }
 
     /// Starts tracking location and watching restaurants, if location is allowed.
@@ -505,9 +573,24 @@ final class AppState {
         }
     }
 
-    /// Sets a reminder 30 minutes before a planned visit, if `remind` is on.
+    /// Saves a planned visit with its estimated cost, and sets a reminder 30 minutes before if `remind` is on.
+    /// With `countsTowardsQuest` on, the place goes to the top of the quest plan.
     /// Returns the reminder time, or nil if none was set (e.g. the visit is too soon).
-    func planVisit(to restaurant: Restaurant, at visitDate: Date, remind: Bool) async -> Date? {
+    func planVisit(to restaurant: Restaurant, at visitDate: Date, remind: Bool, countsTowardsQuest: Bool = true) async -> Date? {
+        let plan = PlannedVisit(restaurantID: restaurant.id, date: visitDate,
+                                estimatedCost: questPlanner.estimatedCost(at: restaurant),
+                                countsTowardsQuest: countsTowardsQuest)
+        // A new plan for the same place replaces the old one, on this phone and in the database.
+        let replaced = plannedVisits.filter { $0.restaurantID == restaurant.id }.map(\.id)
+        plannedVisits.removeAll { $0.restaurantID == restaurant.id }
+        plannedVisits.append(plan)
+        plannedVisits.sort { $0.date < $1.date }
+        save { database, userID in
+            for id in replaced { try await database.deletePlannedVisit(id: id, userID: userID) }
+            try await database.savePlannedVisit(plan, userID: userID)
+        }
+        publishWidgets()
+
         let reminder = LocalReminder.plannedVisit(to: restaurant, at: visitDate)
         guard remind, case .once(let fireDate) = reminder.schedule, fireDate > .now else { return nil }
         guard await ensureNotificationPermission() else { return nil }
@@ -568,12 +651,22 @@ final class AppState {
         let earned = try await database.fetchStamps(userID: userID)
         let quest = try await database.fetchQuest(userID: userID)
         let savedProfile = try await database.fetchProfile(userID: userID)
+        let plans = try await database.fetchPlannedVisits(userID: userID)
+        // Trails and the challenge are optional extras, so the built-in ones are used if they can't load.
+        let trailDocuments = (try? await database.fetchTrails()) ?? []
+        let challenge = try? await database.fetchWeeklyChallenge()
         guard auth.currentUserID == userID else { throw VisitPhotoError.signedOut }
         guard generation == photoSaveGeneration else { throw VisitPhotoError.cancelled }
         restaurants = withRealDistances(places)
         visits = meals
         stamps = earned
         questSettings = quest
+        // Plans older than yesterday were never logged, so they're dropped.
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: .now)) ?? .now
+        plannedVisits = plans.filter { $0.date >= yesterday }
+        let loadedTrails = trailDocuments.compactMap { $0.trail(using: places) }
+        trails = loadedTrails.isEmpty ? MockData.foodTrails : loadedTrails
+        challengeTemplate = challenge ?? .standard
         if let savedProfile {
             profile = savedProfile
         } else {
@@ -582,13 +675,24 @@ final class AppState {
             saveProfile()
         }
         publishWidgets()
-        runInBackground { [photoStore] in await photoStore.retryPendingDeletions(userID: userID) }
+        runInBackground { [photoStore] in await photoStore.retryPendingWork(userID: userID) }
     }
 
     // Visits and stamps
 
+    /// What saving a visit led to, so Log your visit knows which pop-ups and messages to show.
+    struct VisitSaveResult {
+        /// A new stamp, if this was the first verified visit for the cuisine.
+        var stamp: Stamp?
+        /// Set if the meal counts towards the active quest.
+        var budgetUpdate: BudgetUpdate?
+        /// True if the meal photos are saved on the phone but still waiting to upload.
+        var photosWaitingToUpload = false
+    }
+
     /// Save photos first, so a visit never points to a photo that failed to save.
-    func saveVisit(_ visit: Visit, photos: [UIImage]) async throws -> Stamp? {
+    /// If the upload fails (e.g. offline), the photos stay on the phone and upload later, so the visit still saves.
+    func saveVisit(_ visit: Visit, photos: [UIImage]) async throws -> VisitSaveResult {
         guard let userID = auth.currentUserID else { throw VisitPhotoError.signedOut }
         let generation = photoSaveGeneration
         let ids = try await photoStore.save(photos, userID: userID)
@@ -600,9 +704,16 @@ final class AppState {
             await photoStore.delete(ids: ids, userID: userID)
             throw VisitPhotoError.cancelled
         }
+        let waiting = await photoStore.hasPendingUploads(ids: ids, userID: userID)
         var savedVisit = visit
         savedVisit.photoIDs = ids.isEmpty ? nil : ids
-        return addVisit(savedVisit)
+        let stamp = addVisit(savedVisit)
+        return VisitSaveResult(stamp: stamp, budgetUpdate: lastBudgetUpdate, photosWaitingToUpload: waiting)
+    }
+
+    /// Every meal photo fingerprint from earlier visits, to spot a reused photo.
+    var earlierPhotoFingerprints: [String] {
+        visits.flatMap { $0.photoFingerprints ?? [] }
     }
 
     func mealPhoto(id: String) async -> UIImage? {
@@ -611,11 +722,23 @@ final class AppState {
         return auth.currentUserID == userID ? image : nil
     }
 
+    /// The budget update for the last visit added, or nil if it wasn't part of the quest.
+    private(set) var lastBudgetUpdate: BudgetUpdate?
+
     /// Adds a visit and saves it.
     /// Returns a new stamp if it's the first verified visit for that cuisine.
     @discardableResult
     func addVisit(_ visit: Visit) -> Stamp? {
+        // The plan and estimate from just before the meal, to compare with afterwards.
+        let countsForQuest = hasActiveQuest && questSettings?.contains(visit.date) == true
+        let questBefore = countsForQuest ? activeQuest : nil
+        let estimate = questPlanner.estimatedCost(at: visit.restaurant)
+
         visits.insert(visit, at: 0)
+        completePlannedVisit(at: visit.restaurant, on: visit.date)
+        lastBudgetUpdate = questBefore.map {
+            QuestPlanner.budgetUpdate(before: $0, after: activeQuest, visit: visit, estimatedCost: estimate)
+        }
         publishWidgets()
         save { database, userID in try await database.saveVisit(visit, userID: userID) }
 
@@ -633,6 +756,15 @@ final class AppState {
         stamps.append(stamp)
         save { database, userID in try await database.saveStamp(stamp, userID: userID) }
         return stamp
+    }
+
+    /// The visit happened, so its plan is done: the next plan for that place from the day before onwards.
+    private func completePlannedVisit(at restaurant: Restaurant, on date: Date) {
+        let dayBefore = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: date)) ?? date
+        guard let plan = plannedVisits.filter({ $0.restaurantID == restaurant.id && $0.date >= dayBefore }).min(by: { $0.date < $1.date })
+        else { return }
+        plannedVisits.removeAll { $0.id == plan.id }
+        save { database, userID in try await database.deletePlannedVisit(id: plan.id, userID: userID) }
     }
 
     /// Deletes a visit, and the stamp it earned (if any).
@@ -730,204 +862,4 @@ final class AppState {
             await task.value
         }
     }
-}
-
-/// Navigation for the whole app: the selected tab, each tab's screens, and pop-ups.
-@Observable
-final class AppRouter {
-    var selectedTab: AppTab = .home
-    var tabPaths: [AppTab: [AppRoute]] = [:]
-    var onboardingPath: [OnboardingRoute] = []
-
-    var popup: AppPopup?
-    var sheet: AppSheet?
-    var toast: ToastMessage?
-    var banner: InAppBanner?
-
-    /// Widget links contain no account data; authentication still controls the root screen.
-    func openWidgetURL(_ url: URL) {
-        guard url.scheme == "foodpassport" else { return }
-        switch url.host {
-        case "quest":
-            selectedTab = .passport
-            tabPaths[.passport] = []
-        case "budget":
-            selectedTab = .profile
-            tabPaths[.profile] = []
-            sheet = .monthlyBudget
-        default: break
-        }
-    }
-
-    // Tab navigation
-
-    func path(for tab: AppTab) -> Binding<[AppRoute]> {
-        Binding(
-            get: { self.tabPaths[tab] ?? [] },
-            set: { self.tabPaths[tab] = $0 }
-        )
-    }
-
-    func push(_ route: AppRoute) {
-        tabPaths[selectedTab, default: []].append(route)
-    }
-
-    /// Switches to `tab` and opens `route` on it.
-    func open(_ route: AppRoute, in tab: AppTab) {
-        tabPaths[tab] = [route]
-        selectedTab = tab
-    }
-
-    /// Closes Log Visit (and Directions) to go back to the restaurant's page.
-    func closeVisitLoggingScreens() {
-        var path = tabPaths[selectedTab] ?? []
-        while let last = path.last, last.isVisitLoggingStep {
-            path.removeLast()
-        }
-        tabPaths[selectedTab] = path
-    }
-
-    // Pop-ups, toasts and banners
-
-    func present(_ popup: AppPopup) {
-        self.popup = popup
-    }
-
-    func dismissPopup() {
-        popup = nil
-    }
-
-    func showToast(_ text: String) {
-        let message = ToastMessage(text: text)
-        toast = message
-        Task {
-            try? await Task.sleep(for: .seconds(2.5))
-            if toast?.id == message.id { toast = nil }
-        }
-    }
-
-    func showBanner(_ newBanner: InAppBanner) {
-        banner = newBanner
-        Task {
-            try? await Task.sleep(for: .seconds(6))
-            if banner?.id == newBanner.id { banner = nil }
-        }
-    }
-
-    func openBanner() {
-        let route = banner?.route
-        banner = nil
-        if let route { push(route) }
-    }
-
-    /// After a new stamp: close the pop-up, show "Visit logged", then the budget update.
-    func finishStampCelebration(for cuisine: Cuisine) {
-        dismissPopup()
-        closeVisitLoggingScreens()
-        showToast("Visit logged! You earned a \(cuisine.rawValue) stamp ✓")
-        Task {
-            try? await Task.sleep(for: .seconds(2.8))
-            present(.budgetUpdate)
-        }
-    }
-
-    func reset() {
-        selectedTab = .home
-        tabPaths = [:]
-        onboardingPath = []
-        popup = nil
-        sheet = nil
-        toast = nil
-        banner = nil
-    }
-}
-
-private extension AppRoute {
-    var isVisitLoggingStep: Bool {
-        switch self {
-        case .logVisit, .directions: true
-        default: false
-        }
-    }
-}
-
-enum AppTab: String, CaseIterable, Identifiable {
-    case home
-    case explore
-    case passport
-    case history
-    case profile
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .home: "Home"
-        case .explore: "Explore"
-        case .passport: "Passport"
-        case .history: "History"
-        case .profile: "Profile"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .home: "house"
-        case .explore: "magnifyingglass"
-        case .passport: "book.closed"
-        case .history: "clock"
-        case .profile: "person"
-        }
-    }
-}
-
-/// Screens that can be opened on any tab.
-enum AppRoute: Hashable {
-    case placeDetail(Restaurant)
-    case directions(Restaurant)
-    case logVisit(Restaurant)
-    case questDetail
-    case foodTrail
-    case weeklyChallenge
-    case visitDetail(Visit)
-    case about
-}
-
-/// Screens in onboarding: welcome, sign up, permissions, budget.
-enum OnboardingRoute: Hashable {
-    case signIn
-    case signUp
-    case permissions
-    case budgetSetup
-}
-
-/// Pop-ups shown in the middle of the screen.
-enum AppPopup: Equatable {
-    case stampEarned(Cuisine)
-    case budgetUpdate
-    case budgetLimit
-}
-
-/// Bottom sheets that open from more than one screen.
-enum AppSheet: String, Identifiable {
-    case newQuest
-    case editQuest
-    case monthlyBudget
-
-    var id: String { rawValue }
-}
-
-/// A short message at the top of the screen, e.g. "Visit logged".
-struct ToastMessage: Equatable, Identifiable {
-    let id = UUID()
-    let text: String
-}
-
-/// A notification-style banner shown inside the app, e.g. "You've arrived".
-struct InAppBanner: Equatable, Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-    var imageName: String?
-    var route: AppRoute?
 }

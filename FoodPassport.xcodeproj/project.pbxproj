@@ -29,7 +29,13 @@
 			remoteGlobalIDString = F00D00000000000000000041;
 			remoteInfo = FoodPassportWidgets;
 		};
-		F00D00000000000000000069 = {isa = PBXContainerItemProxy; containerPortal = F00D00000000000000000009; proxyType = 1; remoteGlobalIDString = F00D00000000000000000007; remoteInfo = FoodPassport; };
+		F00D00000000000000000069 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00D00000000000000000009 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F00D00000000000000000007;
+			remoteInfo = FoodPassport;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,7 +56,7 @@
 		F00D00000000000000000001 /* FoodPassport.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FoodPassport.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00D00000000000000000002 /* FoodPassportTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoodPassportTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00D00000000000000000040 /* FoodPassportWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FoodPassportWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		F00D00000000000000000062 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoodPassportUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00D00000000000000000062 /* FoodPassportUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoodPassportUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -97,7 +103,11 @@
 			path = FoodPassportWidgets;
 			sourceTree = "<group>";
 		};
-		F00D00000000000000000061 = {isa = PBXFileSystemSynchronizedRootGroup; path = FoodPassportUITests; sourceTree = "<group>"; };
+		F00D00000000000000000061 /* FoodPassportUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FoodPassportUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -126,7 +136,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		F00D00000000000000000064 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F00D00000000000000000064 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -231,7 +247,29 @@
 			productReference = F00D00000000000000000040 /* FoodPassportWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		F00D00000000000000000060 = {isa = PBXNativeTarget; buildConfigurationList = F00D00000000000000000068; buildPhases = (F00D00000000000000000063, F00D00000000000000000064, F00D00000000000000000065, ); buildRules = (); dependencies = (F00D0000000000000000006A, ); fileSystemSynchronizedGroups = (F00D00000000000000000061, ); name = FoodPassportUITests; packageProductDependencies = (); productName = FoodPassportUITests; productReference = F00D00000000000000000062; productType = "com.apple.product-type.bundle.ui-testing"; };
+		F00D00000000000000000060 /* FoodPassportUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F00D00000000000000000068 /* Build configuration list for PBXNativeTarget "FoodPassportUITests" */;
+			buildPhases = (
+				F00D00000000000000000063 /* Sources */,
+				F00D00000000000000000064 /* Frameworks */,
+				F00D00000000000000000065 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F00D0000000000000000006A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F00D00000000000000000061 /* FoodPassportUITests */,
+			);
+			name = FoodPassportUITests;
+			packageProductDependencies = (
+			);
+			productName = FoodPassportUITests;
+			productReference = F00D00000000000000000062 /* FoodPassportUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -244,7 +282,14 @@
 				TargetAttributes = {
 					F00D00000000000000000007 = {
 						CreatedOnToolsVersion = 26.2;
-						SystemCapabilities = {com.apple.ApplicationGroups.iOS = {enabled = 1; }; com.apple.Push = {enabled = 1; }; };
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+							com.apple.Push = {
+								enabled = 1;
+							};
+						};
 					};
 					F00D00000000000000000008 = {
 						CreatedOnToolsVersion = 26.2;
@@ -299,7 +344,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		F00D00000000000000000065 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F00D00000000000000000065 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -324,7 +375,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		F00D00000000000000000063 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F00D00000000000000000063 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -338,7 +395,11 @@
 			target = F00D00000000000000000041 /* FoodPassportWidgets */;
 			targetProxy = F00D0000000000000000004E /* PBXContainerItemProxy */;
 		};
-		F00D0000000000000000006A = {isa = PBXTargetDependency; target = F00D00000000000000000007; targetProxy = F00D00000000000000000069; };
+		F00D0000000000000000006A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F00D00000000000000000007 /* FoodPassport */;
+			targetProxy = F00D00000000000000000069 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -633,8 +694,40 @@
 			};
 			name = Release;
 		};
-		F00D00000000000000000066 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = Z9CY9F39J6; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.seniyagajadeera.FoodPassportUITests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = FoodPassport; }; name = Debug; };
-		F00D00000000000000000067 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = Z9CY9F39J6; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.seniyagajadeera.FoodPassportUITests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = FoodPassport; }; name = Release; };
+		F00D00000000000000000066 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z9CY9F39J6;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.seniyagajadeera.FoodPassportUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = FoodPassport;
+			};
+			name = Debug;
+		};
+		F00D00000000000000000067 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z9CY9F39J6;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.seniyagajadeera.FoodPassportUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = FoodPassport;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -674,7 +767,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		F00D00000000000000000068 = {isa = XCConfigurationList; buildConfigurations = (F00D00000000000000000066, F00D00000000000000000067, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		F00D00000000000000000068 /* Build configuration list for PBXNativeTarget "FoodPassportUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F00D00000000000000000066 /* Debug */,
+				F00D00000000000000000067 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */

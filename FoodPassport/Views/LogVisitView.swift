@@ -17,7 +17,7 @@ struct LogVisitView: View {
     @State private var rating = 0
     @State private var notes = ""
     @State private var hasMealPhoto = false
-    @State private var mealPhotos: [UIImage] = []
+    @State private var mealPhotos: [MealPhoto] = []
     @State private var isSaving = false
     @State private var photoError: String?
     @State private var isAmountFromReceipt = false
@@ -43,6 +43,11 @@ struct LogVisitView: View {
 
     private var itemsTotal: Int {
         VisitItemDraft.total(of: items)
+    }
+
+    /// The first photo that can't prove this visit (reused, old or undated), if any.
+    private var photoProblem: PhotoProblem? {
+        mealPhotos.lazy.compactMap(\.problem).first
     }
 
     /// Save needs at least one item and a total.
@@ -88,6 +93,8 @@ struct LogVisitView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .appBackground()
+        // The last GPS fix may be old, so get a fresh one for verifying the visit.
+        .onAppear { appState.refreshLocation() }
         .navigationTitle("Log your visit")
         .navigationBarTitleDisplayMode(.large)
         // Keep the total in step with the item prices, unless it was typed or came from a receipt.
@@ -96,9 +103,9 @@ struct LogVisitView: View {
             amount = newTotal > 0 ? "\(newTotal)" : ""
         }
         .fullScreenCover(isPresented: $isShowingMealCamera) {
-            MealCameraView(menu: restaurant.popularDishes.map(\.name)) { dishes, photo in
+            MealCameraView(menu: restaurant.popularDishes.map(\.name)) { dishes, photo, takenAt in
                 addScannedDishes(dishes)
-                mealPhotos.append(photo)
+                addMealPhoto(photo, takenAt: takenAt)
             }
         }
         .alert("Couldn't save visit", isPresented: Binding(get: { photoError != nil }, set: { if !$0 { photoError = nil } })) {
@@ -118,7 +125,8 @@ struct LogVisitView: View {
         for dish in dishes {
             let menuDish = restaurant.popularDishes.first { $0.name.caseInsensitiveCompare(dish.dishName) == .orderedSame }
             let priceText = menuDish.map { "\($0.price)" } ?? ""
-            newItems.append(VisitItemDraft(name: dish.dishName, priceText: priceText, cuisine: dish.cuisine, category: dish.category, isDrink: dish.isDrink))
+            newItems.append(VisitItemDraft(name: dish.dishName, priceText: priceText, cuisine: dish.cuisine,
+                                           category: dish.category, isDrink: dish.isDrink, isFromScan: true))
         }
 
         items = items.filter { !$0.isEmpty } + newItems
@@ -126,6 +134,14 @@ struct LogVisitView: View {
             cuisine = suggested.rawValue
         }
         hasMealPhoto = true
+    }
+
+    /// Keeps the photo with its fingerprint, and checks it's new (not reused or old).
+    private func addMealPhoto(_ image: UIImage, takenAt: Date?) {
+        let fingerprint = PhotoCheck.fingerprint(of: image)
+        let problem = PhotoCheck.problem(fingerprint: fingerprint, takenAt: takenAt,
+                                         earlierFingerprints: appState.earlierPhotoFingerprints)
+        mealPhotos.append(MealPhoto(image: image, fingerprint: fingerprint, problem: problem))
     }
 
     /// Fills in prices and the total from a scanned receipt.
@@ -145,7 +161,9 @@ struct LogVisitView: View {
             savedItems.append(VisitItem(name: item.name.trimmed, price: item.price, cuisine: item.cuisine, category: item.category, isDrink: item.isDrink))
         }
 
-        let visit = Visit(
+        // A reused or old photo can't prove the student is here now, so the visit isn't verified.
+        let isVerified = appState.isAtRestaurant(restaurant) && photoProblem == nil
+        var visit = Visit(
             id: UUID().uuidString,
             dishName: savedItems.map(\.name).joined(separator: ", "),
             cuisine: selectedCuisine,
@@ -155,22 +173,33 @@ struct LogVisitView: View {
             notes: notes.trimmed,
             date: .now,
             // Only visits logged at the restaurant are verified, and only those earn stamps.
-            isLocationVerified: appState.isAtRestaurant(restaurant),
-            isAutoDetected: hasMealPhoto,
+            isLocationVerified: isVerified,
+            // Only if a saved item still has the name the scanner gave it.
+            isAutoDetected: namedItems.contains(where: \.isFromScan),
             isFromReceipt: isAmountFromReceipt,
             imageName: restaurant.imageName,
             items: savedItems
         )
+        let fingerprints = mealPhotos.compactMap(\.fingerprint)
+        visit.photoFingerprints = fingerprints.isEmpty ? nil : fingerprints
 
         isSaving = true
         Task {
             do {
-                let stamp = try await appState.saveVisit(visit, photos: mealPhotos)
-                if let stamp {
+                let result = try await appState.saveVisit(visit, photos: mealPhotos.map(\.image))
+                if let stamp = result.stamp {
                     router.present(.stampEarned(stamp.cuisine))
                 } else {
-                    router.closeVisitLoggingScreens()
-                    router.showToast(visit.isLocationVerified ? "Visit logged ✓" : "Visit logged. Stamps need a verified location.")
+                    let message = if result.photosWaitingToUpload {
+                        "Visit logged. Photos will upload when you're online."
+                    } else if visit.isLocationVerified {
+                        "Visit logged ✓"
+                    } else if photoProblem != nil {
+                        "Visit logged. Stamps need a new photo taken here."
+                    } else {
+                        "Visit logged. Stamps need a verified location."
+                    }
+                    router.finishLoggingVisit(message: message, budgetUpdate: result.budgetUpdate)
                 }
             } catch {
                 photoError = error.localizedDescription
@@ -182,25 +211,41 @@ struct LogVisitView: View {
     private var mealPhotosSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionCaption("Meal photos")
-            Text("Photos upload when you save. Keep this form open if you need to retry.")
+            Text("Photos upload when you save. If you're offline, they upload later.")
                 .font(.footnote).foregroundStyle(.secondary)
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
-                    ForEach(mealPhotos.indices, id: \.self) { index in
-                        Image(uiImage: mealPhotos[index])
+                    ForEach(Array(mealPhotos.enumerated()), id: \.element.id) { index, photo in
+                        Image(uiImage: photo.image)
                             .resizable().scaledToFill()
                             .frame(width: 100, height: 100).clipped()
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay {
+                                if photo.problem != nil {
+                                    RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.gold, lineWidth: 3)
+                                }
+                            }
                             .overlay(alignment: .topTrailing) {
-                                Button { mealPhotos.remove(at: index) } label: {
+                                Button { mealPhotos.removeAll { $0.id == photo.id } } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .foregroundStyle(.white, .black.opacity(0.65))
                                         .frame(width: 44, height: 44)
                                 }
                                 .accessibilityLabel("Remove meal photo \(index + 1)")
                             }
+                            .accessibilityLabel(photo.problem.map { "Meal photo \(index + 1). \($0.message)" } ?? "Meal photo \(index + 1)")
                     }
                 }
+            }
+            if let photoProblem {
+                Label {
+                    Text("\(photoProblem.message) It won't verify this visit, so it can't earn a stamp. Take a new photo here instead.")
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.gold)
+                }
+                .font(.footnote)
+                .foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -216,10 +261,11 @@ struct LogVisitView: View {
                 Text(restaurant.name)
                     .font(.title3.bold())
                     .foregroundStyle(Theme.ink)
-                if appState.isAtRestaurant(restaurant) {
-                    PillLabel(text: "Location verified", trailingSystemImage: "checkmark", style: .green)
+                let check = appState.locationCheck(for: restaurant)
+                if check == .verified {
+                    PillLabel(text: check.message, trailingSystemImage: "checkmark", style: .green)
                 } else {
-                    PillLabel(text: "Not at this restaurant", systemImage: "location.slash")
+                    PillLabel(text: check.message, systemImage: check == .outOfDate ? "location" : "location.slash")
                 }
             }
 
@@ -320,6 +366,7 @@ struct LogVisitView: View {
                 item.wrappedValue.cuisine = nil
                 item.wrappedValue.category = nil
                 item.wrappedValue.isDrink = nil
+                item.wrappedValue.isFromScan = false
             }
         )
         // Name and price side by side; one above the other with very large text.
@@ -402,1032 +449,6 @@ struct LogVisitView: View {
     }
 }
 
-/// The full-screen camera for photographing a meal. The dish is recognised on the phone.
-struct MealCameraView: View {
-    private enum Step {
-        case camera
-        case recognising(UIImage)
-        case results(UIImage, [MealPrediction])
-        /// Not a dish we know, or something went wrong.
-        case problem(UIImage?, title: String, message: String)
-    }
-
-    private enum CameraStatus {
-        case starting
-        case running
-        /// No camera (the simulator).
-        case unavailable
-        case denied
-    }
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
-
-    private let menu: [String]
-    private let recognizer: MealRecognizer
-    private let initialPhoto: UIImage?
-    private let onConfirm: ([MealPrediction], UIImage) -> Void
-
-    @State private var camera = CameraService()
-    @State private var cameraStatus = CameraStatus.starting
-    @State private var step = Step.camera
-    @State private var isFlashOn = false
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var isShowingResults = false
-    @State private var confirmedDishes: [MealPrediction] = []
-    @State private var wantsManualEntry = false
-    @State private var review: MealScanViewModel
-
-    /// `menu` is the restaurant's dishes (they get a boost).
-    /// `initialPhoto` is recognised straight away, for previews.
-    init(
-        menu: [String] = [],
-        recognizer: MealRecognizer = CoreMLMealRecognizer.shared,
-        initialPhoto: UIImage? = nil,
-        onConfirm: @escaping ([MealPrediction], UIImage) -> Void
-    ) {
-        self.menu = menu
-        self.recognizer = recognizer
-        self.initialPhoto = initialPhoto
-        self.onConfirm = onConfirm
-        _review = State(initialValue: MealScanViewModel(recognizer: recognizer))
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            viewfinder
-                .overlay { viewfinderOverlay }
-                .overlay(alignment: .top) { topControls }
-                .clipped()
-
-            bottomControls
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-        }
-        .background(Color.black.ignoresSafeArea())
-        .statusBarHidden()
-        .task {
-            if let initialPhoto {
-                recognise(initialPhoto)
-            } else {
-                await startCamera()
-            }
-        }
-        .task {
-            // Load the model while the student lines up the photo, so it's quick.
-            await recognizer.prepare()
-        }
-        .onDisappear {
-            camera.stop()
-            review.reject()
-        }
-        .onChange(of: selectedPhoto) { _, item in
-            loadPhoto(item)
-        }
-        .sheet(isPresented: $isShowingResults, onDismiss: handleResultsDismissed) {
-            if case .results(let photo, _) = step {
-                MealRecognitionSheet(
-                    photo: photo,
-                    review: review,
-                    onConfirm: { dishes in
-                        confirmedDishes = dishes
-                        isShowingResults = false
-                    },
-                    onEnterManually: {
-                        wantsManualEntry = true
-                        isShowingResults = false
-                    }
-                )
-            }
-        }
-    }
-
-    // Viewfinder
-
-    @ViewBuilder
-    private var viewfinder: some View {
-        switch step {
-        case .camera:
-            switch cameraStatus {
-            case .running:
-                CameraPreview(session: camera.session)
-                    .accessibilityLabel("Camera viewfinder")
-            case .starting:
-                Color.black
-            case .unavailable:
-                cameraMessage(
-                    systemImage: "camera",
-                    title: "No camera here",
-                    message: "The camera isn't available on this device. Choose a photo of your meal instead."
-                )
-            case .denied:
-                cameraMessage(
-                    systemImage: "camera.badge.ellipsis",
-                    title: "Camera access is off",
-                    message: "Allow camera access in Settings to photograph your meal, or choose a photo instead.",
-                    showsSettingsButton: true
-                )
-            }
-        case .recognising(let photo), .results(let photo, _), .problem(let photo?, _, _):
-            Color.black
-                .overlay {
-                    Image(uiImage: photo)
-                        .resizable()
-                        .scaledToFill()
-                }
-                .accessibilityLabel("Photo of your meal")
-        case .problem(nil, _, _):
-            Color.black
-        }
-    }
-
-    @ViewBuilder
-    private var viewfinderOverlay: some View {
-        switch step {
-        case .camera where cameraStatus == .running:
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(.white.opacity(0.85), lineWidth: 2)
-                .padding(40)
-                .overlay(alignment: .bottom) {
-                    Text("Centre your meal in the frame")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.black.opacity(0.45), in: Capsule())
-                        .padding(.bottom, 56)
-                }
-                .allowsHitTesting(false)
-        case .recognising:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                    .tint(.white)
-                Text("Recognising your meal…")
-                    .font(.headline)
-                Label("On your device", systemImage: "iphone")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.8))
-            }
-            .foregroundStyle(.white)
-            .padding(24)
-            .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .accessibilityElement(children: .combine)
-        case .problem(_, let title, let message):
-            VStack(alignment: .leading, spacing: 10) {
-                Text(title)
-                    .font(.title3.bold())
-                    .foregroundStyle(Theme.ink)
-                Text(message)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Retake", action: retake)
-                    .buttonStyle(.brandPrimary)
-                    .padding(.top, 6)
-                Button("Enter manually", action: finishManualEntry)
-                    .buttonStyle(BrandTextButtonStyle(color: .secondary))
-            }
-            .padding(20)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .padding(20)
-            .frame(maxHeight: .infinity, alignment: .bottom)
-        default:
-            EmptyView()
-        }
-    }
-
-    private func cameraMessage(systemImage: String, title: String, message: String, showsSettingsButton: Bool = false) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 52))
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.title3.bold())
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.75))
-            if showsSettingsButton {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        openURL(url)
-                    }
-                }
-                .font(.headline)
-                .foregroundStyle(Theme.orange)
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(hex: 0x1C1C1E))
-    }
-
-    // Controls
-
-    private var topControls: some View {
-        HStack {
-            cameraControlButton(systemImage: "xmark", label: "Close") {
-                dismiss()
-            }
-            Spacer()
-            if case .camera = step, cameraStatus == .running {
-                cameraControlButton(
-                    systemImage: isFlashOn ? "bolt.fill" : "bolt.slash.fill",
-                    label: isFlashOn ? "Flash on" : "Flash off"
-                ) {
-                    isFlashOn.toggle()
-                }
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-    }
-
-    private var bottomControls: some View {
-        VStack(spacing: 16) {
-            Button(action: takePhoto) {
-                Circle()
-                    .stroke(.white, lineWidth: 4)
-                    .frame(width: 80, height: 80)
-                    .overlay {
-                        Circle()
-                            .fill(.white)
-                            .frame(width: 66, height: 66)
-                    }
-            }
-            .buttonStyle(.plain)
-            .opacity(canTakePhoto ? 1 : 0.35)
-            .disabled(!canTakePhoto)
-            .accessibilityLabel("Take photo")
-
-            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                Text("Choose from Photos")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(minHeight: 44)
-            }
-            .disabled(isBusy)
-        }
-    }
-
-    private var canTakePhoto: Bool {
-        if case .camera = step { return cameraStatus == .running }
-        return false
-    }
-
-    private var isBusy: Bool {
-        if case .recognising = step { return true }
-        return false
-    }
-
-    private func cameraControlButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.black.opacity(0.5), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-
-    // Actions
-
-    /// Starts the camera, or explains why it can't.
-    private func startCamera() async {
-        guard CameraService.isAvailable else {
-            cameraStatus = .unavailable
-            return
-        }
-        guard await CameraService.requestAccess() else {
-            cameraStatus = .denied
-            return
-        }
-        camera.start()
-        cameraStatus = .running
-    }
-
-    /// Takes a photo and recognises the meal in it.
-    private func takePhoto() {
-        Task {
-            do {
-                recognise(try await camera.takePhoto(withFlash: isFlashOn))
-            } catch {
-                step = .problem(nil, title: "Couldn't take the photo", message: error.localizedDescription)
-            }
-        }
-    }
-
-    /// Loads the photo chosen from Photos.
-    private func loadPhoto(_ item: PhotosPickerItem?) {
-        guard let item else { return }
-        Task {
-            if let data = try? await item.loadTransferable(type: Data.self), let photo = UIImage(data: data) {
-                recognise(photo)
-            } else {
-                step = .problem(nil, title: "Couldn't open the photo", message: MealRecognitionError.unreadableImage.localizedDescription)
-            }
-        }
-    }
-
-    /// Runs the meal recogniser and shows the results (or the problem).
-    private func recognise(_ photo: UIImage) {
-        step = .recognising(photo)
-        Task {
-            await review.scan(photo, menu: menu)
-            if let result = review.result {
-                step = .results(photo, result.predictions)
-                isShowingResults = true
-            } else if let message = review.errorMessage {
-                step = .problem(photo, title: "Couldn't recognise the photo", message: message)
-            }
-        }
-    }
-
-    /// Clears the photo so the student can try again.
-    private func retake() {
-        review.reject()
-        selectedPhoto = nil
-        confirmedDishes = []
-        wantsManualEntry = false
-        step = .camera
-    }
-
-    /// Runs when the results sheet closes, however it was closed.
-    private func handleResultsDismissed() {
-        if !confirmedDishes.isEmpty {
-            if case .results(let photo, _) = step { onConfirm(confirmedDishes, photo) }
-            dismiss()
-        } else if wantsManualEntry {
-            finishManualEntry()
-        } else {
-            // They swiped the results away, so go back to the camera.
-            retake()
-        }
-    }
-
-    /// Keep a valid photo even when the student types the food name themselves.
-    private func finishManualEntry() {
-        switch step {
-        case .results(let photo, _), .problem(let photo?, _, _):
-            onConfirm([], photo)
-        default:
-            break
-        }
-        review.reject()
-        dismiss()
-    }
-}
-
-/// The live camera picture.
-private struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
-
-    func makeUIView(context: Context) -> PreviewView {
-        let view = PreviewView()
-        view.previewLayer.session = session
-        view.previewLayer.videoGravity = .resizeAspectFill
-        return view
-    }
-
-    func updateUIView(_ view: PreviewView, context: Context) {}
-
-    final class PreviewView: UIView {
-        override class var layerClass: AnyClass {
-            AVCaptureVideoPreviewLayer.self
-        }
-
-        var previewLayer: AVCaptureVideoPreviewLayer {
-            layer as! AVCaptureVideoPreviewLayer
-        }
-    }
-}
-
-/// Review each detected item. Its three rows are alternative names, not three foods.
-struct MealRecognitionSheet: View {
-    let photo: UIImage?
-    let review: MealScanViewModel
-    let onConfirm: ([MealPrediction]) -> Void
-    let onEnterManually: () -> Void
-
-    private var confirmTitle: String {
-        let count = review.selectedDishes.count
-        return count == 0 ? "Choose at least one item" : (count == 1 ? "Add selected item" : "Add \(count) items")
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(review.regions.count > 1 ? "Review your meal" : "Choose your meal")
-                    .font(.title2.bold()).foregroundStyle(Theme.ink)
-                    .accessibilityAddTraits(.isHeader)
-                Text("Choose one name for each item you had. Nothing is selected for you.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                if let photo {
-                    MealRegionPhoto(photo: photo, regions: review.regions.count > 1 ? review.regions : [])
-                }
-                ForEach(review.regions) { region in
-                    VStack(alignment: .leading, spacing: 10) {
-                        if review.regions.count > 1 {
-                            Text("Item \(region.id)").font(.headline).foregroundStyle(Theme.ink)
-                        }
-                        if region.isOther {
-                            Label("This may be something else. Check the alternatives or enter it yourself.", systemImage: "questionmark.circle")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                        ForEach(region.predictions) { prediction in
-                            Button {
-                                review.toggle(prediction.label, in: region.id)
-                            } label: {
-                                PredictionRow(prediction: prediction, isSelected: review.choices[region.id] == prediction.label)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                Text("Missing an item? You can scan it separately after adding these.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button(confirmTitle) {
-                    if let dishes = review.confirm() { onConfirm(dishes) }
-                }
-                .buttonStyle(.brandPrimary)
-                .disabled(review.selectedDishes.isEmpty)
-                Button("Enter manually", action: onEnterManually)
-                    .buttonStyle(BrandTextButtonStyle(color: .secondary))
-            }
-            .padding(20)
-        }
-        .presentationDetents([.large])
-        .brandSheetStyle()
-        .sensoryFeedback(.selection, trigger: review.choices)
-    }
-}
-
-private struct MealRegionPhoto: View {
-    let photo: UIImage
-    let regions: [MealRegion]
-
-    var body: some View {
-        Image(uiImage: photo).resizable().scaledToFit()
-            .overlay {
-                GeometryReader { proxy in
-                    ForEach(regions) { region in
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Theme.orange, lineWidth: 2)
-                            .overlay(alignment: .topLeading) {
-                                Text("\(region.id)").font(.caption.bold()).padding(6)
-                                    .foregroundStyle(.white).background(Theme.orange, in: Circle())
-                            }
-                            .frame(width: region.bounds.width * proxy.size.width, height: region.bounds.height * proxy.size.height)
-                            .position(x: region.bounds.midX * proxy.size.width, y: region.bounds.midY * proxy.size.height)
-                    }
-                }
-                .accessibilityHidden(true)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .accessibilityLabel(regions.isEmpty ? "Your meal photo" : "Meal photo with \(regions.count) marked items")
-    }
-}
-
-private struct PredictionRow: View {
-    let prediction: MealPrediction
-    let isSelected: Bool
-
-    private var percentage: Int {
-        Int((prediction.confidence * 100).rounded())
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // A tick box, so it's clear more than one dish can be picked.
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundStyle(isSelected ? Theme.orange : Theme.faintInk)
-
-            VStack(alignment: .leading, spacing: 10) {
-                AdaptiveStack(spacing: 8) {
-                    Text(prediction.label)
-                        .font(.headline)
-                        .foregroundStyle(Theme.ink)
-                    if prediction.isOnMenu {
-                        PillLabel(text: "On the menu", font: .caption2.weight(.semibold))
-                            .fixedSize()
-                    }
-                    Spacer()
-                    Text(verbatim: "\(percentage)%")
-                        .font(.headline)
-                        .foregroundStyle(isSelected ? Theme.ink : Color.secondary)
-                }
-
-                Text([prediction.isDrink ? "Drink" : "Food", prediction.category,
-                      prediction.cuisine.map { "Suggested cuisine: " + $0.rawValue }]
-                    .compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                ProgressBar(
-                    value: prediction.confidence,
-                    tint: isSelected ? Theme.orange : Theme.faintInk,
-                    height: 6
-                )
-            }
-        }
-        .padding(16)
-        .cardBackground(cornerRadius: 16, shadowStrength: 0.4)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(isSelected ? Theme.orange : .clear, lineWidth: 2)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([prediction.label, "\(percentage) percent confidence", prediction.isDrink ? "Drink" : "Food",
-                             prediction.category, prediction.cuisine.map { "Suggested cuisine: " + $0.rawValue },
-                             prediction.isOnMenu ? "On the menu" : nil].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityHint(isSelected ? "Double-tap to untick" : "Double-tap to tick")
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// Scans a receipt and shows the total it found, highlighted on the photo.
-struct ReceiptScanView: View {
-    private enum Step {
-        case choosing
-        case reading(UIImage)
-        case result(UIImage, ReceiptScan)
-        case failed(UIImage?, String)
-    }
-
-    @Environment(\.dismiss) private var dismiss
-
-    private let scanner: ReceiptScanner
-    private let initialImage: UIImage?
-    /// True when the student already picked their dishes, so the receipt only adds prices.
-    private let keepsYourItems: Bool
-    private let onUseReceipt: (ReceiptScan) -> Void
-
-    @State private var step: Step = .choosing
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var isShowingDocumentCamera = false
-
-    /// `initialImage` is read straight away, for previews.
-    init(
-        scanner: ReceiptScanner = VisionReceiptScanner(),
-        initialImage: UIImage? = nil,
-        keepsYourItems: Bool = false,
-        onUseReceipt: @escaping (ReceiptScan) -> Void
-    ) {
-        self.scanner = scanner
-        self.initialImage = initialImage
-        self.keepsYourItems = keepsYourItems
-        self.onUseReceipt = onUseReceipt
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.black.opacity(0.5), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
-
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-
-            Spacer(minLength: 16)
-
-            photoArea
-                .padding(.horizontal, 32)
-
-            Spacer(minLength: 16)
-
-            bottomCard
-        }
-        .background(Color(hex: 0x2A2724).ignoresSafeArea())
-        .statusBarHidden()
-        .fullScreenCover(isPresented: $isShowingDocumentCamera) {
-            DocumentCameraView(
-                onScan: { image in
-                    isShowingDocumentCamera = false
-                    read(image)
-                },
-                onCancel: { isShowingDocumentCamera = false }
-            )
-            .ignoresSafeArea()
-        }
-        .onChange(of: selectedPhoto) { _, item in
-            loadPhoto(item)
-        }
-        .task {
-            if let initialImage {
-                read(initialImage)
-            }
-        }
-    }
-
-    // Photo
-
-    @ViewBuilder
-    private var photoArea: some View {
-        switch step {
-        case .choosing:
-            instructions(systemImage: "doc.text.viewfinder", title: "Scan your receipt",
-                         message: "Photograph the whole receipt, flat and in good light. It's read on your phone and the photo isn't uploaded.")
-        case .reading(let image):
-            ReceiptPhotoView(image: image, highlight: nil)
-                .overlay {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.white)
-                        .padding(20)
-                        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
-                }
-        case .result(let image, let receipt):
-            ReceiptPhotoView(image: image, highlight: receipt.totalBoundingBox)
-        case .failed(let image?, _):
-            ReceiptPhotoView(image: image, highlight: nil)
-        case .failed(nil, _):
-            instructions(systemImage: "exclamationmark.triangle", title: "Couldn't open the photo", message: "Try another photo of the receipt.")
-        }
-    }
-
-    private func instructions(systemImage: String, title: String, message: String) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 64))
-                .foregroundStyle(.white.opacity(0.9))
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.title2.bold())
-                .foregroundStyle(.white)
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.7))
-        }
-    }
-
-    // Bottom card
-
-    private var bottomCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            switch step {
-            case .choosing:
-                choosingButtons
-
-            case .reading:
-                SectionCaption("Total detected")
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Reading receipt…")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(height: 41)
-
-            case .result(_, let receipt):
-                resultDetails(for: receipt)
-
-            case .failed(_, let message):
-                Text("Couldn't read this receipt")
-                    .font(.title3.bold())
-                    .foregroundStyle(Theme.ink)
-                Text(message)
-                    .foregroundStyle(.secondary)
-                Button("Retake", action: retake)
-                    .buttonStyle(.brandPrimary)
-                    .padding(.top, 12)
-                Button("Enter the amount myself") { dismiss() }
-                    .buttonStyle(BrandTextButtonStyle(color: .secondary))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private var choosingButtons: some View {
-        // The document scanner needs a real camera, so the simulator only gets Photos.
-        if VNDocumentCameraViewController.isSupported {
-            Button {
-                isShowingDocumentCamera = true
-            } label: {
-                Label("Scan receipt", systemImage: "doc.viewfinder")
-            }
-            .buttonStyle(.brandPrimary)
-
-            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                Label("Choose from Photos", systemImage: "photo.on.rectangle")
-            }
-            .buttonStyle(BrandTextButtonStyle(color: .secondary))
-        } else {
-            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                Label("Choose from Photos", systemImage: "photo.on.rectangle")
-            }
-            .buttonStyle(.brandPrimary)
-        }
-    }
-
-    @ViewBuilder
-    private func resultDetails(for receipt: ReceiptScan) -> some View {
-        if let total = receipt.total {
-            if !receipt.items.isEmpty {
-                SectionCaption(receipt.items.count == 1 ? "1 item found" : "\(receipt.items.count) items found")
-                receiptItemList(receipt.items)
-                Divider()
-                    .padding(.vertical, 6)
-            }
-
-            AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
-                Text("Total")
-                    .font(.headline)
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                Text(total.lkr)
-                    .font(.title.bold())
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
-            }
-            .accessibilityElement(children: .combine)
-
-            if !receipt.isTotalFromTotalLine {
-                Label("No TOTAL line was found, so this is the largest amount. Check it before using it.",
-                      systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(Theme.orangeText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            // The total can be more than the items, e.g. because of a service charge.
-            let itemsSum = receipt.items.reduce(0) { $0 + $1.price }
-            if !receipt.items.isEmpty && itemsSum != total {
-                Text("The items add up to \(itemsSum.lkr). The rest may be tax or a service charge.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if keepsYourItems && !receipt.items.isEmpty {
-                Label("Your dishes stay as they are. Their prices and the total come from this receipt.", systemImage: "checkmark.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Button(useButtonTitle(for: receipt)) {
-                onUseReceipt(receipt)
-                dismiss()
-            }
-            .buttonStyle(.brandPrimary)
-            .padding(.top, 12)
-
-            Button("Retake", action: retake)
-                .buttonStyle(BrandTextButtonStyle(color: .secondary))
-        } else {
-            Text("No amount found")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.ink)
-            Text("Retake the photo with the total in view, or type the amount yourself.")
-                .foregroundStyle(.secondary)
-            Button("Retake", action: retake)
-                .buttonStyle(.brandPrimary)
-                .padding(.top, 12)
-        }
-    }
-
-    private func useButtonTitle(for receipt: ReceiptScan) -> String {
-        if receipt.items.isEmpty {
-            return "Use this amount"
-        }
-        return keepsYourItems ? "Add these prices" : "Use these items"
-    }
-
-    /// Each item on the receipt with its price. Long receipts scroll, so the buttons stay on screen.
-    @ViewBuilder
-    private func receiptItemList(_ items: [ReceiptScan.LineItem]) -> some View {
-        let list = VStack(alignment: .leading, spacing: 8) {
-            ForEach(items) { item in
-                AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 2) {
-                    Text(item.name)
-                    Spacer(minLength: 12)
-                    Text(item.price.lkr)
-                        .monospacedDigit()
-                }
-                .font(.subheadline)
-                .foregroundStyle(Theme.ink)
-                .accessibilityElement(children: .combine)
-            }
-        }
-
-        if items.count > 4 {
-            ScrollView {
-                list
-            }
-            .frame(height: 150)
-        } else {
-            list
-        }
-    }
-
-    // Actions
-
-    /// Loads the photo chosen from Photos.
-    private func loadPhoto(_ item: PhotosPickerItem?) {
-        guard let item else { return }
-        Task {
-            if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                read(image)
-            } else {
-                step = .failed(nil, ReceiptScanError.unreadableImage.localizedDescription)
-            }
-        }
-    }
-
-    /// Reads the receipt and shows the total.
-    private func read(_ image: UIImage) {
-        step = .reading(image)
-        Task {
-            do {
-                let receipt = try await scanner.scan(image)
-                withAnimation { step = .result(image, receipt) }
-            } catch {
-                withAnimation { step = .failed(image, error.localizedDescription) }
-            }
-        }
-    }
-
-    /// Clears the photo so the student can try again.
-    private func retake() {
-        selectedPhoto = nil
-        withAnimation { step = .choosing }
-    }
-}
-
-/// The receipt photo, with an orange box around the total.
-private struct ReceiptPhotoView: View {
-    let image: UIImage
-    /// Where the total is (Vision uses 0–1, from the bottom-left).
-    let highlight: CGRect?
-
-    var body: some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFit()
-            .overlay {
-                if let highlight {
-                    GeometryReader { proxy in
-                        // Vision measures from the bottom-left, SwiftUI from the top-left, so flip it.
-                        let box = CGRect(
-                            x: highlight.minX * proxy.size.width,
-                            y: (1 - highlight.maxY) * proxy.size.height,
-                            width: highlight.width * proxy.size.width,
-                            height: highlight.height * proxy.size.height
-                        )
-                        .insetBy(dx: -10, dy: -8)
-
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Theme.orange, lineWidth: 3)
-                            .background(Theme.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .frame(width: box.width, height: box.height)
-                            .position(x: box.midX, y: box.midY)
-                    }
-                    .transition(.opacity)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
-            .accessibilityLabel("Photo of your receipt")
-    }
-}
-
-/// Apple's document scanner. It finds the receipt's edges and straightens the photo.
-struct DocumentCameraView: UIViewControllerRepresentable {
-    let onScan: (UIImage) -> Void
-    let onCancel: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onScan: onScan, onCancel: onCancel)
-    }
-
-    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
-        let controller = VNDocumentCameraViewController()
-        controller.delegate = context.coordinator
-        return controller
-    }
-
-    func updateUIViewController(_ controller: VNDocumentCameraViewController, context: Context) {}
-
-    final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
-        private let onScan: (UIImage) -> Void
-        private let onCancel: () -> Void
-
-        init(onScan: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
-            self.onScan = onScan
-            self.onCancel = onCancel
-        }
-
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            guard scan.pageCount > 0 else { return onCancel() }
-            onScan(scan.imageOfPage(at: 0))
-        }
-
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            onCancel()
-        }
-
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-            onCancel()
-        }
-    }
-}
-
-/// The "New stamp earned!" pop-up.
-struct StampEarnedPopup: View {
-    let cuisine: Cuisine
-    let quest: Quest
-    let onViewPassport: () -> Void
-    let onDone: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Starts the stamping animation when the pop-up appears.
-    @State private var isStamped = false
-
-    var body: some View {
-        PopupCard {
-            ZStack {
-                Circle()
-                    .strokeBorder(Theme.orange, style: StrokeStyle(lineWidth: 3, dash: [7, 5]))
-                    .frame(width: 150, height: 150)
-                    .rotationEffect(.degrees(isStamped ? 0 : -40))
-
-                Circle()
-                    .fill(Theme.primaryGradient)
-                    .frame(width: 122, height: 122)
-                    .overlay {
-                        VStack(spacing: 6) {
-                            Image(systemName: cuisine.symbolName)
-                                .font(.title.weight(.bold))
-                                .symbolEffect(.bounce, value: reduceMotion ? false : isStamped)
-                            Text(cuisine.rawValue.uppercased())
-                                .font(.caption.weight(.heavy))
-                                .multilineTextAlignment(.center)
-                        }
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.6)
-                        .padding(10)
-                        // It's artwork with a fixed size, so its text stops growing at large sizes.
-                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-                    }
-                    .shadow(color: Theme.orange.opacity(0.4), radius: 12, y: 6)
-            }
-            .rotationEffect(.degrees(cuisine.stampTilt))
-            .scaleEffect(isStamped || reduceMotion ? 1 : 1.35)
-            .opacity(isStamped || reduceMotion ? 1 : 0)
-            .onAppear {
-                // With Reduce Motion on, the stamp just appears instead of spinning and bouncing in.
-                if reduceMotion {
-                    isStamped = true
-                } else {
-                    withAnimation(.spring(duration: 0.5, bounce: 0.45).delay(0.1)) {
-                        isStamped = true
-                    }
-                }
-            }
-            .sensoryFeedback(.success, trigger: isStamped)
-            .accessibilityHidden(true)
-
-            VStack(spacing: 6) {
-                Text("New stamp earned!")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.ink)
-                Text("Quest progress: \(quest.cuisinesTried) of \(quest.targetCuisines) cuisines")
-                    .foregroundStyle(.secondary)
-            }
-
-            ProgressBar(value: quest.cuisineProgress, tint: Theme.orange, label: "Quest progress")
-                .frame(maxWidth: 200)
-
-            VStack(spacing: 10) {
-                Button("View passport", action: onViewPassport)
-                    .buttonStyle(.brandPrimary)
-                Button("Done", action: onDone)
-                    .buttonStyle(.brandTinted)
-            }
-            .padding(.top, 4)
-        }
-    }
-}
-
 // Previews
 
 #Preview {
@@ -1435,25 +456,10 @@ struct StampEarnedPopup: View {
         .previewInNavigationStack()
 }
 
-#Preview {
-    MealCameraView(recognizer: MockMealRecognizer(), initialPhoto: UIImage(named: "dish_kottu")) { _, _ in }
-}
-
-#Preview {
-    let review = MealScanViewModel(recognizer: MockMealRecognizer())
-    Color.black
-        .sheet(isPresented: .constant(true)) {
-            MealRecognitionSheet(photo: nil, review: review, onConfirm: { _ in }, onEnterManually: {})
-                .task { await review.scan(UIImage(), menu: []) }
-        }
-}
-
-#Preview {
-    ReceiptScanView(scanner: MockReceiptScanner(), initialImage: UIImage(systemName: "doc.text")) { _ in }
-}
-
-#Preview {
-    StampEarnedPopup(cuisine: .sriLankan, quest: MockData.activeQuest, onViewPassport: {}, onDone: {})
-        .padding()
-        .background(Color.black.opacity(0.4))
+/// A meal photo on the form, with its fingerprint and anything that stops it proving the visit.
+struct MealPhoto: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let fingerprint: String?
+    let problem: PhotoProblem?
 }

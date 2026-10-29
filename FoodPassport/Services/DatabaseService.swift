@@ -2,7 +2,8 @@ import Foundation
 import FirebaseFirestore
 
 /// Reads and writes the student's data. AppState only uses this protocol, so it can run on Firestore or the mock.
-/// Firestore layout: restaurants/{id}, users/{userID}, users/{userID}/visits/{id}, users/{userID}/stamps/{cuisine}.
+/// Firestore layout: restaurants/{id}, trails/{id}, challenges/current, users/{userID},
+/// users/{userID}/visits/{id}, users/{userID}/stamps/{cuisine}, users/{userID}/plannedVisits/{id}.
 protocol DatabaseService {
     func fetchRestaurants() async throws -> [Restaurant]
 
@@ -24,11 +25,52 @@ protocol DatabaseService {
 
     func fetchQuest(userID: String) async throws -> QuestSettings?
     func saveQuest(_ quest: QuestSettings, userID: String) async throws
+
+    func fetchPlannedVisits(userID: String) async throws -> [PlannedVisit]
+    func savePlannedVisit(_ plan: PlannedVisit, userID: String) async throws
+    func deletePlannedVisit(id: PlannedVisit.ID, userID: String) async throws
+
+    /// Trails and the weekly challenge are set up by an administrator. Empty or nil means use the built-in ones.
+    func fetchTrails() async throws -> [TrailDocument]
+    func fetchWeeklyChallenge() async throws -> ChallengeDocument?
 }
 
 extension DatabaseService {
     func fetchQuest(userID: String) async throws -> QuestSettings? { nil }
     func saveQuest(_ quest: QuestSettings, userID: String) async throws {}
+    func fetchPlannedVisits(userID: String) async throws -> [PlannedVisit] { [] }
+    func savePlannedVisit(_ plan: PlannedVisit, userID: String) async throws {}
+    func deletePlannedVisit(id: PlannedVisit.ID, userID: String) async throws {}
+    func fetchTrails() async throws -> [TrailDocument] { [] }
+    func fetchWeeklyChallenge() async throws -> ChallengeDocument? { nil }
+}
+
+/// A food trail as saved in Firestore (trails/{id}). The stops are restaurant IDs, in walking order.
+struct TrailDocument: Codable, Hashable {
+    var id = ""
+    let name: String
+    let summary: String
+    let restaurantIDs: [Restaurant.ID]
+
+    // The ID is the document's name, not a field inside it.
+    enum CodingKeys: String, CodingKey { case name, summary, restaurantIDs }
+
+    /// The trail with its restaurants filled in. Stops for restaurants that no longer exist are skipped.
+    func trail(using restaurants: [Restaurant]) -> FoodTrail? {
+        let stops = restaurantIDs.compactMap { id in restaurants.first { $0.id == id } }
+        guard !stops.isEmpty else { return nil }
+        return FoodTrail(id: id, name: name, summary: summary, stops: stops.map { TrailStop(restaurant: $0, isVisited: false) })
+    }
+}
+
+/// This week's challenge as saved in Firestore (challenges/current): try `target` different cuisines.
+struct ChallengeDocument: Codable, Hashable {
+    let title: String
+    let details: String
+    let target: Int
+
+    static let standard = ChallengeDocument(title: "Try 3 cuisines this week",
+                                            details: "Log meals from three different cuisines.", target: 3)
 }
 
 /// The real database, Cloud Firestore. It keeps a copy on the phone, so it works offline too.
@@ -69,6 +111,41 @@ final class FirestoreDatabaseService: DatabaseService {
 
     func saveQuest(_ quest: QuestSettings, userID: String) async throws {
         try await userDocument(userID).collection("quests").document("active").setData(encoder.encode(quest))
+    }
+
+    // Planned visits
+
+    private func plannedVisitsCollection(_ userID: String) -> CollectionReference {
+        userDocument(userID).collection("plannedVisits")
+    }
+
+    func fetchPlannedVisits(userID: String) async throws -> [PlannedVisit] {
+        let snapshot = try await plannedVisitsCollection(userID).order(by: "date").getDocuments()
+        return try snapshot.documents.map { try $0.data(as: PlannedVisit.self) }
+    }
+
+    func savePlannedVisit(_ plan: PlannedVisit, userID: String) async throws {
+        try await plannedVisitsCollection(userID).document(plan.id).setData(encoder.encode(plan))
+    }
+
+    func deletePlannedVisit(id: PlannedVisit.ID, userID: String) async throws {
+        try await plannedVisitsCollection(userID).document(id).delete()
+    }
+
+    // Trails and challenges
+
+    func fetchTrails() async throws -> [TrailDocument] {
+        let snapshot = try await db.collection("trails").getDocuments()
+        return try snapshot.documents.map { document in
+            var trail = try document.data(as: TrailDocument.self)
+            trail.id = document.documentID
+            return trail
+        }
+    }
+
+    func fetchWeeklyChallenge() async throws -> ChallengeDocument? {
+        let document = try await db.collection("challenges").document("current").getDocument()
+        return document.exists ? try document.data(as: ChallengeDocument.self) : nil
     }
 
     // Profile
@@ -132,9 +209,20 @@ final class FirestoreDatabaseService: DatabaseService {
 /// It only holds one user, so `userID` is ignored.
 final class MockDatabaseService: DatabaseService {
     var quest: QuestSettings?
+    var plannedVisits: [PlannedVisit] = []
+    var trails: [TrailDocument] = []
+    var weeklyChallenge: ChallengeDocument?
 
     func fetchQuest(userID: String) async throws -> QuestSettings? { quest }
     func saveQuest(_ quest: QuestSettings, userID: String) async throws { self.quest = quest }
+    func fetchPlannedVisits(userID: String) async throws -> [PlannedVisit] { plannedVisits }
+    func savePlannedVisit(_ plan: PlannedVisit, userID: String) async throws {
+        plannedVisits.removeAll { $0.id == plan.id }
+        plannedVisits.append(plan)
+    }
+    func deletePlannedVisit(id: PlannedVisit.ID, userID: String) async throws { plannedVisits.removeAll { $0.id == id } }
+    func fetchTrails() async throws -> [TrailDocument] { trails }
+    func fetchWeeklyChallenge() async throws -> ChallengeDocument? { weeklyChallenge }
     var restaurants: [Restaurant]
     var profile: UserProfile?
     var visits: [Visit]

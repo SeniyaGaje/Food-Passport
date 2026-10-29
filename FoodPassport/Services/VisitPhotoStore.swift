@@ -6,14 +6,12 @@ enum VisitPhotoError: LocalizedError {
     case unreadable
     case signedOut
     case cancelled
-    case cloudUnavailable
 
     var errorDescription: String? {
         switch self {
         case .unreadable: "That meal photo couldn't be saved. Try another photo."
         case .signedOut: "Sign in again before saving your visit."
         case .cancelled: "This visit was cancelled because your data changed. Try again."
-        case .cloudUnavailable: "Couldn't upload your meal photos. Check your connection and try Save again. Your photos are still in this form."
         }
     }
 }
@@ -22,11 +20,15 @@ nonisolated protocol VisitPhotoStore: Sendable {
     func save(_ images: [UIImage], userID: String) async throws -> [String]
     func load(id: String, userID: String) async -> UIImage?
     func delete(ids: [String], userID: String) async
-    func retryPendingDeletions(userID: String) async
+    /// Uploads photos saved while offline and finishes deletions that failed.
+    func retryPendingWork(userID: String) async
+    /// True if any of these photos is saved on the phone but not uploaded yet.
+    func hasPendingUploads(ids: [String], userID: String) async -> Bool
 }
 
 extension VisitPhotoStore {
-    nonisolated func retryPendingDeletions(userID: String) async {}
+    nonisolated func retryPendingWork(userID: String) async {}
+    nonisolated func hasPendingUploads(ids: [String], userID: String) async -> Bool { false }
 }
 
 /// Photos stay in Application Support, separately for each signed-in account.

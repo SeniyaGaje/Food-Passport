@@ -73,12 +73,16 @@ struct ExploreView: View {
                 GeometryReader { space in
                     if space.size.width >= 680 && !dynamicTypeSize.isAccessibilitySize {
                         HStack(spacing: 0) {
-                            mapContent.frame(maxWidth: .infinity).accessibilityIdentifier("explore.map")
+                            mapCard.frame(maxWidth: .infinity)
+                                .padding(.leading, Theme.screenMargin)
+                                .padding(.bottom, Theme.Spacing.s)
+                                .accessibilityIdentifier("explore.map")
                             listContent.frame(width: max(300, space.size.width * 0.43)).accessibilityIdentifier("explore.list")
                         }
                     } else {
                         VStack(spacing: 8) {
-                            mapContent.frame(height: max(180, space.size.height * 0.45))
+                            mapCard.frame(height: max(180, space.size.height * 0.45))
+                                .padding(.horizontal, Theme.screenMargin)
                             listContent
                         }
                     }
@@ -170,6 +174,16 @@ struct ExploreView: View {
                     .padding(.bottom, 16)
             }
         }
+    }
+
+    /// On iPad the map sits in a rounded card, so it doesn't run under the see-through sidebar.
+    private var mapCard: some View {
+        mapContent
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .strokeBorder(Theme.cardBorder, lineWidth: 1)
+            }
     }
 
     private var listContent: some View {
