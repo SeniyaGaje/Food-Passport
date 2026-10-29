@@ -44,6 +44,25 @@ test('only the owner can save a valid quest', async () => {
   await assertSucceeds(deleteDoc(alice));
 });
 
+test('quests can be extended with a timestamp only', async () => {
+  const quest = { type: 'New cuisines', duration: 'This week', targetCuisines: 3, budget: 3000,
+    maxDistanceKm: 2, startedAt: Timestamp.now(), extendedUntil: Timestamp.now() };
+  const alice = doc(env.authenticatedContext('alice').firestore(), 'users/alice/quests/active');
+  await assertSucceeds(setDoc(alice, quest));
+  await assertFails(setDoc(alice, { ...quest, extendedUntil: 'next week' }));
+});
+
+test('planned visits: only the owner, with a valid estimate', async () => {
+  const plan = { id: 'plan-1', restaurantID: 'dragon-wok', date: Timestamp.now(), estimatedCost: 750, countsTowardsQuest: true };
+  const alice = doc(env.authenticatedContext('alice').firestore(), 'users/alice/plannedVisits/plan-1');
+  await assertSucceeds(setDoc(alice, plan));
+  await assertFails(setDoc(alice, { ...plan, estimatedCost: -5 }));
+  await assertFails(setDoc(alice, { ...plan, id: 'other' }));
+  await assertFails(setDoc(alice, { ...plan, extra: true }));
+  await assertFails(getDoc(doc(env.authenticatedContext('bob').firestore(), alice.path)));
+  await assertSucceeds(deleteDoc(alice));
+});
+
 test('push tokens: only their owner can register or read them', async () => {
   const token = { token: 'test-registration-token', platform: 'ios', updatedAt: Timestamp.now() };
   const path = 'users/alice/devices/test';

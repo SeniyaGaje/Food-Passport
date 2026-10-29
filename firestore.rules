@@ -30,7 +30,7 @@ service cloud.firestore {
       match /quests/{questId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
-          && request.resource.data.keys().hasOnly(['type', 'targetCuisines', 'budget', 'duration', 'maxDistanceKm', 'trailID', 'startedAt'])
+          && request.resource.data.keys().hasOnly(['type', 'targetCuisines', 'budget', 'duration', 'maxDistanceKm', 'trailID', 'startedAt', 'extendedUntil'])
           && request.resource.data.type in ['New cuisines', 'Food trail']
           && request.resource.data.duration in ['This week', 'This month']
           && request.resource.data.targetCuisines is int
@@ -40,7 +40,20 @@ service cloud.firestore {
           && request.resource.data.maxDistanceKm >= 0.5 && request.resource.data.maxDistanceKm <= 5
           && (!request.resource.data.keys().hasAny(['trailID']) || request.resource.data.trailID == null
             || request.resource.data.trailID is string)
-          && request.resource.data.startedAt is timestamp;
+          && request.resource.data.startedAt is timestamp
+          && (!request.resource.data.keys().hasAny(['extendedUntil'])
+            || request.resource.data.extendedUntil is timestamp);
+      }
+      // Plan visit: the place, when, the estimate at planning time and "Count towards my quest".
+      match /plannedVisits/{planId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['id', 'restaurantID', 'date', 'estimatedCost', 'countsTowardsQuest'])
+          && request.resource.data.id == planId
+          && request.resource.data.restaurantID is string && request.resource.data.restaurantID.size() > 0
+          && request.resource.data.date is timestamp
+          && request.resource.data.estimatedCost is int && request.resource.data.estimatedCost >= 0
+          && request.resource.data.countsTowardsQuest is bool;
       }
       match /trails/{trailId} { allow read, write: if isOwner(userId); }
       match /challenges/{challengeId} { allow read, write: if isOwner(userId); }
