@@ -6,6 +6,28 @@ import UIKit
 
 /// The app's shared data: who is signed in, their visits and stamps, and their settings.
 /// The services (Firebase, Face ID, notifications, location) are passed in, so tests can pass in mocks instead.
+/// The "Require Face ID" choices in Profile.
+enum FaceIDLockDelay: Int, CaseIterable, Identifiable {
+    case immediately = 0
+    case oneMinute = 1
+    case fiveMinutes = 5
+    case fifteenMinutes = 15
+    case oneHour = 60
+
+    var id: Int { rawValue }
+    var seconds: TimeInterval { TimeInterval(rawValue * 60) }
+
+    var label: String {
+        switch self {
+        case .immediately: "Immediately"
+        case .oneMinute: "After 1 minute"
+        case .fiveMinutes: "After 5 minutes"
+        case .fifteenMinutes: "After 15 minutes"
+        case .oneHour: "After 1 hour"
+        }
+    }
+}
+
 @Observable
 final class AppState {
     enum Stage {
@@ -61,6 +83,14 @@ final class AppState {
     private(set) var isFaceIDEnabled = false {
         didSet { settings.set(isFaceIDEnabled, forKey: SettingsKey.faceIDEnabled) }
     }
+    /// How long the app can be in the background before it asks for Face ID again.
+    private(set) var lockDelay: FaceIDLockDelay = .immediately {
+        didSet { settings.set(lockDelay.rawValue, forKey: SettingsKey.lockDelayMinutes) }
+    }
+    /// When the app last went to the background. Saved, so a fresh launch knows how long it's been.
+    private var backgroundedAt: Date? {
+        didSet { settings.set(backgroundedAt, forKey: SettingsKey.backgroundedAt) }
+    }
     private(set) var plannedVisitRemindersEnabled = false {
         didSet { settings.set(plannedVisitRemindersEnabled, forKey: SettingsKey.plannedVisitReminders) }
     }
@@ -76,6 +106,8 @@ final class AppState {
 
     private enum SettingsKey {
         static let faceIDEnabled = "faceIDEnabled"
+        static let lockDelayMinutes = "faceIDLockDelayMinutes"
+        static let backgroundedAt = "backgroundedAt"
         static let plannedVisitReminders = "plannedVisitRemindersEnabled"
         static let weeklyChallengeReminder = "weeklyChallengeReminderEnabled"
         static let weeklyReminderHour = "weeklyReminderHour"
@@ -119,6 +151,8 @@ final class AppState {
         self.widgets = widgets
 
         isFaceIDEnabled = settings.bool(forKey: SettingsKey.faceIDEnabled)
+        lockDelay = FaceIDLockDelay(rawValue: settings.integer(forKey: SettingsKey.lockDelayMinutes)) ?? .immediately
+        backgroundedAt = settings.object(forKey: SettingsKey.backgroundedAt) as? Date
         plannedVisitRemindersEnabled = settings.bool(forKey: SettingsKey.plannedVisitReminders)
         weeklyChallengeReminderEnabled = settings.bool(forKey: SettingsKey.weeklyChallengeReminder)
         weeklyReminderHour = settings.object(forKey: SettingsKey.weeklyReminderHour) as? Int ?? 9
@@ -252,7 +286,7 @@ final class AppState {
         let spent = visits.filter { month?.contains($0.date) == true }.map(\.amount).reduce(0, +)
         let quest = activeQuest
         let challenge = currentChallenge
-        var snapshot = WidgetSnapshot(isSignedIn: true, questTitle: hasActiveQuest ? quest.title : nil,
+        var snapshot = WidgetSnapshot(isSignedIn: true, hiddenAfter: widgetsHiddenAfter, questTitle: hasActiveQuest ? quest.title : nil,
             cuisinesTried: quest.cuisinesTried, targetCuisines: quest.targetCuisines,
             questUnit: quest.progressUnit,
             questEndsAt: questSettings?.endDate(), monthlyBudget: profile.monthlyBudget,
@@ -279,8 +313,10 @@ final class AppState {
         do {
             try await loadUserData(userID: userID)
             enterApp()
-            // Opening the app is like signing in again, so ask for Face ID first.
-            isLocked = isFaceIDEnabled
+            // Opening the app is like signing in again, so ask for Face ID first,
+            // unless it was only closed a moment ago (within the "Require Face ID" time).
+            isLocked = isFaceIDEnabled && lockTimeHasPassed(at: .now)
+            backgroundedAt = nil
             publishWidgets()
             await refreshReminders()
             startLocationServices()
@@ -506,7 +542,46 @@ final class AppState {
         }
     }
 
-    /// Locks the app when it goes to the background, if Face ID is on.
+    func setLockDelay(_ delay: FaceIDLockDelay) {
+        lockDelay = delay
+        publishWidgets()
+    }
+
+    /// The app went to the background: lock now, or note the time so it locks once the delay has passed.
+    func appDidEnterBackground(at now: Date = .now) {
+        guard stage == .main, isFaceIDEnabled, !isLocked else { return }
+        if lockDelay == .immediately {
+            lockIfNeeded()
+        } else {
+            backgroundedAt = now
+            // The widgets keep showing the passport until the app would lock.
+            publishWidgets()
+        }
+    }
+
+    /// The app is back on screen: lock it if it was away for longer than the delay.
+    func appDidBecomeActive(at now: Date = .now) {
+        guard backgroundedAt != nil else { return }
+        if lockTimeHasPassed(at: now) {
+            lockIfNeeded()
+        }
+        backgroundedAt = nil
+        if !isLocked { publishWidgets() }
+    }
+
+    /// True if there's no record of a short break, or the break was longer than the delay.
+    private func lockTimeHasPassed(at now: Date) -> Bool {
+        guard let backgroundedAt else { return true }
+        return now.timeIntervalSince(backgroundedAt) >= lockDelay.seconds
+    }
+
+    /// With Face ID on and the app in the background, when the widgets must hide the passport.
+    private var widgetsHiddenAfter: Date? {
+        guard isFaceIDEnabled, let backgroundedAt else { return nil }
+        return backgroundedAt.addingTimeInterval(lockDelay.seconds)
+    }
+
+    /// Locks the app straight away, if Face ID is on.
     func lockIfNeeded() {
         guard stage == .main, isFaceIDEnabled else { return }
         isLocked = true

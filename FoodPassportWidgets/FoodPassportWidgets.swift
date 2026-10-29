@@ -21,9 +21,13 @@ struct PassportProvider: TimelineProvider {
         let store = WidgetSnapshotStore()
         let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)) ?? now.addingTimeInterval(24 * 60 * 60)
         let nextRefresh = min(now.addingTimeInterval(30 * 60), nextDay)
-        let entry = PassportEntry(date: now, snapshot: store.read(at: now))
-        let rollover = PassportEntry(date: nextDay, snapshot: store.read(at: nextDay))
-        completion(Timeline(entries: [entry, rollover], policy: .after(nextRefresh)))
+        var dates = [now, nextDay]
+        // With Face ID on, hide the passport at the moment the app would lock.
+        if let hiddenAfter = store.read(at: now).hiddenAfter, hiddenAfter > now, hiddenAfter < nextDay {
+            dates.append(hiddenAfter)
+        }
+        let entries = dates.sorted().map { PassportEntry(date: $0, snapshot: store.read(at: $0)) }
+        completion(Timeline(entries: entries, policy: .after(nextRefresh)))
     }
 }
 
@@ -173,7 +177,7 @@ struct QuestWidgetView: View {
             accessoryRectangular
         default:
             if !snapshot.isSignedIn {
-                SignedOutView(message: "Sign in to see your quest.")
+                SignedOutView(message: "Open the app to see your quest.")
             } else if let title = snapshot.questTitle {
                 switch family {
                 case .systemSmall: small(title: title)
@@ -471,7 +475,7 @@ struct BudgetWidgetView: View {
             case .accessoryRectangular:
                 Text("Sign in to see your budget").font(.caption)
             default:
-                SignedOutView(message: "Sign in to see your budget.")
+                SignedOutView(message: "Open the app to see your budget.")
             }
         } else {
             switch family {
@@ -597,7 +601,7 @@ struct ChallengeWidgetView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         default:
             if !snapshot.isSignedIn {
-                SignedOutView(message: "Sign in to see this week's challenge.")
+                SignedOutView(message: "Open the app to see this week's challenge.")
             } else {
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 6) {

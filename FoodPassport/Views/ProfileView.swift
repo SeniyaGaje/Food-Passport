@@ -74,6 +74,23 @@ struct ProfileView: View {
                         isOn: asyncBinding(appState.isFaceIDEnabled, set: appState.setFaceIDEnabled)
                     )
 
+                    if appState.isFaceIDEnabled {
+                        SettingsDivider()
+                        Menu {
+                            Picker("Require \(appState.biometryKind.name)", selection: lockDelay) {
+                                ForEach(FaceIDLockDelay.allCases) { delay in
+                                    Text(delay.label).tag(delay)
+                                }
+                            }
+                        } label: {
+                            SettingsRow(systemImage: nil, title: "Require \(appState.biometryKind.name)", titleColor: .secondary) {
+                                SettingsValue(appState.lockDelay.label)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("How long the app can be closed before it asks again. Widgets show your passport until then.")
+                    }
+
                     SettingsDivider()
                     SettingsToggleRow(
                         systemImage: isDarkModeOn ? "moon.fill" : "sun.max.fill",
@@ -174,6 +191,10 @@ struct ProfileView: View {
 
     /// For switches that need to ask first (Face ID or notifications).
     /// The switch only stays on if AppState says yes.
+    private var lockDelay: Binding<FaceIDLockDelay> {
+        Binding(get: { appState.lockDelay }, set: { appState.setLockDelay($0) })
+    }
+
     private func asyncBinding(_ value: Bool, set: @escaping (Bool) async -> Void) -> Binding<Bool> {
         Binding(
             get: { value },

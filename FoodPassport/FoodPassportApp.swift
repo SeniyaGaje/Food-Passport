@@ -95,8 +95,11 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             appState.isAppActive = newPhase == .active
             if newPhase == .background {
-                appState.lockIfNeeded()
-            } else if newPhase == .active, appState.stage == .main, !appState.isLocked {
+                appState.appDidEnterBackground()
+            } else if newPhase == .active {
+                appState.appDidBecomeActive()
+            }
+            if newPhase == .active, appState.stage == .main, !appState.isLocked {
                 Task { await appState.refreshData() }
             }
             if newPhase == .active { openQuickLogIfRequested() }

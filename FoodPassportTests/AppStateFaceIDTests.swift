@@ -116,6 +116,71 @@ struct AppStateFaceIDTests {
         #expect(nextLaunch.appState.isLocked)
     }
 
+    @Test("With a 5 minute delay, a short break doesn't lock but a long one does")
+    func lockDelay() async throws {
+        let app = TestApp()
+        try await app.signIn()
+        await app.appState.setFaceIDEnabled(true)
+        app.appState.setLockDelay(.fiveMinutes)
+        let start = Date.now
+
+        app.appState.appDidEnterBackground(at: start)
+        #expect(!app.appState.isLocked)
+        app.appState.appDidBecomeActive(at: start.addingTimeInterval(60))
+        #expect(!app.appState.isLocked)
+
+        app.appState.appDidEnterBackground(at: start)
+        app.appState.appDidBecomeActive(at: start.addingTimeInterval(6 * 60))
+        #expect(app.appState.isLocked)
+    }
+
+    @Test("\"Immediately\" locks as soon as the app goes to the background")
+    func lockImmediately() async throws {
+        let app = TestApp()
+        try await app.signIn()
+        await app.appState.setFaceIDEnabled(true)
+
+        app.appState.appDidEnterBackground()
+
+        #expect(app.appState.isLocked)
+    }
+
+    @Test("Widgets keep the passport until the delay ends, then hide it")
+    func widgetsHideAfterDelay() async throws {
+        let publisher = RecordingWidgetPublisher()
+        let app = TestApp(widgets: publisher)
+        try await app.signIn()
+        await app.appState.setFaceIDEnabled(true)
+        app.appState.setLockDelay(.fifteenMinutes)
+        let start = Date.now
+
+        app.appState.appDidEnterBackground(at: start)
+
+        let snapshot = publisher.latest
+        #expect(snapshot.isSignedIn)
+        #expect(snapshot.hiddenAfter == start.addingTimeInterval(15 * 60))
+        #expect(snapshot.current(at: start.addingTimeInterval(60)).isSignedIn)
+        #expect(!snapshot.current(at: start.addingTimeInterval(16 * 60)).isSignedIn)
+    }
+
+    @Test("Reopening soon after closing skips Face ID, but not after the delay")
+    func relaunchWithinDelay() async throws {
+        let firstLaunch = TestApp(signedIn: true)
+        await firstLaunch.appState.restoreSession()
+        await firstLaunch.appState.setFaceIDEnabled(true)
+        firstLaunch.appState.setLockDelay(.fiveMinutes)
+        firstLaunch.appState.appDidEnterBackground()
+
+        let soon = TestApp(signedIn: true, relaunching: firstLaunch)
+        await soon.appState.restoreSession()
+        #expect(!soon.appState.isLocked)
+
+        soon.appState.appDidEnterBackground(at: .now.addingTimeInterval(-10 * 60))
+        let later = TestApp(signedIn: true, relaunching: soon)
+        await later.appState.restoreSession()
+        #expect(later.appState.isLocked)
+    }
+
     @Test("Labels follow the sensor on the phone, e.g. Touch ID")
     func touchIDPhone() {
         let app = TestApp(biometry: .touchID)

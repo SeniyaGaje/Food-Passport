@@ -3,6 +3,8 @@ import Foundation
 /// Only the values a widget needs. No email, photos or Firebase credentials.
 nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     var isSignedIn = false
+    /// With Face ID on, the passport is hidden from this time (when the app would ask for Face ID again).
+    var hiddenAfter: Date?
     var questTitle: String?
     var cuisinesTried = 0
     var targetCuisines = 0
@@ -27,6 +29,7 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     }
 
     func current(at date: Date) -> WidgetSnapshot {
+        if let hiddenAfter, date >= hiddenAfter { return WidgetSnapshot() }
         var value = self
         if budgetMonth != Self.monthKey(for: date) { value.monthlySpent = 0 }
         if let questEndsAt, date >= questEndsAt { value.questTitle = nil }
