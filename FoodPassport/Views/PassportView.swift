@@ -301,6 +301,11 @@ struct PlanStopRow: View {
                 Text("\(stop.restaurant.cuisine.rawValue) · \(stop.restaurant.distanceText)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let planned = stop.plannedFor {
+                    Label("Planned \(planned.formatted(.dateTime.weekday(.abbreviated).hour().minute()))", systemImage: "calendar")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.orangeText)
+                }
                 if !stop.fitsBudget {
                     Text("Over budget – optional")
                         .font(.footnote.weight(.semibold))

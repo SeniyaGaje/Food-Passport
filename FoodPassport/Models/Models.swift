@@ -37,8 +37,11 @@ struct Restaurant: Identifiable, Hashable, Codable {
     let longitude: Double
     let imageName: String
     let routeSummary: String
+    /// Older restaurant documents only have this text, e.g. "2 weeks ago".
     let pricesUpdated: String
     let popularDishes: [Dish]
+    /// When the menu prices were last checked. Newer documents have this instead of guessing from text.
+    var pricesCheckedOn: Date? = nil
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -69,6 +72,14 @@ extension Restaurant {
     var priceRangeText: String {
         "LKR \(priceRange.lowerBound.formatted())–\(priceRange.upperBound.formatted())"
     }
+
+    /// e.g. "Prices checked 12 Oct 2026", or the older text if there's no date.
+    var pricesUpdatedText: String {
+        if let pricesCheckedOn {
+            return "Prices checked \(pricesCheckedOn.formatted(date: .abbreviated, time: .omitted))"
+        }
+        return "Prices last updated \(pricesUpdated)"
+    }
 }
 
 /// A logged meal. Saved in Firestore under users/{userID}/visits/{id}.
@@ -90,6 +101,8 @@ struct Visit: Identifiable, Hashable, Codable {
     var items: [VisitItem]? = nil
     /// Photo IDs work with the local cache and the account's Firebase Storage folder.
     var photoIDs: [String]? = nil
+    /// A fingerprint of each meal photo (see PhotoCheck), so the same photo can't verify another visit.
+    var photoFingerprints: [String]? = nil
 
     /// The visit's items. Older visits get one item made from their dish name and amount.
     var allItems: [VisitItem] {
@@ -128,6 +141,8 @@ struct VisitItemDraft: Identifiable, Equatable {
     var cuisine: Cuisine? = nil
     var category: String? = nil
     var isDrink: Bool? = nil
+    /// True if the meal scanner named this item and the student hasn't renamed it.
+    var isFromScan = false
 
     /// The price as a number, ignoring "LKR" and commas.
     var price: Int? {
@@ -294,10 +309,18 @@ struct QuestSettings: Codable, Equatable {
     var maxDistanceKm = 2.0
     var trailID: String? = nil
     var startedAt: Date = .now
+    /// Set by "Extend deadline". Otherwise the quest ends with the week or month it started in.
+    var extendedUntil: Date? = nil
 
     func endDate(calendar: Calendar = .current) -> Date {
+        if let extendedUntil { return extendedUntil }
         let component: Calendar.Component = duration == .thisWeek ? .weekOfYear : .month
         return calendar.dateInterval(of: component, for: startedAt)?.end ?? startedAt
+    }
+
+    /// Visits in this window count towards the quest.
+    func contains(_ date: Date, calendar: Calendar = .current) -> Bool {
+        date >= startedAt && date < endDate(calendar: calendar)
     }
 }
 
@@ -307,6 +330,19 @@ struct PlannedStop: Identifiable, Hashable {
     let restaurant: Restaurant
     let estimatedCost: Int
     var fitsBudget = true
+    /// When the student planned to go, if they used Plan visit.
+    var plannedFor: Date? = nil
+}
+
+/// A visit planned on a restaurant's page. Saved in Firestore under users/{userID}/plannedVisits/{id}.
+/// The estimate is saved too, so after the meal we can compare it with what was really paid.
+struct PlannedVisit: Identifiable, Hashable, Codable {
+    var id = UUID().uuidString
+    let restaurantID: Restaurant.ID
+    let date: Date
+    let estimatedCost: Int
+    /// "Count towards my quest": the place is put at the top of the quest plan.
+    let countsTowardsQuest: Bool
 }
 
 struct Quest: Hashable {
@@ -338,14 +374,20 @@ struct Quest: Hashable {
     }
 }
 
-/// How the quest plan changed after a meal cost more than expected.
+/// Shown after a meal that counts towards the quest: what it cost against the estimate,
+/// and how the plan changed because of it.
 struct BudgetUpdate: Hashable {
+    let restaurantName: String
     let actualCost: Int
     let estimatedCost: Int
-    let removedStop: PlannedStop
-    let replacementStop: PlannedStop
+    let remainingBudget: Int
+    /// A place that was in the plan but no longer fits.
+    var removedStop: PlannedStop? = nil
+    /// The cheaper place that took its spot, if there is one.
+    var replacementStop: PlannedStop? = nil
 
-    var overspend: Int { actualCost - estimatedCost }
+    /// More than 0 if the meal cost more than expected, less than 0 if it cost less.
+    var difference: Int { actualCost - estimatedCost }
 }
 
 enum TrailStopStatus {
@@ -426,16 +468,23 @@ enum DashboardPeriod: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-struct DailySpending: Identifiable, Hashable {
-    var id: String { day }
-    let day: String
+/// One bar in the spending chart: a day, a week of a month, or a month.
+struct SpendingBar: Identifiable, Hashable {
+    var id: Date { start }
+    let start: Date
+    /// e.g. "Monday", "8–14 Oct" or "October", read out by VoiceOver.
+    let label: String
+    /// e.g. "M", "8–14" or "Oct", under the bar.
+    let shortLabel: String
     let amount: Int
     var isHighlighted = false
 }
 
+/// How much went on one cuisine, e.g. Sri Lankan, LKR 1,800, 60%.
 struct CuisineShare: Identifiable, Hashable {
     var id: Cuisine { cuisine }
     let cuisine: Cuisine
+    var amount = 0
     let percentage: Int
 }
 

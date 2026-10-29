@@ -115,9 +115,12 @@ struct ModelTests {
         #expect(quest.budgetProgress > 1)
     }
 
-    @Test("A budget update reports how much more the meal cost than estimated")
-    func budgetUpdateOverspend() {
-        #expect(MockData.latestBudgetUpdate.overspend == 300)
+    @Test("A budget update reports how much more (or less) the meal cost than estimated")
+    func budgetUpdateDifference() {
+        #expect(MockData.latestBudgetUpdate.difference == 300)
+        let cheaper = BudgetUpdate(restaurantName: "Dragon Wok", actualCost: 600, estimatedCost: 750, remainingBudget: 900)
+        #expect(cheaper.difference == -150)
+        #expect(cheaper.removedStop == nil)
     }
 
     // Trails and challenges

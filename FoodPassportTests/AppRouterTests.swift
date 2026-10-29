@@ -116,7 +116,7 @@ struct AppRouterTests {
         router.tabPaths[.history] = [.about]
         router.onboardingPath = [.signIn]
         router.sheet = .monthlyBudget
-        router.present(.budgetUpdate)
+        router.present(.budgetUpdate(MockData.latestBudgetUpdate))
 
         router.reset()
 

@@ -58,7 +58,7 @@ struct MultiDeviceTests {
         try await app.signIn()
         let started = Date.now.addingTimeInterval(-60)
         app.appState.saveQuest(QuestSettings(targetCuisines: 2, budget: 1200, startedAt: started))
-        app.appState.addVisit(makeVisit(amount: 800, date: started.addingTimeInterval(-1)))
+        app.appState.addVisit(makeVisit(cuisine: .italian, amount: 800, date: started.addingTimeInterval(-1)))
         app.appState.addVisit(makeVisit(amount: 400))
         await app.appState.waitForPendingWrites()
         #expect(app.appState.activeQuest.spent == 400)

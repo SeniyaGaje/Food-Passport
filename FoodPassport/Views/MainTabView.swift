@@ -51,6 +51,12 @@ struct MainTabView: View {
             appState.notificationDestination = nil
             open(destination)
         }
+        // The widgets' "Log visit" button: log at the restaurant the student is at, or let them pick one.
+        .onChange(of: router.wantsQuickLog, initial: true) { _, wantsQuickLog in
+            guard wantsQuickLog else { return }
+            router.wantsQuickLog = false
+            startQuickLog()
+        }
         // The student arrived at a restaurant while the app is open: show the banner.
         .onChange(of: appState.arrivedRestaurant) { _, restaurant in
             guard let restaurant else { return }
@@ -74,6 +80,18 @@ struct MainTabView: View {
         NavigationStack(path: router.path(for: tab)) {
             rootView(for: tab)
                 .navigationDestination(for: AppRoute.self) { AppRouteDestination(route: $0) }
+        }
+    }
+
+    private func startQuickLog() {
+        appState.refreshLocation()
+        if let restaurant = appState.restaurantHere {
+            router.tabPaths[.explore] = [.placeDetail(restaurant), .logVisit(restaurant)]
+            router.selectedTab = .explore
+        } else {
+            router.tabPaths[.explore] = []
+            router.selectedTab = .explore
+            router.showToast("Pick the place you're eating at, then tap Log visit")
         }
     }
 
@@ -128,6 +146,8 @@ struct AppRouteDestination: View {
             WeeklyChallengeView(challenge: appState.currentChallenge)
         case .visitDetail(let visit):
             VisitDetailView(visit: visit)
+        case .spendingOverview(let period):
+            SpendingOverviewView(period: period)
         case .about:
             AboutView()
         }
@@ -152,6 +172,7 @@ struct AppSheetContent: View {
 
 /// Shows the current pop-up in the middle of a dimmed screen.
 struct PopupHost: View {
+    @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -164,6 +185,8 @@ struct PopupHost: View {
                     .accessibilityHidden(true)
 
                 popupContent(popup)
+                    // Pop-ups stay phone-sized on iPad instead of stretching across the screen.
+                    .frame(maxWidth: 440)
                     .padding(.horizontal, 28)
                     // Zooms in, or just fades in with Reduce Motion on.
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
@@ -180,19 +203,19 @@ struct PopupHost: View {
         case .stampEarned(let cuisine):
             StampEarnedPopup(
                 cuisine: cuisine,
-                quest: MockData.activeQuest,
+                quest: appState.hasActiveQuest ? appState.activeQuest : nil,
                 onViewPassport: {
                     router.dismissPopup()
                     router.closeVisitLoggingScreens()
                     router.selectedTab = .passport
                 },
                 onDone: {
-                    router.finishStampCelebration(for: cuisine)
+                    router.finishStampCelebration(for: cuisine, budgetUpdate: appState.lastBudgetUpdate)
                 }
             )
-        case .budgetUpdate:
+        case .budgetUpdate(let update):
             BudgetUpdatePopup(
-                update: MockData.latestBudgetUpdate,
+                update: update,
                 onSeeUpdatedPlan: {
                     router.dismissPopup()
                     router.open(.questDetail, in: .passport)
@@ -204,14 +227,18 @@ struct PopupHost: View {
             )
         case .budgetLimit:
             BudgetLimitPopup(
-                quest: MockData.activeQuest,
+                quest: appState.activeQuest,
                 onIncreaseBudget: {
                     router.dismissPopup()
-                    router.sheet = .editQuest
+                    if let budget = appState.increaseQuestBudgetToFitPlan() {
+                        router.showToast("Quest budget raised to \(budget.lkr)")
+                    }
                 },
                 onExtendDeadline: {
                     router.dismissPopup()
-                    router.sheet = .editQuest
+                    if let end = appState.extendQuestDeadline() {
+                        router.showToast("Quest now ends \(end.formatted(.dateTime.weekday(.abbreviated).day().month()))")
+                    }
                 },
                 onKeepAsIs: {
                     router.dismissPopup()

@@ -28,7 +28,8 @@ enum MockData {
             Dish(name: "Rice & Curry", price: 450),
             Dish(name: "String Hoppers", price: 400),
             Dish(name: "Lamprais", price: 650),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 14, hour: 9)
     )
 
     static let spiceRoute = Restaurant(
@@ -48,7 +49,8 @@ enum MockData {
             Dish(name: "Butter Chicken", price: 850),
             Dish(name: "Chicken Biryani", price: 950),
             Dish(name: "Garlic Naan", price: 250),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 7, hour: 9)
     )
 
     static let dragonWok = Restaurant(
@@ -68,7 +70,8 @@ enum MockData {
             Dish(name: "Devilled Chicken", price: 900),
             Dish(name: "Chop Suey", price: 400),
             Dish(name: "Noodles", price: 650),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 3, hour: 9)
     )
 
     static let hoppersHut = Restaurant(
@@ -88,7 +91,8 @@ enum MockData {
             Dish(name: "Plain Hoppers (3)", price: 150),
             Dish(name: "String Hoppers", price: 400),
             Dish(name: "Pol Roti", price: 120),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 7, hour: 9)
     )
 
     static let pastaCorner = Restaurant(
@@ -108,7 +112,8 @@ enum MockData {
             Dish(name: "Margherita Pizza", price: 1400),
             Dish(name: "Penne Arrabbiata", price: 1050),
             Dish(name: "Garlic Bread", price: 450),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 14, hour: 9)
     )
 
     /// The NIBM canteen, so arrival alerts and verified visits can be shown live on campus.
@@ -131,7 +136,8 @@ enum MockData {
             Dish(name: "Chicken Kottu", price: 600),
             Dish(name: "Fried Rice", price: 550),
             Dish(name: "Egg Roti", price: 200),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 2, hour: 9)
     )
 
     /// A tea kade on Chakkindarama Road, Ratmalana, so arrival alerts and verified visits can be tried there.
@@ -157,7 +163,8 @@ enum MockData {
             Dish(name: "Egg Roti", price: 200),
             Dish(name: "Vadai", price: 80),
             Dish(name: "String Hoppers", price: 350),
-        ]
+        ],
+        pricesCheckedOn: date(daysAgo: 2, hour: 9)
     )
 
     static let restaurants = [campusBites, spiceRoute, dragonWok, hoppersHut, pastaCorner, nibmCanteen, ratmalanaTeaKade]
@@ -256,9 +263,12 @@ enum MockData {
         planExplanation: "Dragon Wok fits your remaining LKR 800 and is a cuisine you haven't tried yet."
     )
 
+    /// The proposal's example: a meal cost LKR 300 more than planned, so Pasta Corner no longer fits.
     static let latestBudgetUpdate = BudgetUpdate(
+        restaurantName: "Spice Route",
         actualCost: 950,
         estimatedCost: 650,
+        remainingBudget: 800,
         removedStop: PlannedStop(restaurant: pastaCorner, estimatedCost: 1200, fitsBudget: false),
         replacementStop: PlannedStop(restaurant: dragonWok, estimatedCost: 750)
     )
@@ -301,20 +311,10 @@ enum MockData {
 
     // Dashboard
 
-    static let weeklySpending: [DailySpending] = [
-        DailySpending(day: "Mon", amount: 250),
-        DailySpending(day: "Tue", amount: 400),
-        DailySpending(day: "Wed", amount: 180),
-        DailySpending(day: "Thu", amount: 650),
-        DailySpending(day: "Fri", amount: 950, isHighlighted: true),
-        DailySpending(day: "Sat", amount: 520),
-        DailySpending(day: "Sun", amount: 800),
-    ]
-
-    static let cuisineShares: [CuisineShare] = [
-        CuisineShare(cuisine: .sriLankan, percentage: 67),
-        CuisineShare(cuisine: .indian, percentage: 33),
-    ]
+    /// The sample visits as a dashboard, for previews.
+    static var spendingSummary: SpendingSummary {
+        SpendingSummary(visits: visits, period: .thisMonth, monthlyBudget: profile.monthlyBudget)
+    }
 
     // Scanning (fake results for previews)
 

@@ -320,9 +320,10 @@ struct BudgetSetupView: View {
                     CurrencyField(amount: $budget)
                 }
 
-                Label("You can change this anytime in Profile.", systemImage: "info.circle")
+                Label("We'll start you on a quest to try 3 new cuisines this month with this budget. You can change both anytime.", systemImage: "flag.checkered")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, Theme.Spacing.xl)
             .padding(.vertical, Theme.Spacing.xs)
@@ -332,6 +333,7 @@ struct BudgetSetupView: View {
         .safeAreaInset(edge: .bottom) {
             Button {
                 appState.updateMonthlyBudget(budget)
+                appState.startFirstQuestIfNeeded(budget: budget)
                 router.reset()
                 appState.enterApp()
             } label: {

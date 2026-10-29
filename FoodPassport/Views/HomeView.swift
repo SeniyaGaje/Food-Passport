@@ -10,35 +10,9 @@ struct HomeView: View {
 
     private var quest: Quest { appState.activeQuest }
 
-    private var periodVisits: [Visit] {
-        let calendar = Calendar.current
-        let interval: DateInterval?
-        switch period {
-        case .thisWeek: interval = calendar.dateInterval(of: .weekOfYear, for: .now)
-        case .thisMonth: interval = calendar.dateInterval(of: .month, for: .now)
-        case .lastMonth:
-            let previous = calendar.date(byAdding: .month, value: -1, to: .now) ?? .now
-            interval = calendar.dateInterval(of: .month, for: previous)
-        case .allTime: interval = nil
-        }
-        return appState.visits.filter { interval?.contains($0.date) ?? true }
-    }
-
-    private var weeklySpending: [DailySpending] {
-        let calendar = Calendar.current
-        return (-6...0).map { offset in
-            let date = calendar.date(byAdding: .day, value: offset, to: .now) ?? .now
-            let amount = periodVisits.filter { calendar.isDate($0.date, inSameDayAs: date) }.map(\.amount).reduce(0, +)
-            return DailySpending(day: date.formatted(.dateTime.weekday(.wide)), amount: amount, isHighlighted: offset == 0)
-        }
-    }
-
-    private var cuisineShares: [CuisineShare] {
-        let groups = Dictionary(grouping: periodVisits, by: \.cuisine)
-        return Cuisine.allCases.compactMap { cuisine in
-            guard let meals = groups[cuisine] else { return nil }
-            return CuisineShare(cuisine: cuisine, percentage: Int((Double(meals.count) / Double(max(1, periodVisits.count)) * 100).rounded()))
-        }
+    /// Totals, chart bars and breakdowns for the chosen period.
+    private var summary: SpendingSummary {
+        SpendingSummary(visits: appState.visits, period: period, monthlyBudget: appState.profile.monthlyBudget)
     }
 
     /// "Good evening, John", depending on the time of day.
@@ -54,18 +28,19 @@ struct HomeView: View {
     }
 
     var body: some View {
+        let summary = summary
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     ScreenHeader("Your overview", subtitle: greeting) {
                         ProfileAvatarButton()
                     }
-                    periodMenu
+                    DashboardPeriodMenu(period: $period)
                 }
 
                 AdaptiveStack(spacing: Theme.Spacing.s) {
-                    StatTile(value: "\(periodVisits.count)", label: "Visits", systemImage: "fork.knife")
-                    StatTile(value: "\(Set(periodVisits.map(\.cuisine)).count)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
+                    StatTile(value: "\(summary.visits.count)", label: "Visits", systemImage: "fork.knife")
+                    StatTile(value: "\(Set(summary.visits.map(\.cuisine)).count)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
                     StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
@@ -74,17 +49,23 @@ struct HomeView: View {
                     QuestSummaryCard(quest: quest)
                 }
                 .buttonStyle(.pressableCard)
+                .accessibilityIdentifier("home.quest")
                 } else {
                     NoQuestCard()
                 }
 
-                WeeklySpendingCard(entries: weeklySpending)
+                NavigationLink(value: AppRoute.spendingOverview(period)) {
+                    SpendingChartCard(summary: summary, showsChevron: true)
+                }
+                .buttonStyle(.pressableCard)
+                .accessibilityHint("Opens your spending overview")
+                .accessibilityIdentifier("home.spending")
 
-                if cuisineShares.isEmpty {
+                if summary.byCuisine.isEmpty {
                     EmptyStateView(systemImage: "chart.pie", title: "No meals in this period",
                         message: "Choose another period or log a meal to see your cuisine breakdown.")
                 } else {
-                    CuisineBreakdownCard(shares: cuisineShares)
+                    CuisineBreakdownCard(shares: summary.byCuisine)
                 }
 
                 RecentActivitySection(visits: Array(appState.visits.prefix(3))) {
@@ -101,8 +82,13 @@ struct HomeView: View {
         .navigationTitleHidden("Home")
         .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
     }
+}
 
-    private var periodMenu: some View {
+/// The "This month ▾" button that picks the dashboard's period.
+struct DashboardPeriodMenu: View {
+    @Binding var period: DashboardPeriod
+
+    var body: some View {
         Menu {
             Picker("Period", selection: $period) {
                 ForEach(DashboardPeriod.allCases) { period in
@@ -203,66 +189,90 @@ struct QuestSummaryCard: View {
     }
 }
 
-struct WeeklySpendingCard: View {
-    let entries: [DailySpending]
+/// The spending bar chart. Its bars follow the period: days this week, weeks of a month, or months.
+struct SpendingChartCard: View {
+    let summary: SpendingSummary
+    var showsChevron = false
 
-    private var highlightedDay: String? {
-        entries.first(where: \.isHighlighted)?.day
-    }
-
-    private var total: Int {
-        entries.map(\.amount).reduce(0, +)
-    }
+    private var bars: [SpendingBar] { summary.bars }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
-                SectionCaption("Weekly spending")
+                SectionCaption(summary.chartTitle)
                 Spacer()
-                Text(total.lkr)
+                Text(summary.total.lkr)
                     .font(.headline)
                     .monospacedDigit()
                     .foregroundStyle(Theme.ink)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
 
-            Chart(entries) { entry in
+            Chart(bars) { bar in
                 BarMark(
-                    x: .value("Day", entry.day),
-                    y: .value("Spent", entry.amount),
+                    x: .value("Period", bar.shortLabel),
+                    y: .value("Spent", bar.amount),
                     width: .ratio(0.55)
                 )
                 // AnyShapeStyle lets one line choose between a gradient and a plain colour.
-                .foregroundStyle(entry.isHighlighted ? AnyShapeStyle(Theme.primaryGradient) : AnyShapeStyle(Theme.track))
+                .foregroundStyle(bar.isHighlighted ? AnyShapeStyle(Theme.primaryGradient) : AnyShapeStyle(Theme.track))
                 .cornerRadius(8)
-                .accessibilityLabel(entry.day)
-                .accessibilityValue(entry.amount.lkr)
+                .accessibilityLabel(bar.label)
+                .accessibilityValue(bar.amount.lkr)
             }
             .chartYAxis(.hidden)
             .chartXAxis {
                 AxisMarks { value in
                     AxisValueLabel {
-                        if let day = value.as(String.self) {
-                            Text(String(day.prefix(1)))
-                                .font(.subheadline)
-                                .fontWeight(day == highlightedDay ? .bold : .regular)
-                                .foregroundStyle(day == highlightedDay ? Theme.orangeText : Color.secondary)
+                        if let label = value.as(String.self) {
+                            let isHighlighted = bars.first { $0.shortLabel == label }?.isHighlighted == true
+                            Text(label)
+                                .font(bars.count > 7 ? .caption2 : .subheadline)
+                                .fontWeight(isHighlighted ? .bold : .regular)
+                                .foregroundStyle(isHighlighted ? Theme.orangeText : Color.secondary)
                         }
                     }
                 }
             }
             .frame(height: 150)
-            .accessibilityLabel("Weekly spending chart")
+            .accessibilityLabel(summary.chartTitle)
+            // VoiceOver's Audio Graph plays the bars as tones and reads a summary.
+            .accessibilityChartDescriptor(SpendingChartDescriptor(title: summary.chartTitle, bars: bars))
         }
         .cardStyle(padding: 20)
     }
 }
 
+/// Describes the spending chart for VoiceOver's Audio Graphs.
+struct SpendingChartDescriptor: AXChartDescriptorRepresentable {
+    let title: String
+    let bars: [SpendingBar]
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let highest = bars.max { $0.amount < $1.amount }
+        let total = bars.map(\.amount).reduce(0, +)
+        let summary = highest.map { total > 0 ? "\(total.lkr) in total. Most was \($0.amount.lkr) in \($0.label)." : "Nothing spent yet." } ?? ""
+        let xAxis = AXCategoricalDataAxisDescriptor(title: "Period", categoryOrder: bars.map(\.label))
+        let yAxis = AXNumericDataAxisDescriptor(title: "Spent", range: 0...Double(max(highest?.amount ?? 0, 1)),
+                                                gridlinePositions: []) { Int($0).lkr }
+        let series = AXDataSeriesDescriptor(name: "Spending", isContinuous: false,
+                                            dataPoints: bars.map { AXDataPoint(x: $0.label, y: Double($0.amount)) })
+        return AXChartDescriptor(title: title, summary: summary, xAxis: xAxis, yAxis: yAxis,
+                                 additionalAxes: [], series: [series])
+    }
+}
+
+/// What share of the money went on each cuisine, as a donut chart with a legend.
 struct CuisineBreakdownCard: View {
     let shares: [CuisineShare]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionCaption("Cuisines explored")
+            SectionCaption("Spending by cuisine")
 
             // Side by side if there's room, otherwise one above the other.
             ViewThatFits(in: .horizontal) {
@@ -285,17 +295,18 @@ struct CuisineBreakdownCard: View {
     private var donut: some View {
         Chart(shares) { share in
             SectorMark(
-                angle: .value("Share", share.percentage),
+                angle: .value("Spent", max(share.amount, 1)),
                 innerRadius: .ratio(0.62),
                 angularInset: 2
             )
             .foregroundStyle(color(for: share))
             .cornerRadius(4)
             .accessibilityLabel(share.cuisine.rawValue)
-            .accessibilityValue("\(share.percentage) percent")
+            .accessibilityValue("\(share.amount.lkr), \(share.percentage) percent")
         }
         .frame(width: 120, height: 120)
-        .accessibilityLabel("Cuisines explored chart")
+        .accessibilityLabel("Spending by cuisine chart")
+        .accessibilityChartDescriptor(CuisineChartDescriptor(shares: shares))
         .overlay {
             VStack(spacing: 0) {
                 Text("\(shares.count)")
@@ -319,7 +330,7 @@ struct CuisineBreakdownCard: View {
                     Text(share.cuisine.rawValue)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Theme.ink)
-                    Text(verbatim: "\(share.percentage)%")
+                    Text(verbatim: "\(share.percentage)% · \(share.amount.lkr)")
                         .font(.subheadline)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -334,6 +345,22 @@ struct CuisineBreakdownCard: View {
     private func color(for share: CuisineShare) -> Color {
         let index = shares.firstIndex(of: share) ?? 0
         return Theme.chartPalette[index % Theme.chartPalette.count]
+    }
+}
+
+/// Describes the cuisine chart for VoiceOver's Audio Graphs.
+struct CuisineChartDescriptor: AXChartDescriptorRepresentable {
+    let shares: [CuisineShare]
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let top = shares.first.map { "Most went on \($0.cuisine.rawValue): \($0.amount.lkr), \($0.percentage) percent." } ?? ""
+        let xAxis = AXCategoricalDataAxisDescriptor(title: "Cuisine", categoryOrder: shares.map(\.cuisine.rawValue))
+        let yAxis = AXNumericDataAxisDescriptor(title: "Spent", range: 0...Double(max(shares.map(\.amount).max() ?? 0, 1)),
+                                                gridlinePositions: []) { Int($0).lkr }
+        let series = AXDataSeriesDescriptor(name: "Spending by cuisine", isContinuous: false,
+                                            dataPoints: shares.map { AXDataPoint(x: $0.cuisine.rawValue, y: Double($0.amount)) })
+        return AXChartDescriptor(title: "Spending by cuisine", summary: top, xAxis: xAxis, yAxis: yAxis,
+                                 additionalAxes: [], series: [series])
     }
 }
 
@@ -376,13 +403,13 @@ struct RecentActivitySection: View {
 }
 
 #Preview {
-    WeeklySpendingCard(entries: MockData.weeklySpending)
+    SpendingChartCard(summary: MockData.spendingSummary)
         .padding()
         .appBackground()
 }
 
 #Preview {
-    CuisineBreakdownCard(shares: MockData.cuisineShares)
+    CuisineBreakdownCard(shares: MockData.spendingSummary.byCuisine)
         .padding()
         .appBackground()
 }

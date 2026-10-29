@@ -33,6 +33,33 @@ enum Geofence {
     static let verificationRadius: CLLocationDistance = 150
     /// iOS lets an app watch at most 20 areas at a time.
     static let maxMonitoredRestaurants = 20
+    /// A GPS fix rougher than this can't prove which restaurant the student is in.
+    static let maxAccuracy: CLLocationAccuracy = 100
+    /// A fix older than two minutes may be from before the student left.
+    static let maxLocationAge: TimeInterval = 2 * 60
+}
+
+/// The result of checking the student's location against a restaurant.
+enum LocationCheck: Equatable {
+    case verified
+    case tooFar
+    /// The last fix is too old to trust.
+    case outOfDate
+    /// The fix is too rough (e.g. indoors with weak GPS).
+    case inaccurate
+    /// No location yet, or location is off.
+    case unknown
+
+    /// Shown on Log your visit when the visit can't be verified.
+    var message: String {
+        switch self {
+        case .verified: "Location verified"
+        case .tooFar: "Not at this restaurant"
+        case .outOfDate: "Checking your location…"
+        case .inaccurate: "GPS signal too weak to verify"
+        case .unknown: "Location unknown"
+        }
+    }
 }
 
 /// Finds the student's location and watches for them arriving at restaurants.
@@ -57,6 +84,8 @@ protocol LocationService: AnyObject {
 
     func startUpdatingLocation()
     func stopUpdatingLocation()
+    /// Gets a fresh fix now, even if the student hasn't moved.
+    func refreshLocation()
 
     /// Starts watching the nearest restaurants (replacing any watched before).
     func monitorArrivals(at restaurants: [Restaurant])
@@ -108,6 +137,12 @@ final class CoreLocationService: NSObject, LocationService, CLLocationManagerDel
 
     func stopUpdatingLocation() {
         manager.stopUpdatingLocation()
+    }
+
+    /// The 20 m filter means no new fix while standing still, so restart updates to get one now.
+    func refreshLocation() {
+        manager.stopUpdatingLocation()
+        manager.startUpdatingLocation()
     }
 
     func monitorArrivals(at restaurants: [Restaurant]) {
@@ -227,6 +262,20 @@ final class MockLocationService: LocationService {
 
     func stopUpdatingLocation() {
         isUpdatingLocation = false
+    }
+
+    private(set) var refreshCount = 0
+
+    func refreshLocation() {
+        refreshCount += 1
+        if let currentLocation {
+            // A fresh fix of the same spot, with the time set to now.
+            let fresh = CLLocation(coordinate: currentLocation.coordinate, altitude: currentLocation.altitude,
+                                   horizontalAccuracy: currentLocation.horizontalAccuracy,
+                                   verticalAccuracy: currentLocation.verticalAccuracy, timestamp: .now)
+            self.currentLocation = fresh
+            onLocationChange?(fresh)
+        }
     }
 
     func monitorArrivals(at restaurants: [Restaurant]) {

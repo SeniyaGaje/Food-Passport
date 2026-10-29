@@ -95,10 +95,17 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             appState.isAppActive = newPhase == .active
             if newPhase == .background {
-                appState.lockIfNeeded()
-            } else if newPhase == .active, appState.stage == .main, !appState.isLocked {
+                appState.appDidEnterBackground()
+            } else if newPhase == .active {
+                appState.appDidBecomeActive()
+            }
+            if newPhase == .active, appState.stage == .main, !appState.isLocked {
                 Task { await appState.refreshData() }
             }
+            if newPhase == .active { openQuickLogIfRequested() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuickLogRequest.notification).receive(on: RunLoop.main)) { _ in
+            openQuickLogIfRequested()
         }
         .alert("Something went wrong", isPresented: isShowingError) {
             Button("OK", role: .cancel) {}
@@ -120,6 +127,13 @@ struct RootView: View {
             Button("Not now", role: .cancel) {}
         } message: {
             Text("To get reminders, allow notifications for FoodPassport in Settings.")
+        }
+    }
+
+    /// The widgets' "Log visit" button left a note for the app.
+    private func openQuickLogIfRequested() {
+        if QuickLogRequest.take(), let url = URL(string: "foodpassport://log") {
+            router.openWidgetURL(url)
         }
     }
 

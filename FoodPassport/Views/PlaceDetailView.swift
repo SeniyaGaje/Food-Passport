@@ -97,7 +97,7 @@ struct PlaceDetailView: View {
             }
             .cardBackground()
 
-            Label("Prices last updated \(restaurant.pricesUpdated)", systemImage: "clock.arrow.circlepath")
+            Label(restaurant.pricesUpdatedText, systemImage: "clock.arrow.circlepath")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -233,6 +233,7 @@ struct PlanVisitSheet: View {
                     Label("Count towards my quest", systemImage: "flag.checkered")
                 }
                 .padding(.vertical, 12)
+                .accessibilityHint("Puts this place at the top of your quest plan")
             }
             .labelStyle(CompactLabelStyle())
             .foregroundStyle(Theme.ink)
@@ -253,11 +254,13 @@ struct PlanVisitSheet: View {
     private func planVisit() {
         let visitDate = selectedVisitDate
         let wantsReminder = remindMe
+        let countsForQuest = countsTowardsQuest
         let restaurant = restaurant
         dismiss()
 
         Task {
-            let reminderDate = await appState.planVisit(to: restaurant, at: visitDate, remind: wantsReminder)
+            let reminderDate = await appState.planVisit(to: restaurant, at: visitDate, remind: wantsReminder,
+                                                        countsTowardsQuest: countsForQuest)
             let day = visitDate.formatted(.dateTime.weekday(.abbreviated).day().hour().minute())
 
             if let reminderDate {
@@ -449,6 +452,12 @@ struct DirectionsView: View {
                 }
                 .buttonStyle(.brandPrimary)
                 .disabled(isNavigating)
+
+                Button(action: openInMaps) {
+                    Label("Open in Apple Maps", systemImage: "map")
+                }
+                .buttonStyle(.brandTinted)
+                .accessibilityHint("Turn-by-turn walking directions in the Maps app")
             }
         }
         .padding(20)
@@ -476,6 +485,15 @@ struct DirectionsView: View {
             route = nil
         }
         isLoadingRoute = false
+    }
+
+    /// Hands the walk over to Apple Maps for spoken turn-by-turn directions.
+    private func openInMaps() {
+        let destination = MKMapItem(placemark: MKPlacemark(coordinate: restaurant.coordinate))
+        destination.name = restaurant.name
+        destination.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
+        // Still alert them in FoodPassport when they get there.
+        startNavigation()
     }
 
     /// Turns on the "You've arrived" alert for this restaurant.

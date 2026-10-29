@@ -159,7 +159,7 @@ struct QuestEditorSheet: View {
     @State private var budget = 3000
     @State private var duration: QuestDuration = .thisMonth
     @State private var maxDistanceKm = 2.0
-    @State private var selectedTrailID: FoodTrail.ID? = MockData.campusFoodTrail.id
+    @State private var selectedTrailID: FoodTrail.ID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -218,13 +218,14 @@ struct QuestEditorSheet: View {
         .sensoryFeedback(.selection, trigger: duration)
         .sensoryFeedback(.selection, trigger: cuisineCount)
         .onAppear {
+            selectedTrailID = appState.trails.first?.id
             guard mode == .edit, let settings = appState.questSettings else { return }
             questType = settings.type
             cuisineCount = settings.targetCuisines
             budget = settings.budget
             duration = settings.duration
             maxDistanceKm = settings.maxDistanceKm
-            selectedTrailID = settings.trailID
+            selectedTrailID = settings.trailID ?? appState.trails.first?.id
         }
     }
 
@@ -247,7 +248,7 @@ struct QuestEditorSheet: View {
     private var trailPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionCaption("Choose a trail")
-            ForEach(MockData.foodTrails) { trail in
+            ForEach(appState.trails) { trail in
                 let isSelected = trail.id == selectedTrailID
                 Button {
                     selectedTrailID = trail.id
@@ -309,9 +310,14 @@ struct QuestEditorSheet: View {
 
     /// Progress stays based on visits, so editing doesn't invent completed stops.
     private func save() {
-        let settings = QuestSettings(type: questType, targetCuisines: cuisineCount, budget: max(0, budget),
+        let current = mode == .edit ? appState.questSettings : nil
+        var settings = QuestSettings(type: questType, targetCuisines: cuisineCount, budget: max(0, budget),
             duration: duration, maxDistanceKm: maxDistanceKm, trailID: selectedTrailID,
-            startedAt: mode == .edit ? (appState.questSettings?.startedAt ?? .now) : .now)
+            startedAt: current?.startedAt ?? .now)
+        // An extended deadline stays, unless the student picked a different duration.
+        if current?.duration == duration {
+            settings.extendedUntil = current?.extendedUntil
+        }
         appState.saveQuest(settings)
         dismiss()
         router.showToast(mode == .create ? "Quest created – your plan is ready" : "Quest updated – plan recalculated")
@@ -323,6 +329,8 @@ struct FoodTrailView: View {
     let trail: FoodTrail
 
     @State private var position: MapCameraPosition
+    /// Walking routes between the stops, from Apple Maps. Empty until they load (or if offline).
+    @State private var legs: [MKRoute] = []
 
     init(trail: FoodTrail) {
         self.trail = trail
@@ -393,8 +401,16 @@ struct FoodTrailView: View {
 
     private var trailMap: some View {
         Map(position: $position) {
-            MapPolyline(coordinates: trail.stops.map(\.restaurant.coordinate))
-                .stroke(Theme.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [8, 8]))
+            if legs.isEmpty {
+                // No walking routes (yet, or offline): a dashed line from stop to stop.
+                MapPolyline(coordinates: trail.stops.map(\.restaurant.coordinate))
+                    .stroke(Theme.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [8, 8]))
+            } else {
+                ForEach(legs.indices, id: \.self) { index in
+                    MapPolyline(legs[index].polyline)
+                        .stroke(Theme.orange, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                }
+            }
 
             ForEach(Array(trail.stops.enumerated()), id: \.element.id) { index, stop in
                 Annotation(stop.restaurant.name, coordinate: stop.restaurant.coordinate) {
@@ -405,6 +421,24 @@ struct FoodTrailView: View {
             }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .task(id: trail.id) { await loadWalkingRoutes() }
+        .accessibilityLabel("Map of \(trail.name) with \(trail.stops.count) stops")
+    }
+
+    /// Asks Apple Maps for the walking route between each pair of stops, in order.
+    private func loadWalkingRoutes() async {
+        let stops = trail.stops.map(\.restaurant.coordinate)
+        guard stops.count > 1 else { return }
+        var routes: [MKRoute] = []
+        for (from, to) in zip(stops, stops.dropFirst()) {
+            let request = MKDirections.Request()
+            request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
+            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
+            request.transportType = .walking
+            guard let route = try? await MKDirections(request: request).calculate().routes.first else { return }
+            routes.append(route)
+        }
+        legs = routes
     }
 }
 
@@ -559,53 +593,84 @@ private struct SuggestedPlaceRow: View {
     }
 }
 
-/// "Budget update": a meal cost more than expected, so the plan changed.
+/// "Budget update": shown after each meal that counts towards the quest.
+/// It compares the cost with the estimate, and shows any place the plan swapped because of it.
 struct BudgetUpdatePopup: View {
     let update: BudgetUpdate
     let onSeeUpdatedPlan: () -> Void
     let onAdjustBudget: () -> Void
 
+    private var costSentence: String {
+        let meal = "Your meal at \(update.restaurantName) cost \(update.actualCost.lkr)"
+        if update.difference > 0 {
+            return "\(meal), \(update.difference.lkr) more than the \(update.estimatedCost.lkr) estimate."
+        } else if update.difference < 0 {
+            return "\(meal), \((-update.difference).lkr) less than the \(update.estimatedCost.lkr) estimate."
+        }
+        return "\(meal), right on the estimate."
+    }
+
+    private var planSentence: String {
+        if update.replacementStop != nil {
+            return "We've updated your plan to stay within budget."
+        } else if update.removedStop != nil {
+            return "One place no longer fits what's left."
+        }
+        return "Your plan still fits."
+    }
+
     var body: some View {
         PopupCard {
-            PopupIcon(systemImage: "info.circle")
+            PopupIcon(systemImage: update.difference > 0 ? "info.circle" : "checkmark.circle")
 
             VStack(spacing: 8) {
                 Text("Budget update")
                     .font(.title2.bold())
                     .foregroundStyle(Theme.ink)
 
-                Text("Your meal cost \(update.actualCost.lkr), \(update.overspend.lkr) more than estimated. We've updated your plan to stay within budget.")
+                Text("\(costSentence) \(planSentence)")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("\(max(0, update.remainingBudget).lkr) left for this quest")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(update.remainingBudget > 0 ? Theme.ink : Theme.destructive)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    Text("\(update.removedStop.restaurant.name) – \(update.removedStop.estimatedCost.lkr)")
-                        .strikethrough()
-                        .foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: "xmark.circle")
-                        .foregroundStyle(Theme.destructive)
-                }
+            if let removed = update.removedStop {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label {
+                        Text("\(removed.restaurant.name) – \(removed.estimatedCost.lkr)")
+                            .strikethrough()
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "xmark.circle")
+                            .foregroundStyle(Theme.destructive)
+                    }
+                    .accessibilityLabel("Removed: \(removed.restaurant.name), \(removed.estimatedCost.lkr)")
 
-                Divider()
+                    if let replacement = update.replacementStop {
+                        Divider()
 
-                Label {
-                    Text("\(update.replacementStop.restaurant.name) – \(update.replacementStop.estimatedCost.lkr)")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Theme.ink)
-                } icon: {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Theme.green)
+                        Label {
+                            Text("\(replacement.restaurant.name) – \(replacement.estimatedCost.lkr)")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Theme.ink)
+                        } icon: {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Theme.green)
+                        }
+                        .accessibilityLabel("Added instead: \(replacement.restaurant.name), \(replacement.estimatedCost.lkr)")
+                    }
                 }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.insetFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Theme.cardBorder, lineWidth: 1)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.insetFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Theme.cardBorder, lineWidth: 1)
+                }
             }
 
             VStack(spacing: 10) {
@@ -640,10 +705,16 @@ struct BudgetLimitPopup: View {
                     .foregroundStyle(Theme.ink)
 
                 if let blockedStop {
-                    Text("Your remaining \(quest.remainingBudget.lkr) can't cover \(blockedStop.restaurant.name) (est. \(blockedStop.estimatedCost.lkr)) before the quest ends.")
+                    Text("Your remaining \(max(0, quest.remainingBudget).lkr) can't cover \(blockedStop.restaurant.name) (est. \(blockedStop.estimatedCost.lkr)) as well as your other picks.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Text("Increase budget adds just enough for it. Extend deadline gives you another week.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(spacing: 10) {

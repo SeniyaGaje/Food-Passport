@@ -80,7 +80,11 @@ Deleting a visit or resetting its data removes the associated photos after the d
 
 With Firebase configured, resized meal photos upload to the signed-in account's Firebase Storage folder.
 Other devices download them on demand, and previously viewed photos remain cached offline.
-A failed upload keeps the visit form open for retry. Older local-only photos still need their original device.
+If an upload fails (for example offline), the visit still saves: the photo stays on the phone and uploads
+when the app is next online or reopened. Older local-only photos still need their original device.
+
+Each meal photo gets a small fingerprint (`PhotoCheck`). A photo that matches one from an earlier visit,
+was taken more than six hours ago, or has no capture date can't verify the visit, so it can't earn a stamp.
 Without Firebase, the app uses the local store.
 
 (CREDITS.md) for model and dataset credits.
@@ -132,6 +136,9 @@ users/{userID}                      profile: name, email, monthly budget, bookma
 users/{userID}/visits/{visitID}     logged visits
 users/{userID}/stamps/{cuisine}     one stamp per cuisine
 users/{userID}/quests/active        saved quest settings
+users/{userID}/plannedVisits/{id}   Plan visit: place, time, estimate at planning time, counts towards quest
+trails/{trailID}                    optional admin trails: name, summary, restaurantIDs (built-in ones otherwise)
+challenges/current                  optional admin weekly challenge: title, details, target
 users/{userID}/devices/{tokenHash}  private FCM registration
 Storage: users/{userID}/mealPhotos/{UUID}.jpg
 ```
@@ -146,9 +153,12 @@ FoodPassport/
 ├── Assets.xcassets           App icon, accent colour, photos
 ├── Models/
 │   ├── Models.swift          Data types (Restaurant, Visit, Quest, Stamp, …)
+│   ├── QuestPlanner.swift    Quest progress and the budget-aware plan, plus the budget update after a meal
+│   ├── SpendingSummary.swift Dashboard money: totals, chart bars, by restaurant and by cuisine
 │   └── MockData.swift        Sample data for previews, tests and the first Firestore upload
 ├── ViewModels/
-│   ├── AppState.swift        Session and data state, plus navigation (tabs, routes, pop-ups)
+│   ├── AppState.swift        Session and data state (visits, quest, planned visits, settings)
+│   ├── AppRouter.swift       Navigation: tabs, routes, sheets, pop-ups, toasts and widget links
 │   └── MealScanViewModel.swift  Scan review, selection, confirmation and rejection
 ├── Services/
 │   ├── AuthService.swift     Sign up / sign in: Firebase Auth version and a mock for tests
@@ -170,16 +180,23 @@ FoodPassport/
 │   ├── OnboardingViews.swift Welcome, permissions, budget setup
 │   ├── AuthViews.swift       Sign in, sign up, forgot password, Face ID lock
 │   ├── HomeView.swift        Dashboard
+│   ├── SpendingOverviewView.swift  Monthly budget, spending chart, by restaurant and by cuisine
 │   ├── ExploreView.swift     Map / list of restaurants
 │   ├── PlaceDetailView.swift Place detail, plan visit, directions
-│   ├── LogVisitView.swift    Log a visit, meal camera, recognition, receipt scan, stamp earned
+│   ├── LogVisitView.swift    Log a visit form
+│   ├── MealCameraView.swift  Meal camera and recognition results
+│   ├── ReceiptScanView.swift Receipt scan and document camera
+│   ├── StampEarnedPopup.swift  The "New stamp earned" pop-up
 │   ├── PassportView.swift    Stamps and challenges
 │   ├── QuestViews.swift      Quest detail/editor, food trail, weekly challenge, budget pop-ups
 │   ├── HistoryView.swift     Visit history and visit detail
 │   └── ProfileView.swift     Profile, settings, budget and reminder sheets, about
 └── Utilities/
     ├── Theme.swift           Colours, button styles, card style, small extensions
-    └── Components.swift      Reusable UI pieces (headers, chips, fields, pins, rows, …)
+    ├── Components.swift      Reusable UI pieces (headers, chips, fields, pins, rows, …)
+    └── PhotoCheck.swift      Meal photo fingerprint and capture-date checks
+Shared/                       Compiled into the app and the widgets: widget data and the Log visit App Intent
+FoodPassportWidgets/          Quest, budget and weekly challenge widgets (Home Screen, Lock Screen, iPad)
 FoodPassportTests/            Swift Testing unit tests
 MLTraining/                  Dataset collection, review, splitting, training, evaluation and credits
 ```
