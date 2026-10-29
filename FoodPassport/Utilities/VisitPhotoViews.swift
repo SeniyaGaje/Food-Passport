@@ -7,6 +7,7 @@ struct VisitPhotoView: View {
     let fallbackImage: String
     let cuisine: Cuisine
     @State private var image: UIImage?
+    @State private var isLoading = false
 
     var body: some View {
         Group {
@@ -16,9 +17,12 @@ struct VisitPhotoView: View {
                 FoodImageView(imageName: fallbackImage, cuisine: cuisine)
             }
         }
+        .overlay { if isLoading { ProgressView().padding(6).background(.regularMaterial, in: Circle()) } }
         .task(id: photoID) {
             image = nil
             guard let photoID else { return }
+            isLoading = true
+            defer { isLoading = false }
             let saved = await appState.mealPhoto(id: photoID)
             if !Task.isCancelled { image = saved }
         }
@@ -57,6 +61,7 @@ private struct SavedMealPhoto: View {
     let id: String
     @State private var image: UIImage?
     @State private var isLoading = true
+    @State private var retry = 0
 
     var body: some View {
         Group {
@@ -66,12 +71,18 @@ private struct SavedMealPhoto: View {
             } else if isLoading {
                 ProgressView().tint(.white)
             } else {
-                ContentUnavailableView("Photo unavailable on this device", systemImage: "photo",
-                    description: Text("Meal photos are saved on the device where the visit was logged."))
-                    .foregroundStyle(.white)
+                ContentUnavailableView {
+                    Label("Photo unavailable", systemImage: "photo")
+                } description: {
+                    Text("Connect to the internet and retry. Older photos saved only on another device cannot be downloaded.")
+                } actions: {
+                    Button("Retry") { retry += 1 }.buttonStyle(.borderedProminent)
+                }
+                .foregroundStyle(.white)
             }
         }
-        .task(id: id) {
+        .task(id: "\(id)-\(retry)") {
+            isLoading = true
             let saved = await appState.mealPhoto(id: id)
             if !Task.isCancelled {
                 image = saved

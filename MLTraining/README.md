@@ -82,11 +82,9 @@ Food/drink type, suggested cuisine and category come from `catalogue.json`.
 They are label metadata, not independent visual predictions. Cake & Dessert is a
 broad class covering the cake varieties in the dataset, not every possible dessert.
 
-`LocalVisitPhotoStore` saves resized JPEGs under Application Support, scoped by
-account, and the visit keeps their IDs. They are viewable in the history gallery
-and survive reopening. Firebase stores those references with the visit, but
-images stay on this device. Deleting/resetting a visit also deletes its photos.
-No Firebase Storage configuration or image-upload service is required.
+With Firebase configured, `FirebaseVisitPhotoStore` uploads resized meal JPEGs to private account paths,
+then caches downloaded photos in `LocalVisitPhotoStore` for offline viewing. The visit stores photo IDs.
+Previews/demo mode still use local storage. Photo upload is separate from recognition: the hybrid models
 
 ## Limits and viva explanation
 

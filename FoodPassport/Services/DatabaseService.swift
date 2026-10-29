@@ -21,6 +21,14 @@ protocol DatabaseService {
 
     /// "Reset all data" in Profile: deletes visits and stamps but keeps the profile.
     func deleteVisitsAndStamps(userID: String) async throws
+
+    func fetchQuest(userID: String) async throws -> QuestSettings?
+    func saveQuest(_ quest: QuestSettings, userID: String) async throws
+}
+
+extension DatabaseService {
+    func fetchQuest(userID: String) async throws -> QuestSettings? { nil }
+    func saveQuest(_ quest: QuestSettings, userID: String) async throws {}
 }
 
 /// The real database, Cloud Firestore. It keeps a copy on the phone, so it works offline too.
@@ -51,32 +59,16 @@ final class FirestoreDatabaseService: DatabaseService {
 
     func fetchRestaurants() async throws -> [Restaurant] {
         let snapshot = try await restaurantsCollection.order(by: "distanceKm").getDocuments()
-        var restaurants = try snapshot.documents.map { try $0.data(as: Restaurant.self) }
-
-        #if DEBUG
-        // Upload any sample restaurants that Firestore doesn't have yet (e.g. on a new project).
-        // Ones already there are left alone, so edits made in the Firebase console are kept.
-        let missing = MockData.restaurants.filter { sample in
-            !restaurants.contains { $0.id == sample.id }
-        }
-        if !missing.isEmpty {
-            upload(missing)
-            restaurants += missing
-        }
-        #endif
-
-        return restaurants
+        return try snapshot.documents.map { try $0.data(as: Restaurant.self) }
     }
 
-    /// We don't wait for this: Firestore saves it offline first and sends it when online,
-    /// so signing in is never slowed down by the upload.
-    private func upload(_ restaurants: [Restaurant]) {
-        let batch = db.batch()
-        for restaurant in restaurants {
-            guard let data = try? encoder.encode(restaurant) else { continue }
-            batch.setData(data, forDocument: restaurantsCollection.document(restaurant.id))
-        }
-        batch.commit { _ in }
+    func fetchQuest(userID: String) async throws -> QuestSettings? {
+        let document = try await userDocument(userID).collection("quests").document("active").getDocument()
+        return document.exists ? try document.data(as: QuestSettings.self) : nil
+    }
+
+    func saveQuest(_ quest: QuestSettings, userID: String) async throws {
+        try await userDocument(userID).collection("quests").document("active").setData(encoder.encode(quest))
     }
 
     // Profile
@@ -139,6 +131,10 @@ final class FirestoreDatabaseService: DatabaseService {
 /// Fake database kept in memory, for previews, tests and running without Firebase.
 /// It only holds one user, so `userID` is ignored.
 final class MockDatabaseService: DatabaseService {
+    var quest: QuestSettings?
+
+    func fetchQuest(userID: String) async throws -> QuestSettings? { quest }
+    func saveQuest(_ quest: QuestSettings, userID: String) async throws { self.quest = quest }
     var restaurants: [Restaurant]
     var profile: UserProfile?
     var visits: [Visit]

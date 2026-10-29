@@ -1,0 +1,7 @@
+{
+  "aps": {
+    "alert": { "title": "New cuisine challenge", "body": "Open your passport and plan your next meal." },
+    "sound": "default"
+  },
+  "destination": "weeklyChallenge"
+}

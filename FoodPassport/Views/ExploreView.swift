@@ -8,8 +8,10 @@ struct ExploreView: View {
         case list
     }
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var searchText = ""
     @State private var selectedCuisine: Cuisine?
     @State private var displayMode: DisplayMode = .map
@@ -48,7 +50,7 @@ struct ExploreView: View {
             VStack(alignment: .leading, spacing: 14) {
                 ScreenHeader("Explore food", subtitle: "Around campus") {
                     HStack(spacing: 10) {
-                        displayModePicker
+                        if sizeClass != .regular { displayModePicker }
                         ProfileAvatarButton()
                     }
                 }
@@ -59,18 +61,40 @@ struct ExploreView: View {
 
             cuisineChips
 
-            switch displayMode {
-            case .map:
-                mapContent
-            case .list:
-                listContent
+            if appState.restaurants.isEmpty {
+                EmptyStateView(systemImage: "map", title: "No places available",
+                    message: "Refresh when you're online. New restaurants are added by the catalogue administrator.",
+                    actionTitle: "Refresh", action: { Task { await appState.refreshData() } })
+                    .frame(maxHeight: .infinity)
+            } else if filteredRestaurants.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+                    .frame(maxHeight: .infinity)
+            } else if sizeClass == .regular {
+                GeometryReader { space in
+                    if space.size.width >= 680 && !dynamicTypeSize.isAccessibilitySize {
+                        HStack(spacing: 0) {
+                            mapContent.frame(maxWidth: .infinity).accessibilityIdentifier("explore.map")
+                            listContent.frame(width: max(300, space.size.width * 0.43)).accessibilityIdentifier("explore.list")
+                        }
+                    } else {
+                        VStack(spacing: 8) {
+                            mapContent.frame(height: max(180, space.size.height * 0.45))
+                            listContent
+                        }
+                    }
+                }
+            } else {
+                switch displayMode {
+                case .map: mapContent
+                case .list: listContent
+                }
             }
         }
         .padding(.top, 8)
         .appBackground()
-        .navigationTitle("Explore")
-        .toolbar(.hidden, for: .navigationBar)
-        .animation(.easeInOut(duration: 0.25), value: displayMode)
+        .navigationTitleHidden("Explore")
+        .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: displayMode)
         .sensoryFeedback(.selection, trigger: displayMode)
     }
 
@@ -137,7 +161,7 @@ struct ExploreView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if let restaurant = selectedRestaurant {
+            if sizeClass != .regular, let restaurant = selectedRestaurant {
                 RestaurantCard(restaurant: restaurant, highlightsCuisine: true)
                     .id(restaurant.id)
                     // Slides up, or fades with Reduce Motion on.
@@ -160,6 +184,12 @@ struct ExploreView: View {
 
                 ForEach(filteredRestaurants) { restaurant in
                     RestaurantCard(restaurant: restaurant)
+                        .overlay {
+                            if sizeClass == .regular, restaurant.id == selectedRestaurant?.id {
+                                RoundedRectangle(cornerRadius: 20).stroke(Theme.orange, lineWidth: 2)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                 }
 
                 if filteredRestaurants.isEmpty {
@@ -170,6 +200,7 @@ struct ExploreView: View {
             .padding(.top, 4)
             .padding(.bottom, 20)
         }
+        .refreshable { await appState.refreshData() }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
     }

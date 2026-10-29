@@ -24,6 +24,11 @@ final class AppState {
     var restaurants = MockData.restaurants
     var visits = MockData.visits
     var stamps = MockData.stamps
+    private(set) var questSettings: QuestSettings?
+    private(set) var isLoading = false
+    private(set) var loadError: String?
+    private(set) var isOffline = false
+    var isSavingChanges: Bool { !pendingWrites.isEmpty }
 
     /// Shown as an alert when loading or saving fails.
     var errorMessage: String?
@@ -81,10 +86,13 @@ final class AppState {
     private let location: LocationService
     private let settings: UserDefaults
     private let photoStore: VisitPhotoStore
+    private let widgets: WidgetPublishing
     private var photoSaveGeneration = 0
 
     /// Background saves that haven't finished yet, so tests can wait for them.
     private var pendingWrites: [UUID: Task<Void, Never>] = [:]
+    private var failedWrites: [UUID: (userID: String, write: (DatabaseService, String) async throws -> Void)] = [:]
+    var hasFailedWrites: Bool { !failedWrites.isEmpty }
 
     init(
         auth: AuthService = MockAuthService(),
@@ -93,7 +101,8 @@ final class AppState {
         notifications: NotificationService = MockNotificationService(),
         location: LocationService = MockLocationService(),
         settings: UserDefaults = .standard,
-        photoStore: VisitPhotoStore = LocalVisitPhotoStore()
+        photoStore: VisitPhotoStore = LocalVisitPhotoStore(),
+        widgets: WidgetPublishing = NoWidgetPublisher()
     ) {
         self.auth = auth
         self.database = database
@@ -102,6 +111,7 @@ final class AppState {
         self.location = location
         self.settings = settings
         self.photoStore = photoStore
+        self.widgets = widgets
 
         isFaceIDEnabled = settings.bool(forKey: SettingsKey.faceIDEnabled)
         plannedVisitRemindersEnabled = settings.bool(forKey: SettingsKey.plannedVisitReminders)
@@ -129,6 +139,88 @@ final class AppState {
         Set(visits.map(\.cuisine)).count
     }
 
+    var activeQuest: Quest {
+        let settings = questSettings ?? QuestSettings()
+        let end = settings.endDate()
+        let meals = visits.filter { $0.date >= settings.startedAt && $0.date < end }
+        let tried = Set(meals.map(\.cuisine))
+        let spent = meals.map(\.amount).reduce(0, +)
+        let trail = MockData.foodTrails.first { $0.id == settings.trailID } ?? MockData.campusFoodTrail
+        let completedStops = Set(meals.map { $0.restaurant.id })
+        let target = settings.type == .foodTrail ? trail.stops.count : settings.targetCuisines
+        var suggestedCuisines = tried
+        let candidates = settings.type == .foodTrail
+            ? trail.stops.map(\.restaurant).filter { !completedStops.contains($0.id) }
+            : restaurants.sorted { $0.distanceKm < $1.distanceKm }.filter {
+                $0.distanceKm <= settings.maxDistanceKm && suggestedCuisines.insert($0.cuisine).inserted
+            }
+        var remaining = max(0, settings.budget - spent)
+        let plan = candidates.prefix(target).map { restaurant in
+            let estimate = restaurant.priceRange.lowerBound
+            let fits = estimate <= remaining
+            if fits { remaining -= estimate }
+            return PlannedStop(restaurant: restaurant, estimatedCost: estimate, fitsBudget: fits)
+        }
+        return Quest(title: settings.type == .foodTrail ? trail.name : "Explore \(settings.targetCuisines) cuisines",
+                     type: settings.type, targetCuisines: target,
+                     cuisinesTried: settings.type == .foodTrail ? completedStops.intersection(Set(trail.stops.map(\.id))).count : tried.count,
+                     budget: settings.budget, spent: spent, duration: settings.duration,
+                     maxDistanceKm: settings.maxDistanceKm, plan: plan,
+                     planExplanation: "Suggestions use your distance limit, untried cuisines and remaining budget. Prices are estimates.")
+    }
+
+    var hasActiveQuest: Bool {
+        guard let questSettings else { return false }
+        return questSettings.endDate() > .now
+    }
+
+    var currentTrail: FoodTrail {
+        let sample = MockData.campusFoodTrail
+        let visited = Set(visits.map { $0.restaurant.id })
+        return FoodTrail(id: sample.id, name: sample.name, summary: sample.summary,
+                         stops: sample.stops.map { TrailStop(restaurant: $0.restaurant, isVisited: visited.contains($0.id)) })
+    }
+
+    var currentChallenge: WeeklyChallenge {
+        let week = Calendar.current.dateInterval(of: .weekOfYear, for: .now)
+        let meals = visits.filter { week?.contains($0.date) == true }
+        return WeeklyChallenge(title: "Try 3 cuisines this week", details: "Log meals from three different cuisines.",
+                               daysLeft: max(0, Calendar.current.dateComponents([.day], from: .now, to: week?.end ?? .now).day ?? 0),
+                               completed: Set(meals.map(\.cuisine)).count, target: 3, suggestions: activeQuest.plan)
+    }
+
+    func saveQuest(_ settings: QuestSettings) {
+        questSettings = settings
+        save { database, userID in try await database.saveQuest(settings, userID: userID) }
+        publishWidgets()
+    }
+
+    func updateConnectivity(isOffline: Bool) { self.isOffline = isOffline }
+
+    func refreshData() async {
+        guard let userID = auth.currentUserID, !isLoading else { return }
+        do {
+            try await loadUserData(userID: userID)
+            if stage == .onboarding { enterApp() }
+        } catch {
+            loadError = "Couldn't refresh your passport. Your current data is still available."
+        }
+    }
+
+    private func publishWidgets() {
+        guard auth.currentUserID != nil, stage == .main, !isLocked else {
+            widgets.publish(WidgetSnapshot())
+            return
+        }
+        let month = Calendar.current.dateInterval(of: .month, for: .now)
+        let spent = visits.filter { month?.contains($0.date) == true }.map(\.amount).reduce(0, +)
+        widgets.publish(WidgetSnapshot(isSignedIn: true, questTitle: hasActiveQuest ? activeQuest.title : nil,
+            cuisinesTried: activeQuest.cuisinesTried, targetCuisines: activeQuest.targetCuisines,
+            questUnit: activeQuest.progressUnit,
+            questEndsAt: questSettings?.endDate(), monthlyBudget: profile.monthlyBudget,
+            monthlySpent: spent, budgetMonth: WidgetSnapshot.monthKey(for: .now)))
+    }
+
     // Session
 
     /// Runs once at launch. Skips onboarding if the student is still signed in.
@@ -143,6 +235,7 @@ final class AppState {
             enterApp()
             // Opening the app is like signing in again, so ask for Face ID first.
             isLocked = isFaceIDEnabled
+            publishWidgets()
             await refreshReminders()
             startLocationServices()
         } catch {
@@ -184,6 +277,7 @@ final class AppState {
     func enterApp() {
         stage = .main
         isLocked = false
+        publishWidgets()
     }
 
     func signOut() {
@@ -203,6 +297,12 @@ final class AppState {
         arrivedRestaurant = nil
         stage = .onboarding
         isLocked = false
+        questSettings = nil
+        failedWrites = [:]
+        visits = []
+        stamps = []
+        loadError = nil
+        widgets.publish(WidgetSnapshot())
     }
 
     // Location and arrivals
@@ -343,6 +443,7 @@ final class AppState {
         guard stage == .main, isFaceIDEnabled else { return }
         isLocked = true
         lockMessage = nil
+        publishWidgets()
     }
 
     func unlockWithBiometrics() async {
@@ -352,6 +453,7 @@ final class AppState {
         do {
             try await biometrics.authenticate(reason: "Unlock your FoodPassport.")
             isLocked = false
+            publishWidgets()
         } catch {
             lockMessage = (error as? BiometricError)?.errorDescription
         }
@@ -456,17 +558,31 @@ final class AppState {
     }
 
     private func loadUserData(userID: String) async throws {
-        restaurants = withRealDistances(try await database.fetchRestaurants())
-        visits = try await database.fetchVisits(userID: userID)
-        stamps = try await database.fetchStamps(userID: userID)
-
-        if let savedProfile = try await database.fetchProfile(userID: userID) {
+        let generation = photoSaveGeneration
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+        // Assign together, so a failed refresh cannot replace just half the passport.
+        let places = try await database.fetchRestaurants()
+        let meals = try await database.fetchVisits(userID: userID)
+        let earned = try await database.fetchStamps(userID: userID)
+        let quest = try await database.fetchQuest(userID: userID)
+        let savedProfile = try await database.fetchProfile(userID: userID)
+        guard auth.currentUserID == userID else { throw VisitPhotoError.signedOut }
+        guard generation == photoSaveGeneration else { throw VisitPhotoError.cancelled }
+        restaurants = withRealDistances(places)
+        visits = meals
+        stamps = earned
+        questSettings = quest
+        if let savedProfile {
             profile = savedProfile
         } else {
             // The account has no profile yet (e.g. sign-up was interrupted), so make a blank one.
             profile = UserProfile(name: "", email: "", memberSince: .now, monthlyBudget: 3000, bookmarkedRestaurantIDs: [])
-            save { database, userID in try await database.saveProfile(self.profile, userID: userID) }
+            saveProfile()
         }
+        publishWidgets()
+        runInBackground { [photoStore] in await photoStore.retryPendingDeletions(userID: userID) }
     }
 
     // Visits and stamps
@@ -500,6 +616,7 @@ final class AppState {
     @discardableResult
     func addVisit(_ visit: Visit) -> Stamp? {
         visits.insert(visit, at: 0)
+        publishWidgets()
         save { database, userID in try await database.saveVisit(visit, userID: userID) }
 
         guard visit.isLocationVerified, !stamps.contains(where: { $0.cuisine == visit.cuisine }) else {
@@ -521,6 +638,7 @@ final class AppState {
     /// Deletes a visit, and the stamp it earned (if any).
     func deleteVisit(_ visit: Visit) {
         visits.removeAll { $0.id == visit.id }
+        publishWidgets()
         save { database, userID in
             try await database.deleteVisit(id: visit.id, userID: userID)
             await self.photoStore.delete(ids: visit.photoIDs ?? [], userID: userID)
@@ -534,9 +652,11 @@ final class AppState {
 
     func resetAllData() {
         photoSaveGeneration += 1
+        failedWrites = [:]
         let photoIDs = visits.flatMap { $0.photoIDs ?? [] }
         visits = []
         stamps = []
+        publishWidgets()
         save { database, userID in
             try await database.deleteVisitsAndStamps(userID: userID)
             await self.photoStore.delete(ids: photoIDs, userID: userID)
@@ -547,6 +667,7 @@ final class AppState {
 
     func updateMonthlyBudget(_ amount: Int) {
         profile.monthlyBudget = amount
+        publishWidgets()
         saveProfile()
     }
 
@@ -575,13 +696,23 @@ final class AppState {
     private func save(_ write: @escaping (DatabaseService, String) async throws -> Void) {
         guard let userID = auth.currentUserID else { return }
 
+        let id = UUID()
+        let generation = photoSaveGeneration
         runInBackground { [database] in
             do {
                 try await write(database, userID)
             } catch {
+                guard self.auth.currentUserID == userID, self.photoSaveGeneration == generation else { return }
+                self.failedWrites[id] = (userID, write)
                 self.errorMessage = "Couldn't save your changes. \(error.localizedDescription)"
             }
         }
+    }
+
+    func retryFailedWrites() {
+        let failed = failedWrites.values.filter { $0.userID == auth.currentUserID }
+        failedWrites = [:]
+        for operation in failed { save(operation.write) }
     }
 
     /// Runs work in the background, and remembers it so tests can wait for it.
@@ -612,6 +743,21 @@ final class AppRouter {
     var sheet: AppSheet?
     var toast: ToastMessage?
     var banner: InAppBanner?
+
+    /// Widget links contain no account data; authentication still controls the root screen.
+    func openWidgetURL(_ url: URL) {
+        guard url.scheme == "foodpassport" else { return }
+        switch url.host {
+        case "quest":
+            selectedTab = .passport
+            tabPaths[.passport] = []
+        case "budget":
+            selectedTab = .profile
+            tabPaths[.profile] = []
+            sheet = .monthlyBudget
+        default: break
+        }
+    }
 
     // Tab navigation
 

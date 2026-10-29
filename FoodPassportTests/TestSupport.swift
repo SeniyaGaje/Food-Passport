@@ -29,7 +29,8 @@ final class TestApp {
         coordinate: CLLocationCoordinate2D? = CLLocationCoordinate2D(latitude: 6.9028, longitude: 79.8598),
         answerWhenAskedForLocation: LocationPermission = .whenInUse,
         relaunching previousLaunch: TestApp? = nil,
-        photoStore: VisitPhotoStore = LocalVisitPhotoStore()
+        photoStore: VisitPhotoStore = LocalVisitPhotoStore(),
+        widgets: WidgetPublishing = NoWidgetPublisher()
     ) {
         auth = MockAuthService(signedInUserID: signedIn ? "mock-user" : nil)
         let database = database ?? MockDatabaseService()
@@ -47,7 +48,8 @@ final class TestApp {
             notifications: notifications,
             location: location,
             settings: UserDefaults(suiteName: settingsName)!,
-            photoStore: photoStore
+            photoStore: photoStore,
+            widgets: widgets
         )
     }
 
@@ -106,6 +108,8 @@ final class OfflineDatabaseService: DatabaseService {
     }
 
     var failsReads = false
+    var failsWrites = true
+    var writtenVisitIDs: [String] = []
 
     func fetchRestaurants() async throws -> [Restaurant] {
         if failsReads { throw OfflineError() }
@@ -128,9 +132,15 @@ final class OfflineDatabaseService: DatabaseService {
     }
 
     func saveProfile(_ profile: UserProfile, userID: String) async throws { throw OfflineError() }
-    func saveVisit(_ visit: Visit, userID: String) async throws { throw OfflineError() }
+    func saveVisit(_ visit: Visit, userID: String) async throws {
+        if failsWrites { throw OfflineError() }
+        writtenVisitIDs.append(visit.id)
+    }
     func deleteVisit(id: Visit.ID, userID: String) async throws { throw OfflineError() }
     func saveStamp(_ stamp: Stamp, userID: String) async throws { throw OfflineError() }
     func deleteStamp(cuisine: Cuisine, userID: String) async throws { throw OfflineError() }
-    func deleteVisitsAndStamps(userID: String) async throws { throw OfflineError() }
+    func deleteVisitsAndStamps(userID: String) async throws {
+        if failsWrites { throw OfflineError() }
+        writtenVisitIDs = []
+    }
 }

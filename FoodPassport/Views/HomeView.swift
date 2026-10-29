@@ -3,11 +3,43 @@ import Charts
 
 /// The Home tab: totals, the active quest, spending, cuisines and recent visits.
 struct HomeView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @State private var period: DashboardPeriod = .thisMonth
 
-    private let quest = MockData.activeQuest
+    private var quest: Quest { appState.activeQuest }
+
+    private var periodVisits: [Visit] {
+        let calendar = Calendar.current
+        let interval: DateInterval?
+        switch period {
+        case .thisWeek: interval = calendar.dateInterval(of: .weekOfYear, for: .now)
+        case .thisMonth: interval = calendar.dateInterval(of: .month, for: .now)
+        case .lastMonth:
+            let previous = calendar.date(byAdding: .month, value: -1, to: .now) ?? .now
+            interval = calendar.dateInterval(of: .month, for: previous)
+        case .allTime: interval = nil
+        }
+        return appState.visits.filter { interval?.contains($0.date) ?? true }
+    }
+
+    private var weeklySpending: [DailySpending] {
+        let calendar = Calendar.current
+        return (-6...0).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: .now) ?? .now
+            let amount = periodVisits.filter { calendar.isDate($0.date, inSameDayAs: date) }.map(\.amount).reduce(0, +)
+            return DailySpending(day: date.formatted(.dateTime.weekday(.wide)), amount: amount, isHighlighted: offset == 0)
+        }
+    }
+
+    private var cuisineShares: [CuisineShare] {
+        let groups = Dictionary(grouping: periodVisits, by: \.cuisine)
+        return Cuisine.allCases.compactMap { cuisine in
+            guard let meals = groups[cuisine] else { return nil }
+            return CuisineShare(cuisine: cuisine, percentage: Int((Double(meals.count) / Double(max(1, periodVisits.count)) * 100).rounded()))
+        }
+    }
 
     /// "Good evening, John", depending on the time of day.
     private var greeting: String {
@@ -32,19 +64,28 @@ struct HomeView: View {
                 }
 
                 AdaptiveStack(spacing: Theme.Spacing.s) {
-                    StatTile(value: "\(appState.visits.count)", label: "Visits", systemImage: "fork.knife")
-                    StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
+                    StatTile(value: "\(periodVisits.count)", label: "Visits", systemImage: "fork.knife")
+                    StatTile(value: "\(Set(periodVisits.map(\.cuisine)).count)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
                     StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
+                if appState.hasActiveQuest {
                 NavigationLink(value: AppRoute.questDetail) {
                     QuestSummaryCard(quest: quest)
                 }
                 .buttonStyle(.pressableCard)
+                } else {
+                    NoQuestCard()
+                }
 
-                WeeklySpendingCard(entries: MockData.weeklySpending)
+                WeeklySpendingCard(entries: weeklySpending)
 
-                CuisineBreakdownCard(shares: MockData.cuisineShares)
+                if cuisineShares.isEmpty {
+                    EmptyStateView(systemImage: "chart.pie", title: "No meals in this period",
+                        message: "Choose another period or log a meal to see your cuisine breakdown.")
+                } else {
+                    CuisineBreakdownCard(shares: cuisineShares)
+                }
 
                 RecentActivitySection(visits: Array(appState.visits.prefix(3))) {
                     router.selectedTab = .history
@@ -54,10 +95,11 @@ struct HomeView: View {
             .padding(.top, Theme.Spacing.xs)
             .padding(.bottom, Theme.Spacing.xl)
         }
+        .refreshable { await appState.refreshData() }
         .scrollIndicators(.hidden)
         .appBackground()
-        .navigationTitle("Home")
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitleHidden("Home")
+        .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
     }
 
     private var periodMenu: some View {
@@ -115,7 +157,7 @@ struct QuestSummaryCard: View {
             }
 
             progressRow(
-                title: "\(quest.cuisinesTried) of \(quest.targetCuisines) cuisines tried",
+                title: "\(quest.cuisinesTried) of \(quest.targetCuisines) \(quest.progressUnit)",
                 value: quest.cuisineProgress,
                 fill: .white
             )

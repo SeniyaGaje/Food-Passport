@@ -3,6 +3,7 @@ import MapKit
 
 /// The History tab: every visit, grouped by date, with search and filters.
 struct HistoryView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @State private var searchText = ""
@@ -55,7 +56,8 @@ struct HistoryView: View {
                         }
                     }
                 }
-                .scrollIndicators(.hidden)
+                .refreshable { await appState.refreshData() }
+        .scrollIndicators(.hidden)
                 .scrollClipDisabled()
 
                 content
@@ -67,8 +69,8 @@ struct HistoryView: View {
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
         .appBackground()
-        .navigationTitle("History")
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitleHidden("History")
+        .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
         .sensoryFeedback(.selection, trigger: filter)
     }
 
@@ -365,7 +367,7 @@ struct VisitDetailView: View {
                     .accessibilityLabel("View meal photo \(index + 1)")
                 }
             }
-            Text("Saved on this device")
+            Text("Photos sync through your account. Viewed photos are cached for offline use.")
                 .font(.footnote).foregroundStyle(.secondary)
         }
         .cardStyle(padding: 18)

@@ -25,3 +25,8 @@ GoogleService-Info.plist
 MLTraining/Images/
 MLTraining/.cache/
 MLTraining/Review/
+
+# Firebase emulator tools and output
+FirebaseTests/node_modules/
+*-debug.log
+.firebase/

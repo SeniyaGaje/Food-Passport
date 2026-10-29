@@ -1,0 +1,75 @@
+import { before, after, test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
+import { doc, getDoc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getBytes, deleteObject } from 'firebase/storage';
+
+let env;
+before(async () => {
+  env = await initializeTestEnvironment({
+    projectId: 'demo-foodpassport',
+    firestore: { rules: readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8') },
+    storage: { rules: readFileSync(new URL('../storage.rules', import.meta.url), 'utf8') }
+  });
+});
+after(async () => { await env?.cleanup(); });
+
+for (const collection of ['restaurants', 'quests', 'trails', 'challenges']) {
+  test(`${collection}: signed-in reads; all client writes denied`, async () => {
+    const signedIn = doc(env.authenticatedContext('alice').firestore(), collection, 'sample');
+    await assertSucceeds(getDoc(signedIn));
+    await assertFails(setDoc(signedIn, { name: 'changed' }));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), collection, 'sample')));
+  });
+}
+
+for (const collection of ['visits', 'stamps', 'trails', 'challenges']) {
+  test(`${collection}: owner data is isolated`, async () => {
+    const path = `users/alice/${collection}/one`;
+    await assertSucceeds(setDoc(doc(env.authenticatedContext('alice').firestore(), path), { progress: 1 }));
+    await assertFails(getDoc(doc(env.authenticatedContext('bob').firestore(), path)));
+    await assertFails(setDoc(doc(env.authenticatedContext('bob').firestore(), path), { progress: 2 }));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), path)));
+  });
+}
+
+test('only the owner can save a valid quest', async () => {
+  const quest = { type: 'New cuisines', duration: 'This month', targetCuisines: 3, budget: 3000,
+    maxDistanceKm: 2, startedAt: Timestamp.now() };
+  const alice = doc(env.authenticatedContext('alice').firestore(), 'users/alice/quests/active');
+  await assertSucceeds(setDoc(alice, quest));
+  await assertFails(setDoc(alice, { ...quest, budget: -1 }));
+  await assertFails(setDoc(alice, { ...quest, targetCuisines: 99 }));
+  await assertFails(setDoc(doc(env.authenticatedContext('bob').firestore(), alice.path), quest));
+  await assertSucceeds(deleteDoc(alice));
+});
+
+test('push tokens: only their owner can register or read them', async () => {
+  const token = { token: 'test-registration-token', platform: 'ios', updatedAt: Timestamp.now() };
+  const path = 'users/alice/devices/test';
+  const alice = doc(env.authenticatedContext('alice').firestore(), path);
+  await assertSucceeds(setDoc(alice, token));
+  await assertFails(setDoc(alice, { ...token, unexpected: true }));
+  await assertFails(getDoc(doc(env.authenticatedContext('bob').firestore(), path)));
+});
+
+test('meal photos: owner upload/read/delete, cross-account access denied', async () => {
+  const path = 'users/alice/mealPhotos/12345678-1234-1234-1234-123456789abc.jpg';
+  const alice = ref(env.authenticatedContext('alice').storage(), path);
+  await assertSucceeds(uploadBytes(alice, new Uint8Array([255, 216, 255]), { contentType: 'image/jpeg' }));
+  await assertSucceeds(getBytes(alice));
+  const bob = ref(env.authenticatedContext('bob').storage(), path);
+  await assertFails(getBytes(bob));
+  await assertFails(deleteObject(bob));
+  await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), path)));
+  await assertSucceeds(deleteObject(alice));
+});
+
+test('meal photos: oversized files, wrong MIME types and paths rejected', async () => {
+  const storage = env.authenticatedContext('alice').storage();
+  const valid = ref(storage, 'users/alice/mealPhotos/abcdefab-1234-1234-1234-123456789abc.jpg');
+  await assertFails(uploadBytes(valid, new Uint8Array(5 * 1024 * 1024 + 1), { contentType: 'image/jpeg' }));
+  await assertFails(uploadBytes(valid, new Uint8Array([1]), { contentType: 'text/plain' }));
+  await assertFails(uploadBytes(ref(storage, 'public/photo.jpg'), new Uint8Array([1]), { contentType: 'image/jpeg' }));
+  await assertFails(uploadBytes(ref(storage, 'users/bob/mealPhotos/abcdefab-1234-1234-1234-123456789abc.jpg'), new Uint8Array([1]), { contentType: 'image/jpeg' }));
+});

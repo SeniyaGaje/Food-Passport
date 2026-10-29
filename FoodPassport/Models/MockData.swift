@@ -2,7 +2,7 @@ import Foundation
 import CoreLocation
 
 /// Sample data for previews, tests, and running without Firebase.
-/// The restaurants are also uploaded to Firestore the first time (debug builds only).
+/// Shared restaurant data is maintained by an administrator, never uploaded by the app.
 enum MockData {
 
     // Locations (University of Colombo area)
