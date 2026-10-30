@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import FirebaseStorage
 
+/// Talks to Firebase Storage. A protocol, so tests can use a fake that goes offline.
 nonisolated protocol MealPhotoRemote: Sendable {
     func upload(_ data: Data, id: String, userID: String) async throws
     func download(id: String, userID: String) async throws -> Data
@@ -11,24 +12,29 @@ nonisolated protocol MealPhotoRemote: Sendable {
 actor FirebaseMealPhotoRemote: MealPhotoRemote {
     init() {
         let storage = Storage.storage()
+        // Give up on slow transfers instead of hanging (seconds).
         storage.maxUploadRetryTime = 30
         storage.maxDownloadRetryTime = 15
         storage.maxOperationRetryTime = 10
     }
+    // Path: users/{userID}/mealPhotos/{photo ID}.jpg
     private func reference(id: String, userID: String) -> StorageReference {
         Storage.storage().reference().child("users").child(userID).child("mealPhotos").child(id + ".jpg")
     }
 
+    // Uploads as image/jpeg, which the Storage rules require.
     func upload(_ data: Data, id: String, userID: String) async throws {
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
         _ = try await reference(id: id, userID: userID).putDataAsync(data, metadata: metadata)
     }
 
+    // Downloads at most 5 MB, the same limit as the rules.
     func download(id: String, userID: String) async throws -> Data {
         try await reference(id: id, userID: userID).data(maxSize: 5 * 1024 * 1024)
     }
 
+    // Deleting a photo that's already gone isn't an error.
     func remove(id: String, userID: String) async throws {
         do {
             try await reference(id: id, userID: userID).delete()
@@ -47,6 +53,7 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
         var deletions: [String: Set<String>] = [:]
     }
 
+    // The phone copy, the cloud copy, and the file that keeps the retry queue.
     private let local: LocalVisitPhotoStore
     private let remote: MealPhotoRemote
     private let pendingFile: URL?
@@ -58,6 +65,7 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
         self.local = local
         self.remote = remote
         self.pendingFile = pendingFile
+        // Load the retry queue saved by an earlier launch.
         let data = pendingFile.flatMap { try? Data(contentsOf: $0) }
         if let data, let saved = try? JSONDecoder().decode(PendingWork.self, from: data) {
             pending = saved
@@ -70,7 +78,9 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
     }
 
     func save(_ images: [UIImage], userID: String) async throws -> [String] {
+        // Save on the phone first, so the photo is never lost.
         let ids = try await local.save(images, userID: userID)
+        // Then upload each one; stop at the first failure and queue it and the rest.
         for (index, id) in ids.enumerated() {
             do {
                 try await upload(id: id, userID: userID)
@@ -89,8 +99,10 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
     }
 
     func load(id: String, userID: String) async -> UIImage? {
+        // Only real photo IDs, and not ones waiting to be deleted.
         guard UUID(uuidString: id) != nil else { return nil }
         guard pending.deletions[userID]?.contains(id) != true else { return nil }
+        // Use the phone copy, or download it and keep a copy.
         if let image = await local.load(id: id, userID: userID) { return image }
         do {
             let data = try await remote.download(id: id, userID: userID)
@@ -101,8 +113,10 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
         }
     }
 
+    /// Deletes photos from the phone now, and from Firebase as soon as possible.
     func delete(ids: [String], userID: String) async {
         let valid = ids.filter { UUID(uuidString: $0) != nil }
+        // Cancel any queued upload and queue the cloud deletion, saved to disk first.
         pending.uploads[userID]?.subtract(valid)
         pending.deletions[userID, default: []].formUnion(valid)
         persistPending()
@@ -112,6 +126,7 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
 
     /// Only for this account, after it next opens its passport or comes back online.
     func retryPendingWork(userID: String) async {
+        // Retry uploads in order, stopping at the first failure (still offline).
         for id in pending.uploads[userID] ?? [] {
             do {
                 try await upload(id: id, userID: userID)
@@ -126,6 +141,7 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
                 break
             }
         }
+        // Retry deletions.
         for id in pending.deletions[userID] ?? [] {
             do {
                 try await remote.remove(id: id, userID: userID)
@@ -137,6 +153,7 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
         }
     }
 
+    /// Uploads the phone copy of one photo.
     private func upload(id: String, userID: String) async throws {
         try Task.checkCancellation()
         guard let image = await local.load(id: id, userID: userID),
@@ -144,6 +161,7 @@ actor FirebaseVisitPhotoStore: VisitPhotoStore {
         try await remote.upload(data, id: id, userID: userID)
     }
 
+    /// Saves the retry queue to disk, so it survives the app closing.
     private func persistPending() {
         guard let pendingFile else { return }
         do {

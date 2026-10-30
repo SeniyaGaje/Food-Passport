@@ -19,12 +19,14 @@ struct ProfileView: View {
             VStack(spacing: Theme.Spacing.l) {
                 header
 
+                // Lifetime totals.
                 AdaptiveStack(spacing: Theme.Spacing.s) {
                     StatTile(value: "\(appState.visits.count)", label: "Visits", systemImage: "fork.knife")
                     StatTile(value: "\(appState.cuisinesTriedCount)", label: "Cuisines", systemImage: "globe.asia.australia.fill", valueColor: Theme.greenText)
                     StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
+                // The monthly budget (opens the budget sheet).
                 settingsSection("Budget") {
                     Button {
                         router.sheet = .monthlyBudget
@@ -36,6 +38,7 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                 }
 
+                // Reminder switches and the weekly reminder time.
                 settingsSection("Reminders") {
                     SettingsToggleRow(
                         systemImage: "bell.fill",
@@ -67,6 +70,7 @@ struct ProfileView: View {
                 .animation(.easeInOut(duration: 0.2), value: appState.weeklyChallengeReminderEnabled)
 
                 settingsSection("Privacy & display") {
+                    // Face ID switch: turning it on asks for a scan first.
                     SettingsToggleRow(
                         systemImage: appState.biometryKind.systemImage,
                         tint: Theme.green,
@@ -74,6 +78,7 @@ struct ProfileView: View {
                         isOn: asyncBinding(appState.isFaceIDEnabled, set: appState.setFaceIDEnabled)
                     )
 
+                    // With Face ID on, choose how long the app can be away before asking again.
                     if appState.isFaceIDEnabled {
                         SettingsDivider()
                         Menu {
@@ -121,6 +126,7 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
 
                     SettingsDivider()
+                    // Sign out (asks first).
                     Button {
                         isConfirmingSignOut = true
                     } label: {
@@ -131,6 +137,7 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
 
                     SettingsDivider()
+                    // Reset all data (asks first).
                     Button {
                         isConfirmingReset = true
                     } label: {
@@ -145,6 +152,7 @@ struct ProfileView: View {
             .padding(.top, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.xl)
         }
+        // Pull down to reload.
         .refreshable { await appState.refreshData() }
         .scrollIndicators(.hidden)
         .appBackground()
@@ -195,6 +203,7 @@ struct ProfileView: View {
         Binding(get: { appState.lockDelay }, set: { appState.setLockDelay($0) })
     }
 
+    /// A switch whose change runs async code, e.g. the Face ID scan.
     private func asyncBinding(_ value: Bool, set: @escaping (Bool) async -> Void) -> Binding<Bool> {
         Binding(
             get: { value },
@@ -325,6 +334,7 @@ extension View {
     }
 }
 
+/// The sheet for the monthly food budget.
 struct MonthlyBudgetSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -364,6 +374,7 @@ struct MonthlyBudgetSheet: View {
     }
 }
 
+/// The sheet for the weekly reminder time.
 struct ReminderTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
     let time: Date
@@ -399,6 +410,7 @@ struct ReminderTimeSheet: View {
     }
 }
 
+/// About the app and its main features.
 struct AboutView: View {
     private var appVersion: String {
         let info = Bundle.main.infoDictionary

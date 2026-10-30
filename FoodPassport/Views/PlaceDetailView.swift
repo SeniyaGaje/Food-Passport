@@ -24,6 +24,7 @@ struct PlaceDetailView: View {
         .appBackground()
         .navigationTitleHidden(restaurant.name)
         .toolbar {
+            // Bookmark button in the top bar.
             ToolbarItem(placement: .topBarTrailing) {
                 BookmarkButton(isBookmarked: appState.isBookmarked(restaurant)) {
                     appState.toggleBookmark(for: restaurant)
@@ -77,6 +78,7 @@ struct PlaceDetailView: View {
             SectionHeader("Popular dishes")
 
             VStack(spacing: 0) {
+                // The menu, with estimated prices.
                 ForEach(Array(restaurant.popularDishes.enumerated()), id: \.element.id) { index, dish in
                     if index > 0 {
                         Divider()
@@ -97,6 +99,7 @@ struct PlaceDetailView: View {
             }
             .cardBackground()
 
+            // When the prices were last checked, since real prices change.
             Label(restaurant.pricesUpdatedText, systemImage: "clock.arrow.circlepath")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -105,6 +108,7 @@ struct PlaceDetailView: View {
 
     private var actions: some View {
         VStack(spacing: Theme.Spacing.s) {
+            // Plan visit: day, time, reminder and quest.
             Button {
                 isShowingPlanSheet = true
             } label: {
@@ -112,11 +116,13 @@ struct PlaceDetailView: View {
             }
             .buttonStyle(.brandPrimary)
 
+            // Walking directions and the arrival alert.
             NavigationLink(value: AppRoute.directions(restaurant)) {
                 Label("Get directions", systemImage: "figure.walk")
             }
             .buttonStyle(.brandSecondary)
 
+            // Log the visit now.
             NavigationLink(value: AppRoute.logVisit(restaurant)) {
                 Label("I'm here – Log visit", systemImage: "checkmark.circle")
             }
@@ -165,6 +171,7 @@ struct PlanVisitSheet: View {
 
     let restaurant: Restaurant
 
+    // Defaults: two days from now at 1 PM, with a reminder, counting towards the quest.
     @State private var selectedDayIndex = 2
     @State private var selectedMinutes = 13 * 60
     @State private var remindMe = true
@@ -356,6 +363,7 @@ struct DirectionsView: View {
     }
 
     var body: some View {
+        // The walking route in orange, or a dotted straight line if it couldn't be calculated.
         Map(position: $position) {
             if let route {
                 MapPolyline(route.polyline)

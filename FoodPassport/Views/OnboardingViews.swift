@@ -30,6 +30,7 @@ private struct OnboardingDestination: View {
     }
 }
 
+/// The first screen: the photo, the app name and the buttons to sign up or sign in.
 struct WelcomeView: View {
     /// The app name grows with larger text sizes.
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 40
@@ -116,6 +117,7 @@ struct WelcomeView: View {
         }
     }
 
+    // The Get started and sign-in buttons.
     private func buttonStack(secondaryColor: Color) -> some View {
         VStack(spacing: 8) {
             NavigationLink(value: OnboardingRoute.signUp) {
@@ -206,6 +208,7 @@ struct PermissionsView: View {
     }
 }
 
+/// The three permissions explained on Before we begin.
 private enum OnboardingPermission: CaseIterable, Identifiable {
     case location
     case notifications
@@ -254,6 +257,7 @@ private enum OnboardingPermission: CaseIterable, Identifiable {
     }
 }
 
+/// One permission card: icon, title, why it's needed, and a tick once allowed.
 private struct PermissionCard: View {
     let permission: OnboardingPermission
     let isGranted: Bool
@@ -331,6 +335,7 @@ struct BudgetSetupView: View {
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
+            // Save the budget, start the first quest and open the main app.
             Button {
                 appState.updateMonthlyBudget(budget)
                 appState.startFirstQuestIfNeeded(budget: budget)

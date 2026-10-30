@@ -4,6 +4,7 @@ import PhotosUI
 
 /// The full-screen camera for photographing a meal. The dish is recognised on the phone.
 struct MealCameraView: View {
+    // The screen's steps: camera, recognising, results, or a problem.
     private enum Step {
         case camera
         case recognising(UIImage)
@@ -12,6 +13,7 @@ struct MealCameraView: View {
         case problem(UIImage?, title: String, message: String)
     }
 
+    // Whether the camera is starting, running, missing (Simulator) or not allowed.
     private enum CameraStatus {
         case starting
         case running
@@ -29,6 +31,7 @@ struct MealCameraView: View {
     /// The dishes picked, the photo, and when it was taken (nil if a photo from Photos has no date).
     private let onConfirm: ([MealPrediction], UIImage, Date?) -> Void
 
+    // The camera, the current step, and the scan being reviewed.
     @State private var camera = CameraService()
     @State private var cameraStatus = CameraStatus.starting
     @State private var step = Step.camera
@@ -41,7 +44,7 @@ struct MealCameraView: View {
     @State private var wantsManualEntry = false
     @State private var review: MealScanViewModel
 
-    /// `menu` is the restaurant's dishes (they get a boost).
+    /// `menu` is the restaurant's dishes: a matching suggestion uses the menu's name (scores don't change).
     /// `initialPhoto` is recognised straight away, for previews.
     init(
         menu: [String] = [],
@@ -53,6 +56,7 @@ struct MealCameraView: View {
         self.recognizer = recognizer
         self.initialPhoto = initialPhoto
         self.onConfirm = onConfirm
+        // The review holds the scan until the student confirms.
         _review = State(initialValue: MealScanViewModel(recognizer: recognizer))
     }
 
@@ -399,6 +403,7 @@ private struct CameraPreview: UIViewRepresentable {
 
     func updateUIView(_ view: PreviewView, context: Context) {}
 
+    // A view whose layer is the camera's live picture.
     final class PreviewView: UIView {
         override class var layerClass: AnyClass {
             AVCaptureVideoPreviewLayer.self
@@ -470,6 +475,7 @@ struct MealRecognitionSheet: View {
     }
 }
 
+/// The photo with a numbered box around each detected item.
 private struct MealRegionPhoto: View {
     let photo: UIImage
     let regions: [MealRegion]
@@ -496,6 +502,7 @@ private struct MealRegionPhoto: View {
     }
 }
 
+/// One suggestion: the dish name, its confidence, and whether it's selected.
 private struct PredictionRow: View {
     let prediction: MealPrediction
     let isSelected: Bool

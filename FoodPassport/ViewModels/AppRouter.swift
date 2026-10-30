@@ -3,10 +3,12 @@ import SwiftUI
 /// Navigation for the whole app: the selected tab, each tab's screens, and pop-ups.
 @Observable
 final class AppRouter {
+    // The tab showing, and each tab's stack of open screens.
     var selectedTab: AppTab = .home
     var tabPaths: [AppTab: [AppRoute]] = [:]
     var onboardingPath: [OnboardingRoute] = []
 
+    // What's on top right now: a pop-up, a sheet, a short message or a banner.
     var popup: AppPopup?
     var sheet: AppSheet?
     var toast: ToastMessage?
@@ -132,6 +134,7 @@ private extension AppRoute {
     }
 }
 
+/// The five main tabs, with their titles and SF Symbols icons.
 enum AppTab: String, CaseIterable, Identifiable {
     case home
     case explore

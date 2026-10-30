@@ -18,10 +18,12 @@ struct PassportView: View {
                     newQuestButton
                 }
 
+                // The stamp grid; tapping a stamp shows where it was earned.
                 StampGridCard(stamps: appState.stamps) { stamp in
                     selectedStamp = stamp
                 }
 
+                // The active quest, or a prompt to start one.
                 if appState.hasActiveQuest {
                 NavigationLink(value: AppRoute.questDetail) {
                     ActiveQuestCard(quest: quest)
@@ -33,6 +35,7 @@ struct PassportView: View {
 
                 SectionHeader("Challenges")
 
+                // The food trail and its progress.
                 NavigationLink(value: AppRoute.foodTrail) {
                     ChallengeRow(
                         systemImage: "mappin.and.ellipse",
@@ -44,6 +47,7 @@ struct PassportView: View {
                 }
                 .buttonStyle(.pressableCard)
 
+                // This week's challenge.
                 NavigationLink(value: AppRoute.weeklyChallenge) {
                     ChallengeRow(
                         systemImage: "clock",
@@ -155,6 +159,7 @@ struct StampGridCard: View {
     }
 }
 
+/// A stamp's details: where and when it was earned, with a link to its visit.
 struct StampDetailSheet: View {
     let stamp: Stamp
     let visit: Visit?

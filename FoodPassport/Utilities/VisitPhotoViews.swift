@@ -29,6 +29,7 @@ struct VisitPhotoView: View {
     }
 }
 
+/// Full-screen gallery of a visit's photos; swipe between them.
 struct VisitPhotoGallery: View {
     @Environment(\.dismiss) private var dismiss
     let ids: [String]
@@ -56,6 +57,7 @@ struct VisitPhotoGallery: View {
     }
 }
 
+/// One saved photo, loaded by its ID, with Retry if it can't load.
 private struct SavedMealPhoto: View {
     @Environment(AppState.self) private var appState
     let id: String

@@ -11,12 +11,14 @@ struct LogVisitView: View {
 
     let restaurant: Restaurant
 
+    // The form's fields. Items start with one empty row.
     @State private var items = [VisitItemDraft()]
     @State private var cuisine = ""
     @State private var amount = ""
     @State private var rating = 0
     @State private var notes = ""
     @State private var hasMealPhoto = false
+    // Meal photos, with their fingerprints and any problem.
     @State private var mealPhotos: [MealPhoto] = []
     @State private var isSaving = false
     @State private var photoError: String?
@@ -58,18 +60,22 @@ struct LogVisitView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                // The restaurant and its location badge.
                 restaurantCard
 
+                // The Scan your meal button.
                 mealScanArea
 
                 if !mealPhotos.isEmpty { mealPhotosSection }
 
+                // Dishes and drinks, each with a price.
                 itemsSection
 
                 field("Cuisine") {
                     InputField(placeholder: "Cuisine type", text: $cuisine)
                 }
 
+                // The total, with Scan receipt.
                 totalSection
 
                 field("Rating") {
@@ -102,6 +108,7 @@ struct LogVisitView: View {
             guard !hasTypedTotal && !isAmountFromReceipt else { return }
             amount = newTotal > 0 ? "\(newTotal)" : ""
         }
+        // Meal camera; the chosen dishes and the photo come back here.
         .fullScreenCover(isPresented: $isShowingMealCamera) {
             MealCameraView(menu: restaurant.popularDishes.map(\.name)) { dishes, photo, takenAt in
                 addScannedDishes(dishes)
@@ -111,6 +118,7 @@ struct LogVisitView: View {
         .alert("Couldn't save visit", isPresented: Binding(get: { photoError != nil }, set: { if !$0 { photoError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(photoError ?? "") }
+        // Receipt scanner; the total and prices come back here.
         .fullScreenCover(isPresented: $isShowingReceiptScanner) {
             ReceiptScanView(keepsYourItems: !namedItems.isEmpty) { receipt in
                 useReceipt(receipt)
@@ -186,6 +194,7 @@ struct LogVisitView: View {
         isSaving = true
         Task {
             do {
+                // Save the photos and the visit, then decide which pop-up or message to show.
                 let result = try await appState.saveVisit(visit, photos: mealPhotos.map(\.image))
                 if let stamp = result.stamp {
                     router.present(.stampEarned(stamp.cuisine))

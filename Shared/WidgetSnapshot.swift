@@ -23,11 +23,13 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     var challengeTarget: Int?
     var challengeEndsAt: Date?
 
+    /// e.g. "2026-10", to notice when a new month starts.
     static func monthKey(for date: Date, calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month], from: date)
         return "\(parts.year ?? 0)-\(parts.month ?? 0)"
     }
 
+    /// The snapshot as it should look at `date`: hidden after the lock time, reset for a new month or week.
     func current(at date: Date) -> WidgetSnapshot {
         if let hiddenAfter, date >= hiddenAfter { return WidgetSnapshot() }
         var value = self
@@ -38,6 +40,7 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
         return value
     }
 
+    // Progress from 0 to 1, for the bars and gauges.
     var questFraction: Double {
         guard targetCuisines > 0 else { return 0 }
         return min(1, Double(cuisinesTried) / Double(targetCuisines))
@@ -56,6 +59,7 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     var remainingBudget: Int { max(0, monthlyBudget - monthlySpent) }
 }
 
+/// Reads and writes the snapshot file in the App Group shared by the app and the widgets.
 nonisolated struct WidgetSnapshotStore: Sendable {
     static let groupID = "group.com.seniyagajadeera.FoodPassport"
     let file: URL?
@@ -65,6 +69,7 @@ nonisolated struct WidgetSnapshotStore: Sendable {
         self.file = file
     }
 
+    // A missing or unreadable file shows the signed-out widget.
     func read(at date: Date = .now) -> WidgetSnapshot {
         guard let file, let data = try? Data(contentsOf: file),
               let value = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) else {

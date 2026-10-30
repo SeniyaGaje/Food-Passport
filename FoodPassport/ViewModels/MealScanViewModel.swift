@@ -4,11 +4,13 @@ import UIKit
 /// Holds a scan until the student confirms or rejects it.
 @Observable
 final class MealScanViewModel {
+    // The scan result, and the label chosen for each item (by item ID).
     private(set) var result: MealRecognition?
     private(set) var choices: [Int: String] = [:]
 
     var selectedLabels: Set<String> { Set(choices.values) }
 
+    // The items to choose for. With no separate items, the whole photo is one item.
     var regions: [MealRegion] {
         guard let result else { return [] }
         return result.regions.isEmpty
@@ -19,18 +21,21 @@ final class MealScanViewModel {
     private(set) var isScanning = false
 
     private let recognizer: MealRecognizer
+    // Bumped by every new scan or reject, so a late result from an old scan is ignored.
     private var scanNumber = 0
 
     init(recognizer: MealRecognizer = CoreMLMealRecognizer.shared) {
         self.recognizer = recognizer
     }
 
+    // The dish chosen for each item.
     var selectedDishes: [MealPrediction] {
         regions.compactMap { region in
             region.predictions.first { $0.label == choices[region.id] }
         }
     }
 
+    /// Runs the recogniser on a photo. Any earlier scan is cleared first.
     func scan(_ image: UIImage, menu: [String]) async {
         reject()
         let currentScan = scanNumber
@@ -60,6 +65,7 @@ final class MealScanViewModel {
         return dishes
     }
 
+    /// Clears the scan and its choices.
     func reject() {
         scanNumber += 1
         result = nil

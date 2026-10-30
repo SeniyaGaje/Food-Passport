@@ -35,6 +35,7 @@ struct FormErrorText: View {
     }
 }
 
+/// Email and password sign-in, with Forgot password.
 struct SignInView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
@@ -114,6 +115,7 @@ struct SignInView: View {
 
         Task {
             do {
+                // Firebase checks the password, then the passport loads.
                 try await appState.signIn(email: email.trimmed, password: password)
                 router.reset()
             } catch {
@@ -124,6 +126,7 @@ struct SignInView: View {
     }
 }
 
+/// Create an account: name, email and password twice.
 struct SignUpView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
@@ -220,6 +223,7 @@ struct SignUpView: View {
 
         Task {
             do {
+                // Create the account and its profile, then go to the permissions step.
                 try await appState.signUp(name: name.trimmed, email: email.trimmed, password: password)
                 router.onboardingPath.append(.permissions)
             } catch {
@@ -230,6 +234,7 @@ struct SignUpView: View {
     }
 }
 
+/// Sends a password reset email.
 struct ForgotPasswordView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -386,6 +391,7 @@ struct FaceIDLockView: View {
                     .buttonStyle(.brandPrimary)
                     .disabled(isAuthenticating)
 
+                // Can't use Face ID: sign out and sign in with the password instead.
                 Button("Use account password") {
                     router.reset()
                     router.onboardingPath = [.signIn]
