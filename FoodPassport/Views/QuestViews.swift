@@ -13,11 +13,13 @@ struct QuestDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // The progress ring and the money left.
                 progressCard
                 budgetCard
 
                 SectionHeader("Your plan")
 
+                // Each planned stop: one that fits opens the place; one that doesn't explains the budget limit.
                 ForEach(quest.plan) { stop in
                     if stop.fitsBudget {
                         NavigationLink(value: AppRoute.placeDetail(stop.restaurant)) {
@@ -34,6 +36,7 @@ struct QuestDetailView: View {
                     }
                 }
 
+                // "Why these picks?", written by the planner.
                 explanationCard
 
                 Button {
@@ -217,6 +220,7 @@ struct QuestEditorSheet: View {
         .brandSheetStyle()
         .sensoryFeedback(.selection, trigger: duration)
         .sensoryFeedback(.selection, trigger: cuisineCount)
+        // When the sheet opens, fill the fields (from the current quest when editing).
         .onAppear {
             selectedTrailID = appState.trails.first?.id
             guard mode == .edit, let settings = appState.questSettings else { return }
@@ -334,6 +338,7 @@ struct FoodTrailView: View {
 
     init(trail: FoodTrail) {
         self.trail = trail
+        // Start framed on all the stops.
         _position = State(initialValue: .region(.fitting(trail.stops.map(\.restaurant.coordinate), paddingFactor: 1.6)))
     }
 
@@ -421,6 +426,7 @@ struct FoodTrailView: View {
             }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        // Load the walking routes when the screen opens.
         .task(id: trail.id) { await loadWalkingRoutes() }
         .accessibilityLabel("Map of \(trail.name) with \(trail.stops.count) stops")
     }
@@ -506,6 +512,7 @@ private struct TrailStopRow: View {
     }
 }
 
+/// This week's challenge: progress, days left and suggested places.
 struct WeeklyChallengeView: View {
     let challenge: WeeklyChallenge
 
@@ -558,6 +565,7 @@ struct WeeklyChallengeView: View {
     }
 }
 
+/// A suggested place with its distance and estimated cost.
 private struct SuggestedPlaceRow: View {
     let stop: PlannedStop
 
@@ -600,6 +608,7 @@ struct BudgetUpdatePopup: View {
     let onSeeUpdatedPlan: () -> Void
     let onAdjustBudget: () -> Void
 
+    // e.g. "Your meal at Spice Route cost LKR 1,250, LKR 600 more than the LKR 650 estimate."
     private var costSentence: String {
         let meal = "Your meal at \(update.restaurantName) cost \(update.actualCost.lkr)"
         if update.difference > 0 {
@@ -610,6 +619,7 @@ struct BudgetUpdatePopup: View {
         return "\(meal), right on the estimate."
     }
 
+    // Says whether the plan changed because of this meal.
     private var planSentence: String {
         if update.replacementStop != nil {
             return "We've updated your plan to stay within budget."

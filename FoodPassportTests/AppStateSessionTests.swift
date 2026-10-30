@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import FoodPassport
 
+/// Signing in and up, opening the app, signing out and profile changes.
 @Suite("Signing in, signing up and the profile")
 @MainActor
 struct AppStateSessionTests {
@@ -21,6 +22,7 @@ struct AppStateSessionTests {
     @Test("Signing in loads the student's own passport and opens the app")
     func signInLoadsSavedData() async throws {
         let visit = makeVisit(id: "saved-visit")
+        // A fake database holding this student's saved passport.
         let app = TestApp(database: MockDatabaseService(profile: savedProfile, visits: [visit], stamps: []))
 
         try await app.signIn()
@@ -35,6 +37,7 @@ struct AppStateSessionTests {
     @Test("A wrong password shows an error and keeps the student out of the app")
     func wrongPassword() async {
         let app = TestApp()
+        // The fake sign-in rejects the password.
         app.auth.errorToThrow = .invalidCredentials
 
         await #expect(throws: AuthServiceError.invalidCredentials) {
@@ -54,6 +57,7 @@ struct AppStateSessionTests {
 
     @Test("An account whose profile was never saved gets a blank one, which is then saved")
     func missingProfileIsCreated() async throws {
+        // The account has no saved profile.
         let database = MockDatabaseService(profile: nil)
         let app = TestApp(database: database)
 
@@ -72,6 +76,7 @@ struct AppStateSessionTests {
         let database = MockDatabaseService(profile: nil)
         let app = TestApp(database: database)
 
+        // Sign up straight through AppState, as SignUpView does.
         try await app.appState.signUp(name: "Seniya Gajadeera", email: "seniya@nibm.lk", password: "password123")
 
         #expect(app.appState.profile.name == "Seniya Gajadeera")
@@ -119,6 +124,7 @@ struct AppStateSessionTests {
 
     @Test("If the passport can't be loaded, the student sees why and goes back to sign in")
     func restoreWhenOffline() async {
+        // A database that can't load anything, like being offline.
         let database = OfflineDatabaseService()
         database.failsReads = true
         let appState = AppState(auth: MockAuthService(signedInUserID: "mock-user"), database: database, settings: UserDefaults(suiteName: "offline-\(UUID())")!)
@@ -135,6 +141,7 @@ struct AppStateSessionTests {
     func signOut() async throws {
         let app = TestApp(notificationPermission: .allowed)
         try await app.signIn()
+        // Plan a visit, so there's a reminder to clear.
         _ = await app.appState.planVisit(to: MockData.campusBites, at: .now.addingTimeInterval(2 * 60 * 60), remind: true)
         #expect(!app.notifications.scheduledReminders.isEmpty)
 
@@ -179,6 +186,7 @@ struct AppStateSessionTests {
 
     @Test("When saving fails, the student is told instead of the change being lost silently")
     func saveFailureShowsMessage() async throws {
+        // A database where every save fails.
         let appState = AppState(
             auth: MockAuthService(signedInUserID: "mock-user"),
             database: OfflineDatabaseService(),

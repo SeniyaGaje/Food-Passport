@@ -223,6 +223,7 @@ final class MockDatabaseService: DatabaseService {
     func deletePlannedVisit(id: PlannedVisit.ID, userID: String) async throws { plannedVisits.removeAll { $0.id == id } }
     func fetchTrails() async throws -> [TrailDocument] { trails }
     func fetchWeeklyChallenge() async throws -> ChallengeDocument? { weeklyChallenge }
+    // Restaurants, profile, visits and stamps, starting as the sample data.
     var restaurants: [Restaurant]
     var profile: UserProfile?
     var visits: [Visit]
@@ -256,6 +257,7 @@ final class MockDatabaseService: DatabaseService {
         visits.sorted { $0.date > $1.date }
     }
 
+    // Saving replaces any visit with the same ID, like Firestore's setData.
     func saveVisit(_ visit: Visit, userID: String) async throws {
         visits.removeAll { $0.id == visit.id }
         visits.append(visit)
@@ -269,6 +271,7 @@ final class MockDatabaseService: DatabaseService {
         stamps
     }
 
+    // One stamp per cuisine, like the Firestore document ID.
     func saveStamp(_ stamp: Stamp, userID: String) async throws {
         stamps.removeAll { $0.cuisine == stamp.cuisine }
         stamps.append(stamp)

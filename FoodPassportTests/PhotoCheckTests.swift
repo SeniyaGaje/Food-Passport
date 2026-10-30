@@ -5,6 +5,7 @@ import ImageIO
 import UniformTypeIdentifiers
 @testable import FoodPassport
 
+/// The anti-cheating photo checks: fingerprints, capture dates and reused photos.
 @Suite("Meal photo checks")
 @MainActor
 struct PhotoCheckTests {
@@ -27,7 +28,9 @@ struct PhotoCheckTests {
     @Test("The same photo, resized and recompressed, has a matching fingerprint")
     func samePhotoMatches() throws {
         let original = photo()
+        // The same picture at 3× the size.
         let resized = photo(size: CGSize(width: 900, height: 600))
+        // The same picture as a low-quality JPEG.
         let jpeg = try #require(original.jpegData(compressionQuality: 0.3))
         let recompressed = try #require(UIImage(data: jpeg))
 
@@ -44,6 +47,7 @@ struct PhotoCheckTests {
         let b = try #require(PhotoCheck.fingerprint(of: photo(striped: true)))
 
         #expect(PhotoCheck.distance(a, b) > PhotoCheck.sameImageDistance)
+        // A broken fingerprint counts as completely different.
         #expect(PhotoCheck.distance(a, "not hex") == 64)
     }
 
@@ -52,15 +56,20 @@ struct PhotoCheckTests {
         let fingerprint = try #require(PhotoCheck.fingerprint(of: photo()))
         let now = Date.now
 
+        // Matches an earlier visit's photo: reused.
         #expect(PhotoCheck.problem(fingerprint: fingerprint, takenAt: now, earlierFingerprints: [fingerprint]) == .reused)
+        // Taken a week ago: too old.
         let lastWeek = now.addingTimeInterval(-7 * 24 * 60 * 60)
         #expect(PhotoCheck.problem(fingerprint: fingerprint, takenAt: lastWeek, earlierFingerprints: [], now: now) == .old(takenAt: lastWeek))
+        // No date at all.
         #expect(PhotoCheck.problem(fingerprint: fingerprint, takenAt: nil, earlierFingerprints: []) == .noDate)
+        // New and taken a minute ago: no problem.
         #expect(PhotoCheck.problem(fingerprint: fingerprint, takenAt: now.addingTimeInterval(-60), earlierFingerprints: [], now: now) == nil)
     }
 
     @Test("The capture date is read from the photo's EXIF data")
     func captureDateFromExif() throws {
+        // Make a JPEG with an EXIF capture date of 12 Oct 2026, 13:05.
         let cgImage = try #require(photo().cgImage)
         let data = NSMutableData()
         let destination = try #require(CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil))
@@ -72,6 +81,7 @@ struct PhotoCheckTests {
         let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
 
         #expect(parts == DateComponents(year: 2026, month: 10, day: 12, hour: 13, minute: 5))
+        // A PNG with no EXIF data has no capture date.
         let png = try #require(photo().pngData())
         #expect(PhotoCheck.captureDate(of: png) == nil)
     }

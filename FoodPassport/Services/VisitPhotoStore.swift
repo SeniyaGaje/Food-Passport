@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import UIKit
 
+/// Why saving or loading a meal photo failed.
 enum VisitPhotoError: LocalizedError {
     case unreadable
     case signedOut
@@ -16,6 +17,7 @@ enum VisitPhotoError: LocalizedError {
     }
 }
 
+/// Where meal photos are kept: on the phone only, or on the phone plus Firebase.
 nonisolated protocol VisitPhotoStore: Sendable {
     func save(_ images: [UIImage], userID: String) async throws -> [String]
     func load(id: String, userID: String) async -> UIImage?
@@ -26,6 +28,7 @@ nonisolated protocol VisitPhotoStore: Sendable {
     func hasPendingUploads(ids: [String], userID: String) async -> Bool
 }
 
+// Defaults for the local store, which has nothing to upload.
 extension VisitPhotoStore {
     nonisolated func retryPendingWork(userID: String) async {}
     nonisolated func hasPendingUploads(ids: [String], userID: String) async -> Bool { false }
@@ -40,6 +43,7 @@ actor LocalVisitPhotoStore: VisitPhotoStore {
         self.folder = folder
     }
 
+    /// Resizes and saves the photos, returning a new ID for each. If one fails, none are kept.
     func save(_ images: [UIImage], userID: String) async throws -> [String] {
         guard !images.isEmpty else { return [] }
         let accountFolder = directory(for: userID)
@@ -49,6 +53,7 @@ actor LocalVisitPhotoStore: VisitPhotoStore {
         do {
             for image in images {
                 guard image.size.width > 0, image.size.height > 0 else { throw VisitPhotoError.unreadable }
+                // Shrink so the longest side is at most 1,600 px.
                 let scale = min(1, 1600 / max(image.size.width, image.size.height))
                 let format = UIGraphicsImageRendererFormat()
                 format.scale = 1
@@ -56,20 +61,25 @@ actor LocalVisitPhotoStore: VisitPhotoStore {
                 let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
                     image.draw(in: CGRect(origin: .zero, size: size))
                 }
+                // Save as JPEG at 85% quality.
                 guard let data = resized.jpegData(compressionQuality: 0.85) else { throw VisitPhotoError.unreadable }
+                // Skip a photo identical to one already saved for this visit.
                 guard hashes.insert(Data(SHA256.hash(data: data))).inserted else { continue }
                 let id = UUID().uuidString
+                // Write atomically, protected until the phone is first unlocked.
                 try data.write(to: accountFolder.appendingPathComponent(id + ".jpg"),
                                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
                 saved.append(id)
             }
             return saved
         } catch {
+            // Something failed: delete the photos already written, so nothing half-saved is left.
             deleteFiles(ids: saved, userID: userID)
             throw error
         }
     }
 
+    /// Loads a photo by ID. IDs must be UUIDs, so a path like "../x" is refused.
     func load(id: String, userID: String) async -> UIImage? {
         guard UUID(uuidString: id) != nil else { return nil }
         return UIImage(contentsOfFile: directory(for: userID).appendingPathComponent(id + ".jpg").path)
@@ -79,6 +89,7 @@ actor LocalVisitPhotoStore: VisitPhotoStore {
         deleteFiles(ids: ids, userID: userID)
     }
 
+    /// Saves a photo downloaded from Firebase, so it opens offline next time.
     func cache(_ data: Data, id: String, userID: String) throws {
         guard UUID(uuidString: id) != nil, UIImage(data: data) != nil else { throw VisitPhotoError.unreadable }
         let directory = directory(for: userID)
@@ -93,6 +104,7 @@ actor LocalVisitPhotoStore: VisitPhotoStore {
         }
     }
 
+    /// Each account's folder is named after a hash of its user ID.
     private func directory(for userID: String) -> URL {
         let account = SHA256.hash(data: Data(userID.utf8)).map { String(format: "%02x", $0) }.joined()
         return folder.appendingPathComponent(account, isDirectory: true)

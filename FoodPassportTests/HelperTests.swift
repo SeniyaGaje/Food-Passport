@@ -10,6 +10,7 @@ struct HelperTests {
 
     @Test("Amounts are shown in Sri Lankan rupees")
     func rupees() {
+        // The thousands separator depends on the phone's region settings.
         let grouping = Locale.current.groupingSeparator ?? ","
 
         #expect(950.lkr == "LKR 950")
@@ -30,6 +31,7 @@ struct HelperTests {
             CLLocationCoordinate2D(latitude: 6.92, longitude: 79.87),
         ]
 
+        // Two points 0.02° apart with 1.8× padding give a 0.036° span.
         let region = MKCoordinateRegion.fitting(coordinates, paddingFactor: 1.8)
 
         #expect(abs(region.center.latitude - 6.91) < 0.000001)
@@ -40,6 +42,7 @@ struct HelperTests {
 
     @Test("A single restaurant still gets a sensible zoom level")
     func regionForOneCoordinate() {
+        // One point: use the minimum zoom instead of zero.
         let region = MKCoordinateRegion.fitting([MockData.campusBites.coordinate], minimumDelta: 0.006)
 
         #expect(region.center.latitude == MockData.campusBites.latitude)
@@ -75,6 +78,7 @@ struct HelperTests {
     @Test("Each stamp has a small tilt, and not all stamps lean the same way")
     func stampTilt() {
         for cuisine in Cuisine.allCases {
+            // Every stamp leans at most 10 degrees.
             #expect(abs(cuisine.stampTilt) <= 10)
         }
         #expect(Set(Cuisine.allCases.map(\.stampTilt)).count > 1)

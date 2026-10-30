@@ -10,6 +10,7 @@ struct ReceiptParserTests {
     /// Turns lines of text into receipt rows from the top of the page down.
     private func rows(_ lines: String...) -> [TextRow] {
         lines.enumerated().map { index, line in
+            // Each line sits a little lower on the page, like Vision's coordinates (0 is the bottom).
             TextRow(text: line, boundingBox: CGRect(x: 0.1, y: 0.95 - Double(index) * 0.06, width: 0.8, height: 0.04))
         }
     }
@@ -30,10 +31,12 @@ struct ReceiptParserTests {
             "Change 50.00"
         )
 
+        // Run the parser on the lines only (no photo or Vision needed).
         let scan = ReceiptParser.parse(receipt)
 
         #expect(scan.restaurantName == "CAMPUS BITES")
         #expect(scan.date == "26/10/2026")
+        // Tel, Date, Sub Total, Cash and Change lines are not items.
         #expect(scan.items.map(\.name) == ["Kottu Roti", "Iced Milo"])
         #expect(scan.items.map(\.price) == [750, 200])
         #expect(scan.total == 950)
@@ -88,6 +91,7 @@ struct ReceiptParserTests {
 
     @Test("When two lines say TOTAL, the lower one is used")
     func lowestTotalLineWins() {
+        // Lines 0 and 2 both say Total; the lower one (index 2) wins.
         #expect(ReceiptParser.indexOfTotalLine(in: ["Total 900.00", "Tea 200.00", "TOTAL 1,100.00"]) == 2)
     }
 
@@ -147,6 +151,7 @@ struct ReceiptParserTests {
         let scan = ReceiptParser.parse(rows("Tea 100.00", "Tea 100.00", "Total 200.00"))
 
         #expect(scan.items.count == 2)
+        // Each has its own ID (its position on the receipt).
         #expect(Set(scan.items.map(\.id)).count == 2)
     }
 
@@ -172,6 +177,7 @@ struct ReceiptParserTests {
         ("Banquet 12,500.00", 12500),
     ])
     func amountFormats(line: String, expected: Int) {
+        // Each line gives exactly one amount, in rupees (cents are rounded).
         #expect(ReceiptParser.amounts(in: line) == [expected])
     }
 
@@ -189,11 +195,13 @@ struct ReceiptParserTests {
     @Test("Zero and absurdly large numbers are not prices")
     func outOfRangeAmounts() {
         #expect(ReceiptParser.amounts(in: "Discount 0.00").isEmpty)
+        // A 7-digit reference number is too large to be a price.
         #expect(ReceiptParser.amounts(in: "Ref 1234567").isEmpty)
     }
 
     @Test("Every amount on a line is read, in order")
     func severalAmounts() {
+        // The quantity 2 is read too; items use the last amount on the line.
         #expect(ReceiptParser.amounts(in: "2 Kottu Roti 750.00 1,500.00") == [2, 750, 1500])
     }
 
@@ -231,6 +239,7 @@ struct ReceiptParserTests {
     @Test("Postal zones with a leading zero are not prices, but cents are")
     func leadingZeros() {
         #expect(ReceiptParser.amounts(in: "Colombo 07").isEmpty)
+        // 50 cents rounds to 1 rupee.
         #expect(ReceiptParser.amounts(in: "Extra Sauce 0.50") == [1])
     }
 }

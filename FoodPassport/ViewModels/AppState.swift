@@ -241,8 +241,10 @@ final class AppState {
         guard var settings = questSettings else { return nil }
         let quest = activeQuest
         guard let blocked = quest.plan.first(where: { !$0.fitsBudget }) else { return settings.budget }
+        // Money for the stops that fit, plus the blocked stop, minus what's left.
         let alreadyPlanned = quest.plan.filter(\.fitsBudget).map(\.estimatedCost).reduce(0, +)
         let shortfall = alreadyPlanned + blocked.estimatedCost - max(0, quest.remainingBudget)
+        // Add the shortfall, rounded up to the next LKR 100.
         settings.budget += Int((Double(max(shortfall, 0)) / 100).rounded(.up)) * 100
         saveQuest(settings)
         return settings.budget
@@ -282,6 +284,7 @@ final class AppState {
             widgets.publish(WidgetSnapshot())
             return
         }
+        // This calendar month's spending, for the budget widget.
         let month = Calendar.current.dateInterval(of: .month, for: .now)
         let spent = visits.filter { month?.contains($0.date) == true }.map(\.amount).reduce(0, +)
         let quest = activeQuest
@@ -730,6 +733,7 @@ final class AppState {
         // Trails and the challenge are optional extras, so the built-in ones are used if they can't load.
         let trailDocuments = (try? await database.fetchTrails()) ?? []
         let challenge = try? await database.fetchWeeklyChallenge()
+        // Stop if the student signed out or reset while loading.
         guard auth.currentUserID == userID else { throw VisitPhotoError.signedOut }
         guard generation == photoSaveGeneration else { throw VisitPhotoError.cancelled }
         restaurants = withRealDistances(places)
@@ -770,11 +774,14 @@ final class AppState {
     func saveVisit(_ visit: Visit, photos: [UIImage]) async throws -> VisitSaveResult {
         guard let userID = auth.currentUserID else { throw VisitPhotoError.signedOut }
         let generation = photoSaveGeneration
+        // Photos first: the visit only saves if they saved (or were queued to upload).
         let ids = try await photoStore.save(photos, userID: userID)
+        // Signed out while saving: throw the photos away.
         guard auth.currentUserID == userID else {
             await photoStore.delete(ids: ids, userID: userID)
             throw VisitPhotoError.signedOut
         }
+        // Reset while saving: throw the photos away too.
         guard generation == photoSaveGeneration else {
             await photoStore.delete(ids: ids, userID: userID)
             throw VisitPhotoError.cancelled
@@ -817,6 +824,7 @@ final class AppState {
         publishWidgets()
         save { database, userID in try await database.saveVisit(visit, userID: userID) }
 
+        // Stamps: only for a verified visit to a cuisine with no stamp yet.
         guard visit.isLocationVerified, !stamps.contains(where: { $0.cuisine == visit.cuisine }) else {
             return nil
         }
@@ -901,6 +909,7 @@ final class AppState {
     /// Saves to the database in the background, so the student never waits.
     /// Firestore keeps the change offline and syncs it when the phone is online.
     private func save(_ write: @escaping (DatabaseService, String) async throws -> Void) {
+        // Nobody signed in: nothing to save.
         guard let userID = auth.currentUserID else { return }
 
         let id = UUID()
@@ -909,6 +918,7 @@ final class AppState {
             do {
                 try await write(database, userID)
             } catch {
+                // Remember the failed write for Retry, unless the account changed meanwhile.
                 guard self.auth.currentUserID == userID, self.photoSaveGeneration == generation else { return }
                 self.failedWrites[id] = (userID, write)
                 self.errorMessage = "Couldn't save your changes. \(error.localizedDescription)"

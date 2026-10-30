@@ -3,9 +3,11 @@ import Testing
 import CoreLocation
 @testable import FoodPassport
 
+/// Spending Overview numbers, using fixed dates so the results never change.
 @Suite("Spending overview")
 @MainActor
 struct SpendingSummaryTests {
+    // A fixed calendar: Colombo time, weeks starting on Monday.
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Colombo")!
@@ -18,10 +20,12 @@ struct SpendingSummaryTests {
         calendar.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 12))!
     }
 
+    // A day in 2026 at 1 PM.
     private func day(_ month: Int, _ day: Int) -> Date {
         calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 13))!
     }
 
+    // Three October meals (LKR 2,000) and one September meal (LKR 1,200).
     private var visits: [Visit] {
         [
             makeVisit(cuisine: .sriLankan, restaurant: MockData.campusBites, amount: 600, date: day(10, 14)),
@@ -37,6 +41,7 @@ struct SpendingSummaryTests {
 
         #expect(summary.visits.count == 3)
         #expect(summary.total == 2000)
+        // 2,000 ÷ 3 meals, rounded down.
         #expect(summary.averagePerMeal == 666)
         #expect(summary.spentThisMonth == 2000)
         #expect(summary.budgetLeft == 3000)
@@ -67,8 +72,10 @@ struct SpendingSummaryTests {
         let summary = SpendingSummary(visits: visits, period: .thisWeek, monthlyBudget: 5000, now: now, calendar: calendar)
 
         #expect(summary.bars.count == 7)
+        // Tuesday 400, Wednesday 600, every other day 0.
         #expect(summary.bars.map(\.amount) == [0, 400, 600, 0, 0, 0, 0])
         #expect(summary.bars.filter(\.isHighlighted).count == 1)
+        // Thursday, today, is highlighted.
         #expect(summary.bars[3].isHighlighted)
         #expect(summary.bars[0].label == "Monday")
     }
@@ -81,6 +88,7 @@ struct SpendingSummaryTests {
         // 30 days of September: 1–7, 8–14, 15–21, 22–28, 29–30.
         #expect(summary.bars.map(\.shortLabel) == ["1–7", "8–14", "15–21", "22–28", "29–30"])
         #expect(summary.bars.map(\.amount) == [0, 0, 1200, 0, 0])
+        // Last month has no "today", so its biggest week is highlighted.
         #expect(summary.bars[2].isHighlighted)
         #expect(summary.bars.map(\.amount).reduce(0, +) == summary.total)
     }
@@ -89,6 +97,7 @@ struct SpendingSummaryTests {
     func allTimeBars() {
         let summary = SpendingSummary(visits: visits, period: .allTime, monthlyBudget: 5000, now: now, calendar: calendar)
 
+        // September and October.
         #expect(summary.bars.count == 2)
         #expect(summary.bars.map(\.amount) == [1200, 2000])
         #expect(summary.bars.last?.isHighlighted == true)
@@ -96,6 +105,7 @@ struct SpendingSummaryTests {
 
     @Test("No visits: zero totals and no division by zero")
     func empty() {
+        // A budget of 0 must not cause a division by zero.
         let summary = SpendingSummary(visits: [], period: .thisMonth, monthlyBudget: 0, now: now, calendar: calendar)
 
         #expect(summary.total == 0)
@@ -106,6 +116,7 @@ struct SpendingSummaryTests {
     }
 }
 
+/// The verification rule: old or rough GPS fixes can't verify a visit.
 @Suite("Location checks")
 @MainActor
 struct LocationCheckTests {
@@ -117,6 +128,7 @@ struct LocationCheckTests {
         try await app.signIn()
         app.location.simulateMove(to: campusBites.coordinate)
 
+        // Two minutes and a bit later, the same fix is too old.
         let later = Date.now.addingTimeInterval(Geofence.maxLocationAge + 60)
 
         #expect(app.appState.locationCheck(for: campusBites) == .verified)
@@ -127,6 +139,7 @@ struct LocationCheckTests {
     func roughFixIsNotTrusted() async throws {
         let app = TestApp()
         try await app.signIn()
+        // A fix right at the restaurant, but only accurate to 500 m.
         let rough = CLLocation(coordinate: campusBites.coordinate, altitude: 0, horizontalAccuracy: 500,
                                verticalAccuracy: 10, timestamp: .now)
         app.location.onLocationChange?(rough)
@@ -149,6 +162,7 @@ struct LocationCheckTests {
     func restaurantHere() async throws {
         let app = TestApp()
         try await app.signIn()
+        // On campus, but not at any restaurant.
         #expect(app.appState.restaurantHere == nil)
 
         app.location.simulateMove(to: campusBites.coordinate)
@@ -157,11 +171,13 @@ struct LocationCheckTests {
     }
 }
 
+/// The widget snapshot and its links.
 @Suite("Widget data")
 @MainActor
 struct WidgetDataTests {
     @Test("A widget file saved before the new fields existed still opens")
     func oldSnapshotDecodes() throws {
+        // A snapshot saved by an older version, without the newer optional fields.
         let old = #"{"isSignedIn":true,"cuisinesTried":1,"targetCuisines":3,"questUnit":"cuisines tried","monthlyBudget":5000,"monthlySpent":1000,"budgetMonth":"2026-10","updatedAt":0}"#
         let snapshot = try JSONDecoder().decode(WidgetSnapshot.self, from: Data(old.utf8))
 
@@ -176,9 +192,11 @@ struct WidgetDataTests {
         var snapshot = WidgetSnapshot(isSignedIn: true)
         snapshot.challengeCompleted = 2
         snapshot.challengeTarget = 3
+        // This week's challenge ends in a minute.
         snapshot.challengeEndsAt = Date.now.addingTimeInterval(60)
 
         #expect(snapshot.current(at: .now).challengeCompleted == 2)
+        // Two minutes later it's a new week, so progress is back to 0.
         #expect(snapshot.current(at: .now.addingTimeInterval(120)).challengeCompleted == 0)
     }
 
@@ -186,6 +204,7 @@ struct WidgetDataTests {
     func questWidgetValues() async throws {
         let publisher = RecordingWidgetPublisher()
         let database = MockDatabaseService(visits: [], stamps: [])
+        // A quest with LKR 3,000 and nothing spent yet.
         database.quest = QuestSettings(budget: 3000, startedAt: .now.addingTimeInterval(-60))
         let app = TestApp(database: database, widgets: publisher)
         try await app.signIn()

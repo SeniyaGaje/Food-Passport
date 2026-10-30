@@ -10,6 +10,7 @@ struct MainTabView: View {
         @Bindable var router = router
 
         Group {
+            // iPad (regular width): a sidebar with the five destinations.
             if sizeClass == .regular {
                 NavigationSplitView {
                     List(selection: sidebarSelection) {
@@ -26,6 +27,7 @@ struct MainTabView: View {
                 }
                 .navigationSplitViewStyle(.balanced)
             } else {
+                // iPhone (compact width): the tab bar.
                 TabView(selection: $router.selectedTab) {
                     ForEach(AppTab.allCases) { tab in
                         navigation(for: tab)
@@ -36,10 +38,12 @@ struct MainTabView: View {
             }
         }
         .tint(Theme.orange)
+        // Haptics when the tab changes, a message shows, or a stamp is earned.
         .sensoryFeedback(.selection, trigger: router.selectedTab)
         .sensoryFeedback(.success, trigger: router.toast?.id)
         .sensoryFeedback(.success, trigger: appState.stamps.count)
 
+        // Pop-ups and top messages sit above every tab.
         .overlay { PopupHost() }
         .overlay(alignment: .top) { TopMessageHost() }
         .sheet(item: $router.sheet) { sheet in
@@ -77,6 +81,7 @@ struct MainTabView: View {
     }
 
     private func navigation(for tab: AppTab) -> some View {
+        // Each tab has its own navigation stack, driven by the router.
         NavigationStack(path: router.path(for: tab)) {
             rootView(for: tab)
                 .navigationDestination(for: AppRoute.self) { AppRouteDestination(route: $0) }
@@ -113,6 +118,7 @@ struct MainTabView: View {
         }
     }
 
+    // The first screen of each tab.
     @ViewBuilder
     private func rootView(for tab: AppTab) -> some View {
         switch tab {

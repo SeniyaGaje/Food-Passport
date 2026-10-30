@@ -7,6 +7,7 @@ import SwiftUI
 @MainActor
 struct AppRouterTests {
 
+    // The restaurant used in the routes below.
     private let place = MockData.campusBites
 
     @Test("The app opens on Home with nothing pushed")
@@ -23,6 +24,7 @@ struct AppRouterTests {
         let router = AppRouter()
         router.selectedTab = .profile
 
+        // Push About while Profile is showing.
         router.push(.about)
 
         #expect(router.tabPaths[.profile] == [.about])
@@ -33,6 +35,7 @@ struct AppRouterTests {
     func separateStacks() {
         let router = AppRouter()
 
+        // Give two tabs different screens, then check each kept its own.
         router.path(for: .explore).wrappedValue = [.placeDetail(place)]
         router.path(for: .history).wrappedValue = [.visitDetail(MockData.visits[0])]
 
@@ -44,6 +47,7 @@ struct AppRouterTests {
     @Test("Opening a screen from elsewhere switches tab and shows it on top of the tab's first screen")
     func openInTab() {
         let router = AppRouter()
+        // Passport already has two screens open.
         router.tabPaths[.passport] = [.foodTrail, .placeDetail(place)]
 
         router.open(.weeklyChallenge, in: .passport)
@@ -56,6 +60,7 @@ struct AppRouterTests {
     func closeVisitLoggingScreens() {
         let router = AppRouter()
         router.selectedTab = .explore
+        // Explore shows Place detail, Directions and Log visit, like during a real visit.
         router.tabPaths[.explore] = [.placeDetail(place), .directions(place), .logVisit(place)]
 
         router.closeVisitLoggingScreens()
@@ -87,6 +92,7 @@ struct AppRouterTests {
     func openBanner() {
         let router = AppRouter()
         router.selectedTab = .explore
+        // Show the banner that leads to Log your visit.
         router.showBanner(InAppBanner(title: "You've arrived", message: "", route: .logVisit(place)))
 
         router.openBanner()
@@ -99,6 +105,7 @@ struct AppRouterTests {
     func finishStampCelebration() {
         let router = AppRouter()
         router.selectedTab = .explore
+        // As if a visit was just saved and earned a stamp.
         router.tabPaths[.explore] = [.placeDetail(place), .logVisit(place)]
         router.present(.stampEarned(.sriLankan))
 
@@ -112,6 +119,7 @@ struct AppRouterTests {
     @Test("Signing out resets all navigation")
     func reset() {
         let router = AppRouter()
+        // Leave navigation busy, then sign out.
         router.selectedTab = .history
         router.tabPaths[.history] = [.about]
         router.onboardingPath = [.signIn]

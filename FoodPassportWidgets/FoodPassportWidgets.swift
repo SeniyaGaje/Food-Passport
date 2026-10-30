@@ -2,20 +2,25 @@ import SwiftUI
 import WidgetKit
 import AppIntents
 
+/// One moment on the widget's timeline, with the snapshot to show then.
 struct PassportEntry: TimelineEntry {
     let date: Date
     let snapshot: WidgetSnapshot
 }
 
+/// Gives WidgetKit the entries to show. All three widgets share it.
 struct PassportProvider: TimelineProvider {
+    // Shown in the widget gallery and while loading: sample data.
     func placeholder(in context: Context) -> PassportEntry {
         PassportEntry(date: .now, snapshot: .sample)
     }
 
+    // A quick look (e.g. the gallery): sample data in previews, the real snapshot otherwise.
     func getSnapshot(in context: Context, completion: @escaping (PassportEntry) -> Void) {
         completion(context.isPreview ? placeholder(in: context) : PassportEntry(date: .now, snapshot: WidgetSnapshotStore().read()))
     }
 
+    /// The timeline: now, midnight, and the moment Face ID would hide the data. Refreshed within 30 minutes.
     func getTimeline(in context: Context, completion: @escaping (Timeline<PassportEntry>) -> Void) {
         let now = Date.now
         let store = WidgetSnapshotStore()
@@ -68,6 +73,7 @@ private struct WidgetBackground: View {
     }
 }
 
+/// The small title at the top of a widget, e.g. "Quest".
 private struct BrandHeader: View {
     var title = "FoodPassport"
     var systemImage = "globe.asia.australia.fill"
@@ -142,6 +148,7 @@ private struct SignedOutView: View {
 
 // Quest widget
 
+/// The quest widget: progress, budget left and the next pick, in every size.
 struct QuestWidgetView: View {
     let entry: PassportEntry
     @Environment(\.widgetFamily) private var family
@@ -150,20 +157,25 @@ struct QuestWidgetView: View {
 
     var body: some View {
         content
+            // Marked private, so iOS can hide the values on a locked phone.
             .privacySensitive()
             .containerBackground(for: .widget) { WidgetBackground() }
+            // Tapping the widget opens the quest in the app.
             .widgetURL(URL(string: "foodpassport://quest"))
     }
 
     @ViewBuilder
     private var content: some View {
+        // A different layout for each widget size.
         switch family {
+        // Lock Screen, one line of text.
         case .accessoryInline:
             if snapshot.isSignedIn, snapshot.questTitle != nil {
                 Label("Quest \(snapshot.cuisinesTried)/\(snapshot.targetCuisines)", systemImage: "flag.checkered")
             } else {
                 Label("FoodPassport", systemImage: "globe.asia.australia.fill")
             }
+        // Lock Screen circle: a gauge of cuisines tried.
         case .accessoryCircular:
             Gauge(value: snapshot.isSignedIn ? snapshot.questFraction : 0) {
                 Image(systemName: "flag.checkered")
@@ -175,6 +187,7 @@ struct QuestWidgetView: View {
             .accessibilityValue("\(snapshot.cuisinesTried) of \(snapshot.targetCuisines) \(snapshot.questUnit)")
         case .accessoryRectangular:
             accessoryRectangular
+        // Home Screen sizes: signed out, the quest, or a prompt to start one.
         default:
             if !snapshot.isSignedIn {
                 SignedOutView(message: "Open the app to see your quest.")
@@ -215,6 +228,7 @@ struct QuestWidgetView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // Small: title, progress and budget left.
     private func small(title: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             BrandHeader(title: "Quest", systemImage: "flag.checkered")
@@ -234,6 +248,7 @@ struct QuestWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
+    // Medium: the quest on the left; the next pick and Log visit button on the right.
     private func medium(title: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
@@ -257,6 +272,7 @@ struct QuestWidgetView: View {
         }
     }
 
+    // Large: adds days left and the weekly challenge.
     private func large(title: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             BrandHeader()
@@ -452,6 +468,7 @@ private struct ChallengeSummary: View {
 
 // Budget widget
 
+/// The budget widget: this month's spending against the monthly budget.
 struct BudgetWidgetView: View {
     let entry: PassportEntry
     @Environment(\.widgetFamily) private var family
@@ -559,6 +576,7 @@ struct BudgetWidgetView: View {
 
 // Weekly challenge widget
 
+/// The weekly challenge widget: progress and days left.
 struct ChallengeWidgetView: View {
     let entry: PassportEntry
     @Environment(\.widgetFamily) private var family
@@ -574,6 +592,7 @@ struct ChallengeWidgetView: View {
 
     @ViewBuilder
     private var content: some View {
+        // Defaults for a snapshot saved before challenges existed.
         let completed = snapshot.challengeCompleted ?? 0
         let target = snapshot.challengeTarget ?? 3
         switch family {
@@ -642,6 +661,7 @@ struct ChallengeWidgetView: View {
 
 // The widgets
 
+/// Each widget's name, description and sizes, as shown in the widget gallery.
 struct QuestWidget: Widget {
     let kind = "FoodPassportQuest"
     var body: some WidgetConfiguration {
@@ -673,6 +693,7 @@ struct ChallengeWidget: Widget {
     }
 }
 
+/// The widget extension's entry point: the three widgets.
 @main
 struct FoodPassportWidgets: WidgetBundle {
     var body: some Widget {

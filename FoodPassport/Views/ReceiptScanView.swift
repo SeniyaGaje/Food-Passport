@@ -4,6 +4,7 @@ import VisionKit
 
 /// Scans a receipt and shows the total it found, highlighted on the photo.
 struct ReceiptScanView: View {
+    // The steps: choosing a photo, reading it, the result, or a failure.
     private enum Step {
         case choosing
         case reading(UIImage)
@@ -19,6 +20,7 @@ struct ReceiptScanView: View {
     private let keepsYourItems: Bool
     private let onUseReceipt: (ReceiptScan) -> Void
 
+    // The current step, a photo picked from Photos, and whether the scanner is open.
     @State private var step: Step = .choosing
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isShowingDocumentCamera = false
@@ -192,6 +194,7 @@ struct ReceiptScanView: View {
     }
 
     @ViewBuilder
+    /// The items found and the total, under the photo.
     private func resultDetails(for receipt: ReceiptScan) -> some View {
         if let total = receipt.total {
             if !receipt.items.isEmpty {
@@ -258,6 +261,7 @@ struct ReceiptScanView: View {
         }
     }
 
+    /// The button's wording depends on whether the student already picked dishes.
     private func useButtonTitle(for receipt: ReceiptScan) -> String {
         if receipt.items.isEmpty {
             return "Use this amount"

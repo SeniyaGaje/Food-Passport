@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @State private var period: DashboardPeriod = .thisMonth
 
+    // The active quest, worked out from the real visits.
     private var quest: Quest { appState.activeQuest }
 
     /// Totals, chart bars and breakdowns for the chosen period.
@@ -38,12 +39,14 @@ struct HomeView: View {
                     DashboardPeriodMenu(period: $period)
                 }
 
+                // Visits, cuisines and stamps for the chosen period.
                 AdaptiveStack(spacing: Theme.Spacing.s) {
                     StatTile(value: "\(summary.visits.count)", label: "Visits", systemImage: "fork.knife")
                     StatTile(value: "\(Set(summary.visits.map(\.cuisine)).count)", label: "Cuisines", systemImage: "globe.asia.australia.fill")
                     StatTile(value: "\(appState.stamps.count)", label: "Stamps", systemImage: "seal.fill")
                 }
 
+                // The quest card, or a prompt to start one.
                 if appState.hasActiveQuest {
                 NavigationLink(value: AppRoute.questDetail) {
                     QuestSummaryCard(quest: quest)
@@ -54,6 +57,7 @@ struct HomeView: View {
                     NoQuestCard()
                 }
 
+                // The spending chart; tapping it opens the full Spending Overview.
                 NavigationLink(value: AppRoute.spendingOverview(period)) {
                     SpendingChartCard(summary: summary, showsChevron: true)
                 }
@@ -61,6 +65,7 @@ struct HomeView: View {
                 .accessibilityHint("Opens your spending overview")
                 .accessibilityIdentifier("home.spending")
 
+                // Where the money went, by cuisine.
                 if summary.byCuisine.isEmpty {
                     EmptyStateView(systemImage: "chart.pie", title: "No meals in this period",
                         message: "Choose another period or log a meal to see your cuisine breakdown.")
@@ -68,6 +73,7 @@ struct HomeView: View {
                     CuisineBreakdownCard(shares: summary.byCuisine)
                 }
 
+                // The three latest visits.
                 RecentActivitySection(visits: Array(appState.visits.prefix(3))) {
                     router.selectedTab = .history
                 }
@@ -76,10 +82,12 @@ struct HomeView: View {
             .padding(.top, Theme.Spacing.xs)
             .padding(.bottom, Theme.Spacing.xl)
         }
+        // Pull down to reload from Firebase.
         .refreshable { await appState.refreshData() }
         .scrollIndicators(.hidden)
         .appBackground()
         .navigationTitleHidden("Home")
+        // The navigation bar only shows on iPad, where it holds the sidebar button.
         .toolbar(sizeClass == .regular ? .visible : .hidden, for: .navigationBar)
     }
 }

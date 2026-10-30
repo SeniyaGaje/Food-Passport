@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Shown on Home and Passport when there's no active quest, with a button to create one.
 struct NoQuestCard: View {
     @Environment(AppRouter.self) private var router
     var body: some View {

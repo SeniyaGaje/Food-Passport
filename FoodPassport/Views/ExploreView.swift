@@ -17,6 +17,7 @@ struct ExploreView: View {
     @State private var displayMode: DisplayMode = .map
     @State private var selectedRestaurantID: Restaurant.ID?
 
+    // Every restaurant from Firestore, with distances from the student.
     private var restaurants: [Restaurant] {
         appState.restaurants
     }
@@ -69,8 +70,10 @@ struct ExploreView: View {
             } else if filteredRestaurants.isEmpty {
                 ContentUnavailableView.search(text: searchText)
                     .frame(maxHeight: .infinity)
+            // iPad (regular width): map and list together.
             } else if sizeClass == .regular {
                 GeometryReader { space in
+                    // Side by side when there's room (680 pt) and the text isn't at an accessibility size.
                     if space.size.width >= 680 && !dynamicTypeSize.isAccessibilitySize {
                         HStack(spacing: 0) {
                             mapCard.frame(maxWidth: .infinity)
@@ -80,6 +83,7 @@ struct ExploreView: View {
                             listContent.frame(width: max(300, space.size.width * 0.43)).accessibilityIdentifier("explore.list")
                         }
                     } else {
+                        // Narrower window: map on top, list underneath.
                         VStack(spacing: 8) {
                             mapCard.frame(height: max(180, space.size.height * 0.45))
                                 .padding(.horizontal, Theme.screenMargin)
@@ -88,6 +92,7 @@ struct ExploreView: View {
                     }
                 }
             } else {
+                // iPhone: map or list, chosen with the switch.
                 switch displayMode {
                 case .map: mapContent
                 case .list: listContent
@@ -240,6 +245,7 @@ struct ExploreMapView: View {
         self.restaurants = restaurants
         self.highlightedRestaurantID = highlightedRestaurantID
         self.onSelect = onSelect
+        // Start framed on the places nearby.
         _position = State(initialValue: .region(Self.startRegion(for: restaurants, around: userLocation)))
     }
 
@@ -261,6 +267,7 @@ struct ExploreMapView: View {
             // The blue dot for the student (once location is allowed).
             UserAnnotation()
 
+            // A tappable pin for each restaurant, at least 44 pt for easy tapping.
             ForEach(restaurants) { restaurant in
                 Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
                     Button {

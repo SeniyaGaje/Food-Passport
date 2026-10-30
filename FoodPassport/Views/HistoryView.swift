@@ -110,6 +110,7 @@ struct HistoryView: View {
     }
 }
 
+/// The All / This week / This month filter chips.
 private enum HistoryFilter: String, CaseIterable, Identifiable {
     case all = "All"
     case thisWeek = "This week"
@@ -143,6 +144,7 @@ private struct EmptyHistoryView: View {
     }
 }
 
+/// One visit in full: photo, dish, badges, amount, rating, notes and delete.
 struct VisitDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -206,6 +208,7 @@ struct VisitDetailView: View {
         .sheet(isPresented: $isShowingPhotos) {
             VisitPhotoGallery(ids: visit.photoIDs ?? [], startingAt: selectedPhoto)
         }
+        // Ask before deleting, since it can't be undone.
         .alert("Delete Visit?", isPresented: $isConfirmingDelete) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {

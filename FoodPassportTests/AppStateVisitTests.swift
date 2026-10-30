@@ -11,9 +11,11 @@ struct AppStateVisitTests {
     func verifiedVisitEarnsStamp() async throws {
         let app = TestApp()
         try await app.signIn()
+        // Dragon Wok is Chinese, a cuisine with no stamp in the sample data.
         let visit = makeVisit(id: "first-chinese", cuisine: .chinese, restaurant: MockData.dragonWok)
 
         let stamp = try #require(app.appState.addVisit(visit))
+        // Wait for the background saves to reach the fake database.
         await app.appState.waitForPendingWrites()
 
         #expect(stamp.cuisine == .chinese)
@@ -21,6 +23,7 @@ struct AppStateVisitTests {
         #expect(stamp.visitID == "first-chinese")
         #expect(app.appState.visits.first?.id == "first-chinese")
         #expect(app.appState.stamps.contains { $0.cuisine == .chinese })
+        // Both the visit and the stamp reached the database.
         #expect(app.database.visits.contains { $0.id == "first-chinese" })
         #expect(app.database.stamps.contains { $0.cuisine == .chinese })
     }
@@ -31,6 +34,7 @@ struct AppStateVisitTests {
         try await app.signIn()
         let stampsBefore = app.appState.stamps
 
+        // isLocationVerified false: logged away from the restaurant.
         let stamp = app.appState.addVisit(makeVisit(id: "away", cuisine: .chinese, isLocationVerified: false))
         await app.appState.waitForPendingWrites()
 
@@ -44,12 +48,14 @@ struct AppStateVisitTests {
         let app = TestApp()
         try await app.signIn()
 
+        // Two verified Chinese visits in a row.
         let first = app.appState.addVisit(makeVisit(id: "wok-1", cuisine: .chinese))
         let second = app.appState.addVisit(makeVisit(id: "wok-2", cuisine: .chinese))
 
         #expect(first != nil)
         #expect(second == nil)
         #expect(app.appState.stamps.filter { $0.cuisine == .chinese }.count == 1)
+        // Newest visit first.
         #expect(app.appState.visits.prefix(2).map(\.id) == ["wok-2", "wok-1"])
     }
 
@@ -57,6 +63,7 @@ struct AppStateVisitTests {
     func existingStampIsKept() async throws {
         let app = TestApp()
         try await app.signIn()
+        // The sample data already has a Sri Lankan stamp.
         let original = try #require(app.appState.stamps.first { $0.cuisine == .sriLankan })
 
         let stamp = app.appState.addVisit(makeVisit(cuisine: .sriLankan, restaurant: MockData.hoppersHut))
@@ -69,6 +76,7 @@ struct AppStateVisitTests {
     func deletingVisitRemovesItsStamp() async throws {
         let app = TestApp()
         try await app.signIn()
+        // In the sample data, the kottu visit earned the Sri Lankan stamp.
         let kottu = try #require(app.appState.visits.first { $0.id == "visit-kottu" })
 
         app.appState.deleteVisit(kottu)
@@ -96,6 +104,7 @@ struct AppStateVisitTests {
     func resetAllData() async throws {
         let app = TestApp()
         try await app.signIn()
+        // Remember the profile, to check it survives the reset.
         let profile = app.appState.profile
 
         app.appState.resetAllData()
@@ -116,6 +125,7 @@ struct AppStateVisitTests {
         // Sample data: one Sri Lankan visit and two Indian visits.
         #expect(app.appState.cuisinesTriedCount == 2)
 
+        // An unverified Italian visit still counts as a cuisine tried (but earns no stamp).
         app.appState.addVisit(makeVisit(cuisine: .italian, isLocationVerified: false))
         #expect(app.appState.cuisinesTriedCount == 3)
     }

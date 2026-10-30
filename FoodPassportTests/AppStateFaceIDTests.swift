@@ -9,11 +9,13 @@ struct AppStateFaceIDTests {
 
     @Test("Turning Face ID on asks for the student's face first, then remembers the choice")
     func turnOnFaceID() async {
+        // A fresh app with fake services; its fake Face ID passes unless told to fail.
         let app = TestApp()
 
         await app.appState.setFaceIDEnabled(true)
 
         #expect(app.appState.isFaceIDEnabled)
+        // The face was checked exactly once.
         #expect(app.biometrics.promptCount == 1)
 
         // The setting is saved on the phone, so it is still on next time the app opens.
@@ -24,6 +26,7 @@ struct AppStateFaceIDTests {
     @Test("If Face ID doesn't recognise the student, it stays off and they see why")
     func failedScan() async {
         let app = TestApp()
+        // Make the fake sensor fail.
         app.biometrics.errorToThrow = .failed
 
         await app.appState.setFaceIDEnabled(true)
@@ -35,6 +38,7 @@ struct AppStateFaceIDTests {
     @Test("Cancelling the Face ID prompt leaves it off without an error message")
     func cancelledScan() async {
         let app = TestApp()
+        // Pretend the student cancels the prompt.
         app.biometrics.errorToThrow = .cancelled
 
         await app.appState.setFaceIDEnabled(true)
@@ -51,6 +55,7 @@ struct AppStateFaceIDTests {
         await app.appState.setFaceIDEnabled(false)
 
         #expect(!app.appState.isFaceIDEnabled)
+        // Still 1: switching off didn't scan again.
         #expect(app.biometrics.promptCount == 1)
     }
 
@@ -59,9 +64,11 @@ struct AppStateFaceIDTests {
         let app = TestApp()
         try await app.signIn()
 
+        // Face ID is off, so going to the background doesn't lock.
         app.appState.lockIfNeeded()
         #expect(!app.appState.isLocked)
 
+        // Turn Face ID on; now it locks.
         await app.appState.setFaceIDEnabled(true)
         app.appState.lockIfNeeded()
         #expect(app.appState.isLocked)
@@ -96,6 +103,7 @@ struct AppStateFaceIDTests {
         try await app.signIn()
         await app.appState.setFaceIDEnabled(true)
         app.appState.lockIfNeeded()
+        // Too many failed tries: the sensor is locked out.
         app.biometrics.errorToThrow = .lockedOut
 
         await app.appState.unlockWithBiometrics()
@@ -109,6 +117,7 @@ struct AppStateFaceIDTests {
         let firstLaunch = TestApp(signedIn: true)
         await firstLaunch.appState.setFaceIDEnabled(true)
 
+        // A second TestApp reads the first one's saved settings, like reopening the app.
         let nextLaunch = TestApp(signedIn: true, relaunching: firstLaunch)
         await nextLaunch.appState.restoreSession()
 
@@ -124,11 +133,13 @@ struct AppStateFaceIDTests {
         app.appState.setLockDelay(.fiveMinutes)
         let start = Date.now
 
+        // Away for 1 minute: shorter than the 5-minute delay, so no lock.
         app.appState.appDidEnterBackground(at: start)
         #expect(!app.appState.isLocked)
         app.appState.appDidBecomeActive(at: start.addingTimeInterval(60))
         #expect(!app.appState.isLocked)
 
+        // Away for 6 minutes: longer than the delay, so it locks.
         app.appState.appDidEnterBackground(at: start)
         app.appState.appDidBecomeActive(at: start.addingTimeInterval(6 * 60))
         #expect(app.appState.isLocked)
@@ -147,6 +158,7 @@ struct AppStateFaceIDTests {
 
     @Test("Widgets keep the passport until the delay ends, then hide it")
     func widgetsHideAfterDelay() async throws {
+        // A publisher that records every widget snapshot the app sends.
         let publisher = RecordingWidgetPublisher()
         let app = TestApp(widgets: publisher)
         try await app.signIn()
@@ -158,7 +170,9 @@ struct AppStateFaceIDTests {
 
         let snapshot = publisher.latest
         #expect(snapshot.isSignedIn)
+        // Widgets know to hide 15 minutes after the app went to the background.
         #expect(snapshot.hiddenAfter == start.addingTimeInterval(15 * 60))
+        // 1 minute later the widget still shows data; 16 minutes later it doesn't.
         #expect(snapshot.current(at: start.addingTimeInterval(60)).isSignedIn)
         #expect(!snapshot.current(at: start.addingTimeInterval(16 * 60)).isSignedIn)
     }
@@ -169,12 +183,15 @@ struct AppStateFaceIDTests {
         await firstLaunch.appState.restoreSession()
         await firstLaunch.appState.setFaceIDEnabled(true)
         firstLaunch.appState.setLockDelay(.fiveMinutes)
+        // Close the app with a 5-minute delay.
         firstLaunch.appState.appDidEnterBackground()
 
+        // Reopened straight away: no Face ID needed.
         let soon = TestApp(signedIn: true, relaunching: firstLaunch)
         await soon.appState.restoreSession()
         #expect(!soon.appState.isLocked)
 
+        // Pretend it went to the background 10 minutes ago, then reopen: locked.
         soon.appState.appDidEnterBackground(at: .now.addingTimeInterval(-10 * 60))
         let later = TestApp(signedIn: true, relaunching: soon)
         await later.appState.restoreSession()
