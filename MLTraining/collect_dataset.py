@@ -17,10 +17,14 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent
+# A clear User-Agent, as the Wikimedia API asks for.
 HEADERS = {"User-Agent": "FoodPassport/1.0 (educational image classification; Wikimedia/Openverse)"}
+# The columns of dataset_log.csv: what the photo shows, where it came from and its licence.
 FIELDS = ["label", "file", "source", "title", "page", "author", "licence", "licence_url", "sha256"]
+# Shared by the download threads, so requests stay at least 0.35 s apart.
 LAST_REQUEST = 0
 REQUEST_LOCK = threading.Lock()
+# Words a file title must contain, so search results for the wrong dish are dropped.
 KEYWORDS = {
     "kottu": ["kottu", "kotthu", "kothu"], "hoppers": ["appam", "hopper"],
     "string-hoppers": ["idiyappam", "idiappam", "string hopper", "noolputtu"],
@@ -31,6 +35,7 @@ KEYWORDS = {
 }
 
 
+# Downloads a URL politely: rate-limited, retrying busy or failed requests with a growing wait.
 def fetch(url, retries=4):
     global LAST_REQUEST
     for attempt in range(retries):
@@ -51,14 +56,17 @@ def fetch(url, retries=4):
     raise OSError("Request still unavailable after retries")
 
 
+# Calls a JSON web API with query parameters.
 def api(url, **params):
     return json.loads(fetch(url + "?" + urllib.parse.urlencode(params)))
 
 
+# Removes HTML tags from author names.
 def clean(value):
     return html.unescape(re.sub("<[^>]+>", "", value)).strip()
 
 
+# Looks up the licence and author of Commons files, 20 at a time.
 def commons(titles):
     for start in range(0, len(titles), 20):
         try:
@@ -72,6 +80,7 @@ def commons(titles):
             info = page.get("imageinfo", [{}])[0]
             meta = info.get("extmetadata", {})
             licence = meta.get("LicenseShortName", {}).get("value", "")
+            # Keep only open licences: CC BY, CC BY-SA, CC0 or public domain.
             if not (licence.startswith("CC BY") or licence in ("CC0", "Public domain")):
                 continue
             title = page["title"]
@@ -83,23 +92,28 @@ def commons(titles):
                        url=info.get("thumburl", info.get("url")))
 
 
+# Yields candidate photos for one class: Wikimedia Commons first, then Openverse.
 def candidates(entry):
     titles = []
     category_lists = []
+    # Files listed in the class's Commons categories.
     for category in entry["categories"]:
         data = api("https://commons.wikimedia.org/w/api.php", action="query", format="json",
                    list="categorymembers", cmtitle="Category:" + category, cmtype="file", cmlimit=100)
         category_lists.append([x["title"] for x in data.get("query", {}).get("categorymembers", [])])
     for row in itertools.zip_longest(*category_lists):
         titles += [title for title in row if title]
+    # Files found by the class's search phrases.
     for query in entry["queries"]:
         data = api("https://commons.wikimedia.org/w/api.php", action="query", format="json",
                    list="search", srsearch=query + " filetype:bitmap", srnamespace=6,
                    srlimit=15 if entry["id"] == "other" else 40)
         titles += [x["title"] for x in data.get("query", {}).get("search", [])]
     words = KEYWORDS.get(entry["id"], [])
+    # Drop repeated titles and titles without the class's keywords.
     titles = [title for title in dict.fromkeys(titles) if not words or any(word in title.casefold() for word in words)]
     yield from commons(titles)
+    # Openverse search, limited to open licences.
     for query in entry["queries"]:
         for page in (1, 2):
             try:
@@ -135,6 +149,7 @@ def downloads(entry, pages, blocked):
                 except StopIteration:
                     finished = True
                     break
+                # Skip photos already in the dataset and the app's own photos.
                 if photo["page"] in pages or photo["title"].replace("_", " ").casefold() in blocked:
                     continue
                 if not photo["url"] or not photo["author"]:
@@ -151,6 +166,7 @@ def downloads(entry, pages, blocked):
                     print("  Skipped:", photo["title"], str(error)[:100], flush=True)
 
 
+# Collects photos for each class until it reaches its target count.
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=50)
@@ -158,14 +174,17 @@ def main():
     parser.add_argument("--labels", nargs="*")
     parser.add_argument("--ipv4", action="store_true", help="For networks with broken IPv6")
     args = parser.parse_args()
+    # --ipv4 forces IPv4, for networks with broken IPv6.
     if args.ipv4:
         getaddrinfo = socket.getaddrinfo
         socket.getaddrinfo = lambda host, port, *a, **kw: getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
 
+    # The ledger of every photo collected so far, and the ones excluded after review.
     log = ROOT / "dataset_log.csv"
     rows = list(csv.DictReader(log.open())) if log.exists() else []
     excluded_path = ROOT / "excluded.csv"
     excluded = {x["file"] for x in csv.DictReader(excluded_path.open())} if excluded_path.exists() else set()
+    # Hashes and pages seen before, so the same photo is never added twice.
     hashes = {row["sha256"] for row in rows}
     pages = {row["page"] for row in rows}
     # App illustrations must remain unseen, including resized versions of the originals.
@@ -181,10 +200,12 @@ def main():
         writer = csv.DictWriter(output, fieldnames=FIELDS, lineterminator="\n")
         if not rows:
             writer.writeheader()
+        # Each class listed in catalogue.json.
         for entry in json.loads((ROOT / "catalogue.json").read_text())["classes"]:
             label = entry["name"]
             if args.labels and entry["id"] not in args.labels:
                 continue
+            # How many usable photos this class already has, and how many it needs.
             count = sum(row["label"] == label and row["file"] not in excluded for row in rows)
             target = args.other if entry["id"] == "other" else args.limit
             if count >= target:
@@ -197,11 +218,14 @@ def main():
                     break
                 try:
                     photo.pop("url")
+                    # Only real JPEG or PNG files are kept.
                     if not (data.startswith(b"\xff\xd8\xff") or data.startswith(b"\x89PNG")):
                         continue
+                    # Skip exact duplicates, by file hash.
                     digest = hashlib.sha256(data).hexdigest()
                     if digest in hashes:
                         continue
+                    # Name the file after its hash and record its credit in the ledger.
                     path = folder / (digest[:16] + (".png" if data.startswith(b"\x89PNG") else ".jpg"))
                     path.write_bytes(data)
                     row = dict(photo, label=label, file=str(path.relative_to(ROOT)), sha256=digest)

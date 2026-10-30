@@ -5,14 +5,18 @@ import Foundation
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 let images = root.appendingPathComponent("Images")
 let output = root.appendingPathComponent("Review")
+// Pass class folder names (e.g. kottu) to review only those classes.
 let requested = Set(CommandLine.arguments.dropFirst())
 let excludedURL = root.appendingPathComponent("excluded.csv")
+// Photos already excluded are left off the sheets.
 let excluded = Set(((try? String(contentsOf: excludedURL, encoding: .utf8)) ?? "").components(separatedBy: .newlines).dropFirst().filter { !$0.isEmpty }.map { String($0.split(separator: ",")[0]) })
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+// One set of sheets for each class folder.
 for folder in try FileManager.default.contentsOfDirectory(at: images, includingPropertiesForKeys: nil).sorted(by: { $0.path < $1.path }) {
     if !requested.isEmpty && !requested.contains(folder.lastPathComponent) { continue }
     let photos = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
         .filter { ["jpg", "png"].contains($0.pathExtension) && !excluded.contains("Images/" + folder.lastPathComponent + "/" + $0.lastPathComponent) }.sorted { $0.path < $1.path }
+    // Each sheet shows up to 60 photos: 6 per row.
     for start in stride(from: 0, to: photos.count, by: 60) {
         let batch = Array(photos[start..<min(start + 60, photos.count)])
         let size = NSSize(width: 1200, height: ceil(Double(batch.count) / 6) * 130)
@@ -20,6 +24,7 @@ for folder in try FileManager.default.contentsOfDirectory(at: images, includingP
         image.lockFocus()
         NSColor.white.setFill()
         NSRect(origin: .zero, size: size).fill()
+        // Draw each thumbnail with its file name, so a bad photo can be found and excluded.
         for (index, photo) in batch.enumerated() {
             let x = (index % 6) * 200
             let y = Int(size.height) - (index / 6 + 1) * 130
@@ -32,6 +37,7 @@ for folder in try FileManager.default.contentsOfDirectory(at: images, includingP
                 withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: NSColor.black])
         }
         image.unlockFocus()
+        // Save the sheet as a PNG in Review/.
         let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
         try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("\(folder.lastPathComponent)-\(start / 60 + 1).png"))
     }

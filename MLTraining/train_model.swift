@@ -6,6 +6,7 @@ import Vision
 import ImageIO
 import CryptoKit
 
+// One row of split.csv: the photo's label, file, split and hash.
 struct Photo {
     let label: String
     let file: String
@@ -13,16 +14,19 @@ struct Photo {
     let hash: String
 }
 
+// A photo's 512 MobileCLIP numbers, plus its mirrored copy for training.
 struct EmbeddedPhoto: Codable {
     let values: [Float]
     let mirroredValues: [Float]?
 }
 
+// Saved embeddings, tied to the encoder's hash so a new encoder recalculates them.
 struct EmbeddingCache: Codable {
     let encoderHash: String
     let photos: [String: EmbeddedPhoto]
 }
 
+// One photo's prediction, kept for the evaluation report.
 struct ScoredPhoto: Codable {
     let label: String
     let file: String
@@ -72,6 +76,7 @@ func readCSV(_ text: String) -> [[String: String]] {
     return rows.dropFirst().filter { $0.count == headings.count }.map { Dictionary(uniqueKeysWithValues: zip(headings, $0)) }
 }
 
+// Runs the frozen MobileCLIP encoder on one photo and returns its 512 numbers.
 func embedding(at url: URL, mirrored: Bool, model: VNCoreMLModel) throws -> [Float] {
     let request = VNCoreMLRequest(model: model)
     request.imageCropAndScaleOption = .centerCrop
@@ -96,6 +101,7 @@ func embedding(at url: URL, mirrored: Bool, model: VNCoreMLModel) throws -> [Flo
     return array.scalars
 }
 
+// The share of photos whose prediction matches their label.
 func accuracy(_ photos: [ScoredPhoto]) -> Double {
     guard !photos.isEmpty else { return 0 }
     return Double(photos.filter { $0.label == $0.prediction }.count) / Double(photos.count)
@@ -107,15 +113,18 @@ func writeJSON(_ value: Any, to url: URL) throws {
     try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]).write(to: url)
 }
 
+// Paths: this folder and the app's ML folder.
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 let appML = root.deletingLastPathComponent().appendingPathComponent("FoodPassport/ML")
 let cacheFolder = root.appendingPathComponent(".cache")
 try FileManager.default.createDirectory(at: cacheFolder, withIntermediateDirectories: true)
+// Read the split made by split_dataset.py.
 let csv = try String(contentsOf: root.appendingPathComponent("split.csv"), encoding: .utf8)
 let photos = readCSV(csv).map { Photo(label: $0["label"]!, file: $0["file"]!, split: $0["split"]!, hash: $0["sha256"]!) }
 guard !photos.isEmpty else { fatalError("Run split_dataset.py first") }
 let labels = Set(photos.map(\.label))
 let sortedLabels = labels.sorted()
+// Load Apple's MobileCLIP encoder (it isn't trained here, only used).
 let modelURL = appML.appendingPathComponent("MobileCLIPImageEncoder.mlpackage")
 let compute = MLModelConfiguration()
 // CPU also works on Macs and Simulators without a usable Neural Engine context.
@@ -123,6 +132,7 @@ compute.computeUnits = .cpuOnly
 let compiledEncoder = try MLModel.compileModel(at: modelURL)
 defer { try? FileManager.default.removeItem(at: compiledEncoder) }
 let encoder = try VNCoreMLModel(for: MLModel(contentsOf: compiledEncoder, configuration: compute))
+// Reuse embeddings from earlier runs if the encoder hasn't changed.
 let cacheURL = cacheFolder.appendingPathComponent("s0-embeddings.json")
 var encoderHasher = SHA256()
 for file in ["Data/com.apple.CoreML/model.mlmodel", "Data/com.apple.CoreML/weights/weight.bin"] {
@@ -133,6 +143,7 @@ let savedCache = try? JSONDecoder().decode(EmbeddingCache.self, from: Data(conte
 var cache = savedCache?.encoderHash == encoderHash ? savedCache!.photos : [:]
 var training: [AnnotatedFeature<MLShapedArray<Float>, String>] = []
 var validation: [AnnotatedFeature<MLShapedArray<Float>, String>] = []
+// Turn every photo into 512 numbers; training photos also get a mirrored copy.
 for (index, photo) in photos.enumerated() {
     if cache[photo.hash] == nil || (photo.split == "train" && cache[photo.hash]?.mirroredValues == nil) {
         let url = root.appendingPathComponent(photo.file)
@@ -156,6 +167,7 @@ for (index, photo) in photos.enumerated() {
 }
 try JSONEncoder().encode(EmbeddingCache(encoderHash: encoderHash, photos: cache)).write(to: cacheURL)
 
+// Train a logistic regression classifier on the 512 numbers (500 iterations, L2 penalty 0.01).
 var options = LogisticRegressionClassifier<Float, String>.Configuration()
 options.maximumIterations = 500
 options.l2Penalty = 0.01
@@ -163,6 +175,7 @@ let estimator = LogisticRegressionClassifier<Float, String>(labels: labels, conf
 print("Training on \(training.count) examples, including mirrored copies")
 fflush(stdout)
 let trained = try await estimator.fitted(to: training, validateOn: validation)
+// Export it for Core ML; the app loads FoodClassifier.mlpackage.
 let classifierURL = appML.appendingPathComponent("FoodClassifier.mlpackage")
 try? FileManager.default.removeItem(at: classifierURL)
 try trained.export(to: classifierURL)
@@ -182,6 +195,7 @@ for photo in photos {
     scores.append(ScoredPhoto(label: photo.label, file: photo.file, split: photo.split, prediction: best.key,
                               confidence: best.value, probabilities: probabilities))
 }
+// Pick the lowest confidence that is still 95% precise on validation photos.
 let validationScores = scores.filter { $0.split == "validation" }
 let validationKnown = validationScores.filter { $0.prediction != "Other" }
 let thresholds = Set([0.0] + validationKnown.map(\.confidence)).sorted()
@@ -189,6 +203,7 @@ let threshold = thresholds.first { candidate in
     let accepted = validationKnown.filter { $0.confidence >= candidate }
     return accepted.count >= 5 && accuracy(accepted) >= 0.95
 }
+// Write FoodModel.json: labels, cuisines and the threshold the app reads.
 var catalogue = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("training_catalogue.json"))) as! [String: Any]
 let entries = (catalogue["classes"] as! [[String: Any]]).map { entry in
     entry.filter { ["id", "name", "cuisine", "isDrink", "menuNames", "category"].contains($0.key) }
@@ -198,8 +213,10 @@ try writeJSON([
     "confidenceThreshold": threshold ?? 1.0, "requiresConfirmation": true,
     "classes": entries
 ], to: appML.appendingPathComponent("FoodModel.json"))
+// Save every prediction, including mistakes.
 try JSONEncoder().encode(scores).write(to: root.appendingPathComponent("evaluation_predictions.json"))
 
+// Write EvaluationReport.md: accuracy, threshold, per-class results and confusion matrix.
 var report = "# Food classifier evaluation\n\n"
 report += "Frozen Apple MobileCLIP-S0 image encoder + Create ML Components logistic regression. Only the classifier was trained on these photos.\n\n"
 report += "Split seed: 38. Existing author assignments are preserved when extending the dataset. Authors stay in one split across every class. Only training images have mirrored copies. Validation selects the stopping point and confidence threshold; test photos are used only for final evaluation.\n\n"
