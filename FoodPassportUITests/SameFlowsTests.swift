@@ -6,6 +6,7 @@ import UIKit
 final class SameFlowsTests: XCTestCase {
     private var app: XCUIApplication!
 
+    // Each test starts the app fresh in demo mode, in portrait.
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
@@ -40,12 +41,14 @@ final class SameFlowsTests: XCTestCase {
         XCTAssertTrue(text("Popular dishes").waitForExistence(timeout: 5))
         attachScreenshot("5-Place")
 
+        // The Plan visit sheet must offer "Count towards my quest".
         app.buttons["Plan visit"].tap()
         XCTAssertTrue(app.staticTexts["Plan your visit"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.switches["Count towards my quest"].exists)
         attachScreenshot("6-Plan-visit")
         app.buttons["Cancel"].tap()
 
+        // Open Log your visit from the place's page.
         let logVisit = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Log visit'")).firstMatch
         XCTAssertTrue(logVisit.waitForExistence(timeout: 5))
         logVisit.tap()
@@ -79,6 +82,7 @@ final class SameFlowsTests: XCTestCase {
         app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
     }
 
+    // Finds a view by its accessibility identifier, e.g. "home.spending".
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
@@ -107,6 +111,7 @@ final class SameFlowsTests: XCTestCase {
         back.tap()
     }
 
+    // Keeps a screenshot in the test report.
     @MainActor
     private func attachScreenshot(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

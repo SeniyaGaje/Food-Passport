@@ -13,6 +13,7 @@ struct QuestPlannerTests {
                    pricesUpdated: "", popularDishes: [])
     }
 
+    // The test quest started 3 days ago.
     private let started = Date.now.addingTimeInterval(-3 * 24 * 60 * 60)
     /// Set on every test quest, so it's still running even when the tests run on the 1st of a month.
     private let ends = Date.now.addingTimeInterval(30 * 24 * 60 * 60)
@@ -23,11 +24,13 @@ struct QuestPlannerTests {
     private var indian: Restaurant { place("Spice Route", .indian, km: 0.8, prices: 500...800) }
     private var sriLankan: Restaurant { place("Campus Bites", .sriLankan, km: 0.4, prices: 500...900) }
 
+    // A meal at a place, a given number of days ago (1 by default).
     private func meal(_ restaurant: Restaurant, _ amount: Int, daysAgo: Double = 1) -> Visit {
         makeVisit(cuisine: restaurant.cuisine, restaurant: restaurant, amount: amount,
                   date: .now.addingTimeInterval(-daysAgo * 24 * 60 * 60))
     }
 
+    // A planner for a test quest: LKR 3,000 budget, 3 cuisines and a 2 km limit by default.
     private func planner(budget: Int = 3000, target: Int = 3, visits: [Visit],
                          restaurants: [Restaurant]? = nil, plans: [PlannedVisit] = []) -> QuestPlanner {
         QuestPlanner(settings: QuestSettings(targetCuisines: target, budget: budget, maxDistanceKm: 2, startedAt: started, extendedUntil: ends),
@@ -36,11 +39,13 @@ struct QuestPlannerTests {
 
     @Test("Worked example: LKR 3,000 budget, 2,200 spent – Italian at 1,200 is replaced by Chinese at 750")
     func proposalWorkedExample() {
+        // Two meals so far: LKR 1,250 + 950 = 2,200 spent, LKR 800 left.
         let quest = planner(visits: [meal(sriLankan, 1250), meal(indian, 950)]).quest()
 
         #expect(quest.spent == 2200)
         #expect(quest.remainingBudget == 800)
         #expect(quest.cuisinesTried == 2)
+        // One more cuisine needed: Pasta Corner (1,200) doesn't fit, so Dragon Wok (750) replaces it.
         #expect(quest.plan.map(\.restaurant.id) == ["Dragon Wok"])
         #expect(quest.plan.first?.estimatedCost == 750)
         #expect(quest.plan.first?.fitsBudget == true)
@@ -50,6 +55,7 @@ struct QuestPlannerTests {
 
     @Test("With enough money the nearest untried places are picked")
     func nearestWhenAffordable() {
+        // Only LKR 600 spent, so the nearest untried places (Italian, then Indian) both fit.
         let quest = planner(visits: [meal(sriLankan, 600)]).quest()
 
         #expect(quest.plan.map(\.restaurant.id) == ["Pasta Corner", "Spice Route"])
@@ -59,6 +65,7 @@ struct QuestPlannerTests {
 
     @Test("Cuisines tried before the quest are never suggested, and don't count as new")
     func cuisinesTriedBeforeTheQuest() {
+        // A Chinese meal 10 days ago, before the quest started.
         let beforeQuest = meal(chinese, 700, daysAgo: 10)
         let quest = planner(visits: [beforeQuest, meal(chinese, 700)]).quest()
 
@@ -70,6 +77,7 @@ struct QuestPlannerTests {
 
     @Test("A place that can't fit and has no cheaper swap is marked over budget")
     func overBudgetStop() {
+        // Budget LKR 1,000, and the only place costs about 1,200.
         let quest = planner(budget: 1000, target: 1, visits: [], restaurants: [italian]).quest()
 
         #expect(quest.plan.count == 1)
@@ -80,6 +88,7 @@ struct QuestPlannerTests {
 
     @Test("Estimates use what the student paid there before, rounded to LKR 50")
     func estimateFromPastVisits() {
+        // Paid 620 and 700: an average of 660, rounded to 650.
         let planner = planner(visits: [meal(chinese, 620), meal(chinese, 700, daysAgo: 2)])
 
         #expect(planner.estimatedCost(at: chinese) == 650)
@@ -90,6 +99,7 @@ struct QuestPlannerTests {
     @Test("A planned visit keeps its saved estimate and goes first when it counts towards the quest")
     func plannedVisitIsPinned() {
         let tomorrow = Date.now.addingTimeInterval(24 * 60 * 60)
+        // Dragon Wok planned for tomorrow, at the estimate saved when planning.
         let plan = PlannedVisit(restaurantID: chinese.id, date: tomorrow, estimatedCost: 700, countsTowardsQuest: true)
         let quest = planner(target: 2, visits: [], plans: [plan]).quest()
 
@@ -104,11 +114,13 @@ struct QuestPlannerTests {
         let plan = PlannedVisit(restaurantID: chinese.id, date: .now.addingTimeInterval(3600), estimatedCost: 700, countsTowardsQuest: false)
         let quest = planner(target: 1, visits: [], plans: [plan]).quest()
 
+        // Campus Bites is nearest, so it stays first.
         #expect(quest.plan.map(\.restaurant.id) == ["Campus Bites"])
     }
 
     @Test("When the target is reached there's nothing left to plan")
     func targetReached() {
+        // Two new cuisines already tried, and the target is 2.
         let quest = planner(target: 2, visits: [meal(sriLankan, 600), meal(indian, 600)]).quest()
 
         #expect(quest.plan.isEmpty)
@@ -121,12 +133,14 @@ struct QuestPlannerTests {
             TrailStop(restaurant: $0, isVisited: false)
         })
         let settings = QuestSettings(type: .foodTrail, budget: 1500, trailID: "t", startedAt: started, extendedUntil: ends)
+        // Campus Bites is already visited, so 2 stops are left.
         let quest = QuestPlanner(settings: settings, restaurants: [], visits: [meal(sriLankan, 700)], trails: [trail]).quest()
 
         #expect(quest.title == "Test trail")
         #expect(quest.cuisinesTried == 1)
         #expect(quest.targetCuisines == 3)
         #expect(quest.plan.map(\.restaurant.id) == ["Spice Route", "Dragon Wok"])
+        // LKR 800 left: Spice Route (650) fits, Dragon Wok (750) doesn't.
         #expect(quest.plan.map(\.fitsBudget) == [true, false])
     }
 
@@ -142,6 +156,7 @@ struct QuestPlannerTests {
         // Before the meal: 2,050 left, so the two nearest fit.
         #expect(app.appState.activeQuest.plan.map(\.restaurant.id) == ["Pasta Corner", "Spice Route"])
 
+        // Log an Indian meal that cost 1,250 against a 650 estimate.
         let update = try #require(try await app.appState.saveVisit(meal(indian, 1250, daysAgo: 0), photos: []).budgetUpdate)
 
         #expect(update.estimatedCost == 650)
@@ -156,6 +171,7 @@ struct QuestPlannerTests {
         let app = TestApp(database: MockDatabaseService(visits: [], stamps: []))
         try await app.signIn()
 
+        // No quest is saved, so there's nothing to update.
         let result = try await app.appState.saveVisit(makeVisit(), photos: [])
 
         #expect(result.budgetUpdate == nil)
@@ -164,6 +180,7 @@ struct QuestPlannerTests {
     @Test("Increase budget adds just enough for the stop that doesn't fit")
     func increaseBudget() async throws {
         let database = MockDatabaseService(restaurants: [italian], visits: [], stamps: [])
+        // A LKR 1,000 budget, but the only untried place costs about 1,200.
         database.quest = QuestSettings(targetCuisines: 1, budget: 1000, maxDistanceKm: 2, startedAt: started, extendedUntil: ends)
         let app = TestApp(database: database)
         try await app.signIn()
@@ -171,6 +188,7 @@ struct QuestPlannerTests {
 
         let budget = app.appState.increaseQuestBudgetToFitPlan()
 
+        // Raised by exactly the 200 shortfall.
         #expect(budget == 1200)
         #expect(app.appState.activeQuest.nextPick?.restaurant.id == italian.id)
     }
@@ -196,6 +214,7 @@ struct QuestPlannerTests {
         let app = TestApp(database: MockDatabaseService(visits: [], stamps: []))
         try await app.signIn()
 
+        // Called twice: the second call is ignored because a quest already exists.
         app.appState.startFirstQuestIfNeeded(budget: 5000)
         app.appState.startFirstQuestIfNeeded(budget: 8000)
 
@@ -211,6 +230,7 @@ struct QuestPlannerTests {
         let app = TestApp(database: database)
         try await app.signIn()
 
+        // Plan Dragon Wok; its estimate (750) is saved with the plan.
         _ = await app.appState.planVisit(to: chinese, at: .now.addingTimeInterval(2 * 60 * 60), remind: false, countsTowardsQuest: true)
         await app.appState.waitForPendingWrites()
 
@@ -224,6 +244,7 @@ struct QuestPlannerTests {
         #expect(app.appState.plannedVisits.count == 1)
         #expect(app.appState.activeQuest.plan.first?.restaurant.id == chinese.id)
 
+        // Log the meal: the plan is done and removed, and its 750 estimate is used.
         app.appState.addVisit(meal(chinese, 800, daysAgo: 0))
         await app.appState.waitForPendingWrites()
 
@@ -235,6 +256,7 @@ struct QuestPlannerTests {
     @Test("Trails from the database replace the built-in ones")
     func trailsFromDatabase() async throws {
         let database = MockDatabaseService(restaurants: [italian, chinese], visits: [], stamps: [])
+        // An admin trail with one restaurant ID that doesn't exist.
         database.trails = [TrailDocument(id: "noodles", name: "Noodle walk", summary: "Two stops",
                                          restaurantIDs: [chinese.id, "missing", italian.id])]
         database.weeklyChallenge = ChallengeDocument(title: "Try 2 cuisines", details: "Any two.", target: 2)
@@ -242,6 +264,7 @@ struct QuestPlannerTests {
         try await app.signIn()
 
         #expect(app.appState.trails.map(\.name) == ["Noodle walk"])
+        // The missing restaurant is skipped.
         #expect(app.appState.trails[0].stops.map(\.id) == [chinese.id, italian.id])
         #expect(app.appState.currentChallenge.title == "Try 2 cuisines")
         #expect(app.appState.currentChallenge.target == 2)

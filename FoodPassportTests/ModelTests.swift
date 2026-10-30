@@ -3,6 +3,7 @@ import Foundation
 import CoreLocation
 @testable import FoodPassport
 
+/// The data models' own rules: distances, History sections, quest maths, trails, initials and saving.
 @Suite("Models")
 @MainActor
 struct ModelTests {
@@ -21,6 +22,7 @@ struct ModelTests {
     @Test("Distance and walking time are measured from the student's real location")
     func distanceFromStudent() {
         let restaurant = MockData.campusBites
+        // A point 1.1 km north of the restaurant.
         let student = coordinate(1_100, northOf: restaurant.coordinate)
         let measured = restaurant.withDistance(from: CLLocation(latitude: student.latitude, longitude: student.longitude))
 
@@ -46,6 +48,7 @@ struct ModelTests {
 
     @Test("Visits are grouped into Today, Yesterday, This week, Last week and Earlier")
     func visitDateGroups() {
+        // A fixed date and Colombo time zone, so the test gives the same result every day.
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Colombo")!
         let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 24, hour: 12))!
@@ -78,6 +81,7 @@ struct ModelTests {
 
     @Test("Quest progress, spending and the next pick")
     func questProgress() {
+        // The sample quest: LKR 3,000 budget, LKR 2,200 spent, 2 of 3 cuisines.
         let quest = MockData.activeQuest
 
         #expect(quest.remainingBudget == 800)
@@ -127,6 +131,7 @@ struct ModelTests {
 
     @Test("A food trail knows which stop is visited, next and upcoming")
     func foodTrailStatus() {
+        // The sample trail: stop 1 visited, stop 2 next, stop 3 still to come.
         let trail = MockData.campusFoodTrail
 
         #expect(trail.visitedCount == 1)
@@ -153,6 +158,7 @@ struct ModelTests {
 
     @Test("Weekly challenge progress")
     func weeklyChallengeProgress() {
+        // The sample challenge has nothing completed yet.
         #expect(MockData.weeklyChallenge.progress == 0)
 
         let finished = WeeklyChallenge(title: "", details: "", daysLeft: 2, completed: 1, target: 1, suggestions: [])
@@ -183,6 +189,7 @@ struct ModelTests {
     func visitCodableRoundTrip() throws {
         let visit = MockData.visits[0]
 
+        // Encode to JSON and back, like saving to Firestore and loading again.
         let data = try JSONEncoder().encode(visit)
         let decoded = try JSONDecoder().decode(Visit.self, from: data)
 
@@ -197,6 +204,7 @@ struct ModelTests {
 
     // Helpers
 
+    // Builds a quest with only the values a test cares about.
     private func makeQuest(
         targetCuisines: Int = 3,
         cuisinesTried: Int = 1,

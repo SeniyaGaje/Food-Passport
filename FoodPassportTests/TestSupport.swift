@@ -41,6 +41,7 @@ final class TestApp {
         self.previousLaunch = previousLaunch
         settingsName = previousLaunch?.settingsName ?? "FoodPassportTests-\(UUID().uuidString)"
 
+        // The real AppState, built with the fake services above.
         appState = AppState(
             auth: auth,
             database: database,
@@ -58,6 +59,7 @@ final class TestApp {
         UserDefaults.standard.removePersistentDomain(forName: settingsName)
     }
 
+    // Signs in the fake student (the mock accepts any email).
     func signIn() async throws {
         try await appState.signIn(email: "student@nibm.lk", password: "password123")
     }
@@ -95,6 +97,7 @@ func coordinate(_ metres: Double, northOf coordinate: CLLocationCoordinate2D) ->
     CLLocationCoordinate2D(latitude: coordinate.latitude + metres / 110_600, longitude: coordinate.longitude)
 }
 
+// Straight-line distance in metres between two points.
 func distance(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> CLLocationDistance {
     CLLocation(latitude: a.latitude, longitude: a.longitude).distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
 }
@@ -107,6 +110,7 @@ final class OfflineDatabaseService: DatabaseService {
         var errorDescription: String? { "The database is offline." }
     }
 
+    // Switches for each test: whether loading and saving should fail.
     var failsReads = false
     var failsWrites = true
     var writtenVisitIDs: [String] = []

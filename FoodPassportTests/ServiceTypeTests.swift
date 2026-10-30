@@ -11,9 +11,11 @@ struct ServiceTypeTests {
 
     @Test("A planned-visit reminder fires 30 minutes before the visit and opens the restaurant")
     func plannedVisitReminder() {
+        // A fixed date, so the reminder ID is predictable.
         let visitDate = Date(timeIntervalSince1970: 1_800_000_000)
         let reminder = LocalReminder.plannedVisit(to: MockData.campusBites, at: visitDate)
 
+        // The ID is "visit-" + restaurant ID + visit time, so each plan has its own reminder.
         #expect(reminder.id == "visit-campus-bites-1800000000")
         #expect(reminder.schedule == .once(visitDate.addingTimeInterval(-30 * 60)))
         #expect(reminder.destination == .restaurant(id: "campus-bites"))
@@ -58,6 +60,7 @@ struct ServiceTypeTests {
             .weeklyChallenge,
         ]
 
+        // Store the destination in the notification, then read it back as a tap would.
         for destination in destinations {
             let userInfo = destination.userInfo
             let decoded = NotificationDestination(destination: userInfo["destination"], restaurantID: userInfo["restaurantID"])
@@ -67,6 +70,7 @@ struct ServiceTypeTests {
 
     @Test("A notification with missing or unknown details opens nothing")
     func invalidNotificationDestinations() {
+        // Missing restaurant IDs or unknown destinations are ignored.
         #expect(NotificationDestination(destination: "restaurant", restaurantID: nil) == nil)
         #expect(NotificationDestination(destination: "logVisit", restaurantID: nil) == nil)
         #expect(NotificationDestination(destination: "somewhere-else", restaurantID: "campus-bites") == nil)

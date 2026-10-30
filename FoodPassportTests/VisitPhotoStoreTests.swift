@@ -3,9 +3,11 @@ import Testing
 import UIKit
 @testable import FoodPassport
 
+/// Meal photos saved on the phone, and how visits keep and remove them.
 @Suite("Saved meal photos")
 @MainActor
 struct VisitPhotoStoreTests {
+    // A tiny solid-colour photo for testing.
     private func photo() -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 30, height: 20)).image { context in
             UIColor.orange.setFill()
@@ -18,13 +20,16 @@ struct VisitPhotoStoreTests {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }
         let first = LocalVisitPhotoStore(folder: folder)
+        // Two identical photos on one visit: only one is stored.
         let ids = try await first.save([photo(), photo()], userID: "student-a")
         #expect(ids.count == 1, "Identical photos on one visit are stored once")
         let reopened = LocalVisitPhotoStore(folder: folder)
         let saved = await reopened.load(id: ids[0], userID: "student-a")
         #expect(saved?.size.width == 30)
+        // Another account can't see it, and path tricks are refused.
         #expect(await reopened.load(id: ids[0], userID: "student-b") == nil)
         #expect(await reopened.load(id: "../outside", userID: "student-a") == nil)
+        // Another account can't delete it either.
         await reopened.delete(ids: ids, userID: "student-b")
         #expect(await reopened.load(id: ids[0], userID: "student-a") != nil)
         await reopened.delete(ids: ids, userID: "student-a")
@@ -37,8 +42,10 @@ struct VisitPhotoStoreTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let store = LocalVisitPhotoStore(folder: folder)
         await #expect(throws: VisitPhotoError.self) {
+            // An empty UIImage can't be saved, so the whole save fails.
             try await store.save([photo(), UIImage()], userID: "student")
         }
+        // No half-saved photos are left in the folder.
         let contents = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []
         #expect(!contents.contains { $0.pathExtension == "jpg" })
     }
@@ -49,6 +56,7 @@ struct VisitPhotoStoreTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
+        // A 2000 × 1000 photo should be shrunk to 1600 × 800.
         let image = UIGraphicsImageRenderer(size: CGSize(width: 2000, height: 1000), format: format).image { _ in }
         let store = LocalVisitPhotoStore(folder: folder)
         let ids = try await store.save([image], userID: "student")
@@ -58,6 +66,7 @@ struct VisitPhotoStoreTests {
 
     @Test("Saving a visit stores photo references, and deleting it removes its photos")
     func visitPhotoLifecycle() async throws {
+        // An in-memory photo store, so no files are needed.
         let store = MemoryVisitPhotoStore()
         let app = TestApp(photoStore: store)
         try await app.signIn()
@@ -66,8 +75,10 @@ struct VisitPhotoStoreTests {
         await app.appState.waitForPendingWrites()
         let saved = try #require(app.appState.visits.first { $0.id == visit.id })
         let id = try #require(saved.photoIDs?.first)
+        // The visit in the database points at the photo by its ID.
         #expect(app.database.visits.first { $0.id == visit.id }?.photoIDs == [id])
         #expect(await app.appState.mealPhoto(id: id) != nil)
+        // Deleting the visit deletes its photo too.
         app.appState.deleteVisit(saved)
         await app.appState.waitForPendingWrites()
         #expect(await app.appState.mealPhoto(id: id) == nil)
@@ -75,6 +86,7 @@ struct VisitPhotoStoreTests {
 
     @Test("A photo save failure keeps the visit and its stamp unsaved")
     func visitSaveFailure() async throws {
+        // A photo store that always fails.
         let store = MemoryVisitPhotoStore(failsSaving: true)
         let app = TestApp(photoStore: store)
         try await app.signIn()
@@ -82,6 +94,7 @@ struct VisitPhotoStoreTests {
         await #expect(throws: VisitPhotoError.self) {
             try await app.appState.saveVisit(makeVisit(), photos: [photo()])
         }
+        // The photo failed, so the visit and its stamp were not saved.
         #expect(app.appState.visits == before)
         #expect(!app.appState.stamps.contains { $0.cuisine == .chinese })
     }
@@ -97,6 +110,7 @@ struct VisitPhotoStoreTests {
         await app.appState.waitForPendingWrites()
         #expect(await app.appState.mealPhoto(id: id) == nil)
         app.appState.signOut()
+        // Signed out: saving is refused.
         await #expect(throws: VisitPhotoError.self) {
             try await app.appState.saveVisit(makeVisit(), photos: [photo()])
         }
@@ -110,6 +124,7 @@ struct VisitPhotoStoreTests {
         visit.items = [VisitItem(name: "Cake", price: 400, category: "Dessert", isDrink: false)]
         let data = try JSONEncoder().encode(visit)
         #expect(try JSONDecoder().decode(Visit.self, from: data) == visit)
+        // Remove the newer fields, to look like a visit saved by an older version.
         var old = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         old.removeValue(forKey: "photoIDs")
         old.removeValue(forKey: "items")
@@ -125,8 +140,10 @@ struct VisitPhotoStoreTests {
         try await app.signIn()
         let visit = makeVisit(id: "pending-photo", isLocationVerified: false)
         let image = photo()
+        // Start saving a visit; the photo save pauses until the test lets it finish.
         let save = Task { try await app.appState.saveVisit(visit, photos: [image]) }
         await store.waitUntilStarted()
+        // Sign out (or reset) while the photo is still saving.
         if signOut { app.appState.signOut() } else { app.appState.resetAllData() }
         await store.finish()
         do {
@@ -137,10 +154,12 @@ struct VisitPhotoStoreTests {
         }
         await app.appState.waitForPendingWrites()
         #expect(!app.appState.visits.contains { $0.id == visit.id })
+        // The photo that finished late was deleted again.
         #expect(await store.deletedIDs == ["pending-photo-id"])
     }
 }
 
+/// A photo store kept in memory. It can be told to fail.
 private actor MemoryVisitPhotoStore: VisitPhotoStore {
     let failsSaving: Bool
     private var images: [String: [String: UIImage]] = [:]
@@ -163,6 +182,7 @@ private actor MemoryVisitPhotoStore: VisitPhotoStore {
     }
 }
 
+/// A photo store whose save waits until the test calls finish().
 private actor SuspendedVisitPhotoStore: VisitPhotoStore {
     private var pending: CheckedContinuation<[String], Never>?
     private var started: CheckedContinuation<Void, Never>?

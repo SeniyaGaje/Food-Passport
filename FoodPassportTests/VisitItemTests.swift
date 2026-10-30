@@ -11,6 +11,7 @@ struct VisitItemTests {
 
     @Test("A visit lists every item, and its title names the first one")
     func visitWithSeveralItems() {
+        // The first sample visit has Kottu Roti and Iced Milo.
         let visit = MockData.visits[0]
 
         #expect(visit.allItems.map(\.name) == ["Kottu Roti", "Iced Milo"])
@@ -20,6 +21,7 @@ struct VisitItemTests {
 
     @Test("An older visit without items shows its dish and amount as one item")
     func olderVisitWithoutItems() {
+        // makeVisit has no items, like a visit saved before items existed.
         let visit = makeVisit(amount: 650)
 
         #expect(visit.items == nil)
@@ -84,6 +86,7 @@ struct VisitItemTests {
 
     @Test("Scanned dishes replace the blank starting row")
     func scannedDishesFillBlankRow() {
+        // A scanned Kottu Roti replaces the empty row.
         let result = VisitItemDraft.adding([VisitItemDraft(name: "Kottu Roti", priceText: "650")], to: [VisitItemDraft()])
 
         #expect(result.map(\.name) == ["Kottu Roti"])
@@ -92,6 +95,7 @@ struct VisitItemTests {
     @Test("Scanning a dish that's already listed doesn't add it twice")
     func scannedDishesAreNotDuplicated() {
         let list = [VisitItemDraft(name: "Kottu Roti", priceText: "650")]
+        // "kottu roti" is already listed (different capitals); Iced Milo is new.
         let scanned = [VisitItemDraft(name: "kottu roti"), VisitItemDraft(name: "Iced Milo")]
 
         let result = VisitItemDraft.adding(scanned, to: list)
@@ -113,6 +117,7 @@ struct VisitItemTests {
 
     @Test("A receipt adds prices to the dishes already picked, and keeps their names")
     func receiptAddsPricesOnly() {
+        // The student picked these dishes; the receipt uses different names.
         let picked = [VisitItemDraft(name: "Kottu Roti"), VisitItemDraft(name: "Iced Milo")]
         let receipt = [
             ReceiptScan.LineItem(id: 0, name: "MILO ICED 400ML", price: 200),
@@ -127,6 +132,7 @@ struct VisitItemTests {
 
     @Test("Receipt lines that match nothing aren't added to the student's list")
     func extraReceiptLinesAreIgnored() {
+        // "Takeaway Box" matches no dish.
         let picked = [VisitItemDraft(name: "Fried Rice")]
         let receipt = [
             ReceiptScan.LineItem(id: 0, name: "Fried Rice", price: 650),
@@ -144,6 +150,7 @@ struct VisitItemTests {
         let picked = [VisitItemDraft(name: "Hoppers"), VisitItemDraft(name: "Plain Tea")]
         let receipt = [
             ReceiptScan.LineItem(id: 0, name: "TEA", price: 60),
+            // "APPA" shares no word with "Hoppers", but it's the only line left.
             ReceiptScan.LineItem(id: 1, name: "APPA x3", price: 150),
         ]
 
@@ -165,6 +172,7 @@ struct VisitItemTests {
 
     @Test("Each receipt line is only used once")
     func receiptLineUsedOnce() {
+        // Only one receipt line, so only Milk Tea gets a price.
         let picked = [VisitItemDraft(name: "Plain Tea"), VisitItemDraft(name: "Milk Tea"), VisitItemDraft(name: "Vadai")]
         let receipt = [ReceiptScan.LineItem(id: 0, name: "Milk Tea", price: 100)]
 
@@ -194,6 +202,7 @@ struct VisitItemTests {
         var visit = makeVisit(id: "two-dishes", amount: 1050)
         visit.items = items
 
+        // Saved through AppState into the fake database.
         app.appState.addVisit(visit)
         await app.appState.waitForPendingWrites()
 
