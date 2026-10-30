@@ -1,7 +1,7 @@
 # FoodPassport
 
 A budget-aware food exploration app for university students, built with SwiftUI.
-Students set a food quest, find restaurants on a map, log meals, earn cuisine stamps and track their spending.
+Users set a food quest, find restaurants on a map, log meals, earn cuisine stamps and track their spending. 
 
 ## Requirements
 
@@ -125,8 +125,7 @@ drink recognition.
    [`firestore.rules`](firestore.rules) into the **Rules** tab and publish.
 6. Create restaurant documents in the Firebase console or a trusted Admin SDK tool; the app cannot write the shared catalogue.
 7. Enable **Storage** on Blaze and publish [`storage.rules`](storage.rules). Photos use private account paths.
-8. Follow [the increment report](Docs/Increment8-10Report.md) for APNs, App Group signing, widgets and rule deployment.
-9. Run the app and create an account. Use the Debug launch argument `--demo` for a sample-data demonstration without Firebase.
+8. Run the app and create an account. Use the Debug launch argument `--demo` for a sample-data demonstration without Firebase.
 
 Firestore layout:
 
